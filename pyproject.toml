@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "preflight-ml"
+version = "0.1.0"
+description = "A pip-installable Python library that takes a raw pandas DataFrame and returns a cleaned DataFrame, a reusable sklearn Pipeline, and a structured Report — automatically."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "scikit-learn",
+    "pandas",
+    "numpy",
+    "scipy",
+    "python-dateutil",
+    "matplotlib",
+    "typer",
+    "joblib"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]
+
+[project.scripts]
+preflight = "preflight.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/preflight"]

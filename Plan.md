@@ -1,77 +1,101 @@
+# PLAN.md
+
 ## What we are building
-<!-- One paragraph: what, who uses it, what problem it solves -->
+PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-style researchers. It accepts a raw pandas DataFrame and a target column name, and returns a cleaned and feature-engineered DataFrame, a reusable serializable scikit-learn Pipeline, and a structured Report that logs every automated decision with its rationale. The goal is to eliminate mechanical data preparation work without creating a black box — every transform is explainable and every output is reproducible on unseen data.
 
 ## Stack
-- Language:
-- Framework:
-- Database:
-- LLM provider:
-- Cache:
-- Package manager:
-- Test runner:
-- Other:
+- Language: Python 3.9+
+- Framework: scikit-learn (Pipeline, ColumnTransformer, transformers)
+- Data layer: pandas + numpy
+- Statistics: scipy (skewness, IQR, VIF)
+- Date parsing: python-dateutil
+- Visualization: matplotlib
+- CLI: typer
+- Packaging: pyproject.toml + build + twine
+- Test runner: pytest
+- Serialization: joblib
 
 ## Architecture
-<!--
-Describe layers and what each is responsible for.
-Format: Layer name — what it does, what it owns, what it must not do
 
-Example:
-Gateway     — auth, rate limiting, routing. No business logic.
-Core        — domain logic only. No DB calls directly, goes through lib/.
-Inference   — all LLM calls. Single client. Streaming handled here only.
-Storage     — DB + cache. No business logic. Returns typed models only.
--->
+    Profiler     — semantic type inference and EDA signal extraction only. Owns ColumnProfile[]. No data mutation.
+    Cleaner      — consumes ColumnProfile[], applies per-column remediation. Returns cleaned DataFrame + transformer specs.
+    Engineer     — consumes ColumnProfile[] and cleaned DataFrame, applies encoding/scaling/feature creation. Returns transform specs.
+    Assembler    — consumes all transformer specs, builds sklearn Pipeline, assembles PrepResult and Report.
+    Report       — owns all display and export logic. No data processing. Reads ReportEntry[] only.
+    CLI          — thin wrapper around prepare(). No business logic. Handles file I/O only.
 
 ## Component responsibilities
-<!--
-One line per file/module describing exactly what it owns.
-If two components share responsibility for something, that is a bug in the design.
 
-Example:
-lib/llm_client.py     — single LLM client instance, all completions go here
-lib/context_builder.py — assembles final prompt, owns token budget logic
-lib/rate_limiter.py   — Redis token bucket, called as dependency in routers
--->
+    types.py        — SemanticType enum, ColumnProfile dataclass, ReportEntry dataclass, PrepResult dataclass
+    profiler.py     — infers SemanticType for every column, extracts missingness rate, outlier prevalence, correlation, mutual information, VIF, class imbalance, rare categories, leakage flags
+    cleaner.py      — median/mode/constant imputation, missing indicators, column drops, outlier winsorization, duplicate removal, ID column drop, category normalization, rare grouping, dtype coercion
+    engineer.py     — ordinal encoding, one-hot encoding, target encoding (cross-fit), StandardScaler, log1p transform, datetime expansion, model_hint branching
+    assembler.py    — constructs sklearn ColumnTransformer and Pipeline, calls fit_transform on training data, assembles PrepResult
+    report.py       — ReportEntry log, .show() terminal output, .plot() matplotlib charts, .to_html() embedded HTML, .to_dict(), .to_dataframe()
+    __init__.py     — exposes prepare(), profile(), clean(), engineer(), compare() as public API
+    cli.py          — typer app, preflight prepare command, writes .csv / .joblib / .json outputs
 
 ## Data models
-<!--
-Key entities and their fields. Not full schema — just enough to code against.
 
-Example:
-User        — id, email, hashed_password, created_at
-Conversation — id, user_id, created_at
-Message     — id, conversation_id, role, content, tokens, created_at
--->
+    SemanticType    — enum: NUMERIC_FEATURE, NUMERIC_ID, CATEGORICAL_LOW, CATEGORICAL_HIGH,
+                      DATETIME_NATIVE, DATETIME_STRING, BOOLEAN, CONSTANT
+
+    ColumnProfile   — name, semantic_type, missing_rate, outlier_rate, cardinality,
+                      rare_categories[], vif_score, correlation_with_target,
+                      mutual_info_with_target, is_leakage_suspect, dtype
+
+    ReportEntry     — stage (profiler|cleaner|engineer), column, action, rationale,
+                      severity (info|warning|critical), before_stats{}, after_stats{}
+
+    PrepResult      — df (DataFrame), pipeline (sklearn Pipeline), report (Report)
 
 ## API surface
-<!--
-Endpoints, method, auth required, what it does.
 
-Example:
-POST /auth/login         — public   — returns JWT
-POST /chat               — JWT      — SSE streaming chat response
-GET  /conversations      — JWT      — list user conversations
--->
+    pf.prepare(df, target, task, model_hint, drop_threshold, outlier_method, cardinality_threshold)
+                            — full pipeline, returns PrepResult
+
+    pf.profile(df, target)  — Profiler only, returns PrepResult with df=original, pipeline=None
+    pf.clean(df, target)    — Profiler + Cleaner, returns PrepResult with pipeline=None
+    pf.engineer(df, target) — Profiler + Cleaner + Engineer, returns PrepResult with pipeline=None
+    pf.compare(a, b)        — diffs two PrepResults, prints decision and feature shape differences
+
+    CLI: preflight prepare <file> --target --task --model-hint --drop-threshold
+         outputs: <name>_prepared.csv, <name>_pipeline.joblib, <name>_report.json
 
 ## Implementation order
-<!--
-Ordered list. Each item is one focused implementer session.
-Mark independent tasks [PARALLEL].
 
-1. Scaffold — folder structure, requirements.txt, .env.example
-2. Singletons — db.py, llm_client.py, redis_client.py
-3. Models — schema.py data models
-4. Auth — JWT sign/verify, /auth routes
-5. ...
--->
+    1.  Scaffold         — src/preflight/ layout, pyproject.toml, tests/, .gitignore, README stub (Complete)
+    2.  types.py         — SemanticType, ColumnProfile, ReportEntry, PrepResult dataclasses
+    3.  profiler.py      — semantic type inference for all 8 types, EDA signal extraction
+    4.  test_profiler    — unit tests across numeric, categorical, datetime, ID, constant columns
+    5.  cleaner.py       — all remediation strategies consuming ColumnProfile
+    6.  test_cleaner     — unit tests per strategy, rare grouping cascade, VIF cap behavior
+    7.  engineer.py      — all transforms, model_hint branching, cross-fit target encoding
+    8.  test_engineer    — both model_hint modes, datetime expansion, skew handling
+    9.  report.py        — ReportEntry log, .show(), .to_dict(), .to_dataframe()
+    10. assembler.py     — Pipeline construction, column name preservation, PrepResult assembly
+    11. test_assembler   — full prepare() round-trip, pipeline.transform() on held-out data
+    12. report visuals   — .plot() four chart types, .to_html() embedded export
+    13. __init__.py      — wire prepare(), profile(), clean(), engineer(), compare()
+    14. cli.py           — typer CLI, file I/O, output naming
+    15. test_cli         — CLI integration tests
+    16. integration      — real datasets: Titanic, House Prices, Adult Income
+    17. edge cases       — all-null columns, single-category, 100% cardinality, zero-variance
+    18. packaging        — pyproject.toml metadata, classifiers, README.md, test coverage to 80%
+    19. testpypi         — build + upload to TestPyPI, verify install on clean venv
+    20. publish          — twine upload to PyPI, tag v0.1.0
 
 ## Environment variables
-<!--
-Every var the system needs. Copied to CLAUDE.md after scaffold.
-
-VAR_NAME          — purpose, example value
--->
+    None. PreFlight-ML requires no environment variables, API keys, or external services.
 
 ## Architecture decisions log
-<!-- Append only. Never delete. Format: date: decision — reason -->
+    2026-07-02: Scaffolded PreFlight-ML repository structure exactly as defined in CLAUDE.md's "Navigation" section and PLAN.md's "Package structure" section.
+    2025-07-02: Single entry point prepare() — reduces API surface, easier to document and test
+    2025-07-02: model_hint="tree"|"linear" — encodes the single most impactful structural decision about downstream model family without requiring full model specification
+    2025-07-02: Report is a first-class output, not optional — auditability is the core differentiator; a preprocessing library without explainability cannot be trusted
+    2025-07-02: Rare grouping runs before cardinality is finalized — grouping can push CATEGORICAL_HIGH to CATEGORICAL_LOW which changes encoding strategy
+    2025-07-02: VIF capped at top 50 features by variance — O(n²) cost on wide datasets is prohibitive; cap with logged warning is the right tradeoff
+    2025-07-02: Target encoding uses 5-fold cross-fit — naive target encoding leaks target into features during training; cross-fit prevents this
+    2025-07-02: set_output(transform="pandas") on all transformers — column name preservation is non-negotiable for Report readability and user trust; requires sklearn >= 1.2
+    2025-07-02: No automated feature selection — MI scores surfaced in Report only; dropping features silently is too destructive and requires domain judgment
+    2025-07-02: Clean from scratch, nothing from old web app — the FastAPI + Next.js architecture shares no useful primitives with a pip library

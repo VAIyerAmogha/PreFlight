@@ -1,0 +1,9 @@
+scikit-learn
+pandas
+numpy
+scipy
+python-dateutil
+matplotlib
+typer
+joblib
+pytest

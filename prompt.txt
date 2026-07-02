@@ -1,0 +1,27 @@
+Reference CLAUDE.md and PLAN.md for full context before doing anything.
+
+Task: Scaffold the PreFlight-ML repository structure exactly as defined in
+CLAUDE.md's "Navigation" section and PLAN.md's "Package structure" section.
+
+Create:
+- src/preflight/ with empty (stub) files: __init__.py, types.py, profiler.py,
+  cleaner.py, engineer.py, assembler.py, report.py, cli.py
+  - Each stub file should contain only a module docstring describing its
+    responsibility (pulled from PLAN.md's "Component responsibilities"),
+    no logic yet.
+- tests/ with empty test files: test_types.py, test_profiler.py,
+  test_cleaner.py, test_engineer.py, test_assembler.py, test_report.py,
+  test_cli.py — each with a placeholder test that asserts True, so pytest
+  collects successfully.
+- pyproject.toml using src/ layout, package name "preflight-ml", Python
+  >=3.9, dependencies from PLAN.md's "Stack" section pinned to the versions
+  listed, and a [project.scripts] entry point "preflight = preflight.cli:app".
+- .gitignore for a standard Python project (venv, __pycache__, .pytest_cache,
+  build artifacts, .egg-info, etc.)
+- README.md stub with project name, one-line description from PLAN.md's
+  "What we are building", and a placeholder "Installation" and "Usage"
+  section.
+
+Do not implement any real logic in any file. This step is structural only.
+After scaffolding, update CLAUDE.md's "Current focus" section: mark this
+task complete under "Recent completions". also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
