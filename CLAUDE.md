@@ -61,7 +61,7 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-03
-Active work: engineer.py Implementation (Phase 4)
+Active work: report.py Implementation (Phase 5)
 
 Recent completions:
 - Scaffold the PreFlight-ML repository structure — Complete
@@ -76,6 +76,10 @@ Recent completions:
 - Implemented cleaner.py column/row structural decisions (Sub-step 2 of 4) — Complete
 - Implemented cleaner.py value-level remediation functions (Sub-step 3 of 4) — Complete
 - Implemented run_cleaner orchestration in cleaner.py (Sub-step 4 of 4) — Complete
+- Implemented engineer.py encoding strategies (ordinal, one-hot, cross-fit target encoding) (Sub-step 1 of 4) — Complete
+- Implemented engineer.py scaling and skew transform functions (Sub-step 2 of 4) — Complete
+- Implemented engineer.py datetime expansion (Sub-step 3 of 4) — Complete
+- Implemented run_engineer orchestration block in engineer.py (Sub-step 4 of 4) — Complete
 
 Open questions / blockers:
 - Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)

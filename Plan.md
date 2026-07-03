@@ -70,8 +70,8 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     4.  test_profiler    — unit tests across numeric, categorical, datetime, ID, constant columns (Complete)
     5.  cleaner.py       — all remediation strategies consuming ColumnProfile (Complete)
     6.  test_cleaner     — unit tests per strategy, rare grouping cascade, VIF cap behavior (Complete)
-    7.  engineer.py      — all transforms, model_hint branching, cross-fit target encoding
-    8.  test_engineer    — both model_hint modes, datetime expansion, skew handling
+    7.  engineer.py      — all transforms, model_hint branching, cross-fit target encoding (Complete)
+    8.  test_engineer    — both model_hint modes, datetime expansion, skew handling (Complete)
     9.  report.py        — ReportEntry log, .show(), .to_dict(), .to_dataframe()
     10. assembler.py     — Pipeline construction, column name preservation, PrepResult assembly
     11. test_assembler   — full prepare() round-trip, pipeline.transform() on held-out data
@@ -110,3 +110,7 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 2026-07-03: Implemented column- and row-level structural decision functions in `cleaner.py` (Sub-step 2 of 4). Included `drop_high_missingness_columns`, `drop_numeric_id_columns`, and `remove_duplicate_rows` as independently callable, immutable functions.
 2026-07-03: Implemented value-level remediation functions in `cleaner.py` (Sub-step 3 of 4). These functions (`winsorize_outliers`, `normalize_category_values`, `coerce_string_dates_to_datetime`, `group_rare_categories`) execute robust, stateless transformations while delegating conditional checks (e.g., missingness thresholds for winsorization) to the orchestration layer.
 2026-07-03: Finalized cleaner orchestration block (`run_cleaner`). Safely aggregates transformation functions dynamically driven by `SemanticType` and exact state logic, explicitly outputting exhaustive transformer specifications (`specs`) and transparent `ReportEntry` arrays while ensuring the DataFrame remains functionally immutable in memory.
+2026-07-03: Implemented encoding strategies in `engineer.py` (Sub-step 1 of 4). Included `ordinal_encode`, `one_hot_encode`, and `target_encode_cross_fit`. Explicitly used 5-fold cross-fit for target encoding to prevent target leakage into features during training, as naive target encoding introduces severe bias.
+2026-07-03: Implemented scaling and skew transform functions in `engineer.py` (Sub-step 2 of 4). Added explicit checks to prevent log1p transformation on columns with values <= -1 and zero-variance standard scaling protection, preserving mathematical safety without polluting business logic in transformation primitives.
+2026-07-03: Implemented datetime expansion in `engineer.py` (Sub-step 3 of 4). Leveraged pandas `.dt` accessors for native NaT propagation, ensuring rows with missing dates maintain their integrity rather than causing downstream pipeline crashes.
+2026-07-03: Finalized engineer orchestration block (`run_engineer`). Explicitly enforces the `model_hint` lock on transformation branching (tree vs linear) and unconditionally applies 5-fold cross-fit target encoding for high-cardinality categorical data, fully satisfying the leakage-prevention architecture constraints.

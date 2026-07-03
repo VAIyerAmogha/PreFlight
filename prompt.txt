@@ -1,65 +1,61 @@
 Reference CLAUDE.md and PLAN.md for full context before doing anything.
 
-Task: Finish src/preflight/cleaner.py. Implement the orchestration entry
-point tying together sub-steps 1-3.
+Task: Finish src/preflight/engineer.py. Implement the orchestration entry
+point tying together sub-steps 1-3, with model_hint branching per PLAN.md's
+locked encoding table.
 
 Implement:
 
-    def run_cleaner(
+    def run_engineer(
         df: pd.DataFrame,
         profiles: list[ColumnProfile],
         target: str,
-        drop_threshold: float = 0.6,
-        outlier_method: str = "iqr",
-    ) -> tuple[pd.DataFrame, list[ColumnProfile], list[ReportEntry], dict]
+        model_hint: str,  # "tree" | "linear"
+        cardinality_threshold: int = 20,
+    ) -> tuple[pd.DataFrame, list[ReportEntry], dict]
 
-Behavior, in this order (order matters — later steps depend on earlier
-ones):
-1. Remove duplicate rows (remove_duplicate_rows) — always runs first.
-2. Drop columns above drop_threshold missingness (drop_high_missingness_columns)
-   — remove corresponding entries from `profiles` too, so downstream stages
-   never see stale ColumnProfiles for dropped columns.
-3. Drop NUMERIC_ID columns (drop_numeric_id_columns) — same profile
-   pruning as above.
-4. For each remaining column, based on its (possibly now-stale — re-check
-   missing_rate from the profile, do not re-infer semantic_type per
-   CLAUDE.md's "no re-inference" rule):
-   - CATEGORICAL_LOW: normalize_category_values, then mode_impute if
-     missing_rate < some reasonable working threshold (use 0.3, consistent
-     with the outlier-handling missingness gate), else constant_fill.
-     Add missing indicator column if missing_rate > 0.
-   - CATEGORICAL_HIGH: normalize_category_values, group_rare_categories
-     using profile.rare_categories, then constant_fill for missing (never
-     mode — per PLAN.md's explicit per-strategy mapping).
-   - NUMERIC_FEATURE: median_impute if missing_rate < 0.3, add missing
-     indicator if missing_rate > 0. THEN — critically — only call
-     winsorize_outliers if missing_rate <= 0.30, per CLAUDE.md's "Do not
-     apply outlier handling to columns with missingness > 30%" rule. This
-     is the one enforcement point for that constraint; make it explicit
-     and add a ReportEntry with severity="info" noting outlier handling
-     was skipped when the gate blocks it.
-   - DATETIME_STRING: coerce_string_dates_to_datetime.
-   - Other types (BOOLEAN, DATETIME_NATIVE, CONSTANT): pass through
-     unchanged (CONSTANT columns should already be rare after drop steps,
-     but handle gracefully if present).
-5. Emit a ReportEntry (stage="cleaner") for every remediation action taken
-   — column, action, rationale, severity, before_stats/after_stats (e.g.
-   before/after missing_rate). Column drops get severity="warning" (info
-   loss); everything else "info" unless it's something like near-total
-   winsorization touching >10% of values, which is "warning".
-6. Return the cleaned df, the pruned ColumnProfile list (reflecting
-   surviving columns only), the ReportEntry list, and a dict of
-   "transformer specs" — the values used per column (e.g. median used,
-   mode used, rare category mapping) so engineer.py / assembler.py can
-   later build sklearn-compatible fitted-parameter transformers rather
-   than recomputing statistics differently at inference time.
+Behavior:
+- Raise ValueError if model_hint not in ("tree", "linear").
+- For each column (by semantic_type from its ColumnProfile — do not
+  re-infer):
+  - DATETIME_NATIVE: expand_datetime, replace original column with the
+    expanded columns.
+  - CATEGORICAL_LOW: 
+      - model_hint="tree" -> ordinal_encode
+      - model_hint="linear" -> one_hot_encode
+  - CATEGORICAL_HIGH: target_encode_cross_fit in BOTH branches (per
+    PLAN.md, high-cardinality always uses target encoding regardless of
+    model_hint — this isn't in the model_hint branch table, it's
+    unconditional on cardinality).
+  - NUMERIC_FEATURE:
+      - model_hint="linear": apply needs_log_transform check -> log1p_transform
+        if flagged, THEN standard_scale.
+      - model_hint="tree": pass through unchanged, no scaling, no log
+        transform, per PLAN.md's explicit "tree: ... no scaling, no log
+        transform" rule.
+  - BOOLEAN, missing-indicator columns (name ending in "_missing"): pass
+    through unchanged in both branches (already 0/1-compatible per
+    PLAN.md's "Missing indicator passthrough" feature).
+  - CONSTANT: pass through unchanged (should be rare — Cleaner mostly
+    removes these upstream, but don't crash if present).
+- Emit a ReportEntry (stage="engineer") for every transform applied —
+  column, action taken, rationale referencing model_hint, severity="info"
+  for normal transforms. If target_encode_cross_fit is applied to a
+  CATEGORICAL_HIGH column, always log this at severity="info" noting
+  cross-fit was used specifically to prevent leakage, referencing the
+  CLAUDE.md convention.
+- Return the transformed df, ReportEntry list, and a dict of transform
+  specs (ordinal mappings, one-hot column lists, target-encode mappings,
+  scale params, log-transform flags) — this becomes assembler.py's raw
+  material for building the actual sklearn ColumnTransformer in Phase 6.
+- Target column itself is never transformed — pass through only.
 
-Type hints per convention. Original df is never mutated.
+Type hints per convention. Original df not mutated.
 
-After implementing, update CLAUDE.md's "Current focus": mark cleaner.py
+After implementing, update CLAUDE.md's "Current focus": mark engineer.py
 fully complete under "Recent completions", update PLAN.md's implementation
-order checklist (steps 5-6 done), set "Active work" to engineer.py
-(Phase 4) as next. also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
+order checklist (steps 7-8 done), set "Active work" to report.py
+(Phase 5) as next.also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
 
 
 
