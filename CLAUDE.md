@@ -61,7 +61,7 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-03
-Active work: assembler.py Implementation (Phase 6)
+Active work: report.py visuals — .plot() and .to_html() (Phase 7)
 
 Recent completions:
 - Scaffold the PreFlight-ML repository structure — Complete
@@ -83,6 +83,10 @@ Recent completions:
 - Implemented Report class core in report.py (Sub-step 1 of 3) — Complete
 - Implemented Report.show() terminal output in report.py (Sub-step 2 of 3) — Complete
 - Implemented Report.to_dict() and Report.to_dataframe() export methods (Sub-step 3 of 3) — Complete
+- Implemented CleanerTransformer wrapper in assembler.py (Sub-step 1 of 4) — Complete
+- Implemented EngineerTransformer wrapper in assembler.py (Sub-step 2 of 4) — Complete
+- Implemented two-phase Pipeline construction in assembler.py (Sub-step 3 of 4) — Complete
+- Implemented run_assembler and transform_new_data orchestration (Sub-step 4 of 4) — Complete
 
 Open questions / blockers:
 - Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)

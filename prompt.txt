@@ -1,43 +1,61 @@
 Reference CLAUDE.md and PLAN.md for full context before doing anything.
 
-Task: Finish this phase of src/preflight/report.py. Implement
-Report.to_dict() and Report.to_dataframe(). Sub-step 3 of 3.
+Task: Finish src/preflight/assembler.py. Implement the top-level
+orchestration function that produces a full PrepResult per PLAN.md's
+"Assembler — consumes all transformer specs, builds sklearn Pipeline,
+assembles PrepResult and Report" responsibility.
 
 Implement:
 
-    def to_dict(self) -> dict
-        — returns a JSON-serializable dict representation:
-          {
-            "summary": self.summary_counts(),
-            "total_entries": len(self.entries),
-            "entries": [
-                {"stage": ..., "column": ..., "action": ..., "rationale": ...,
-                 "severity": ..., "before_stats": ..., "after_stats": ...},
-                ...
-            ]
-          }
-          Must be genuinely JSON-serializable — before_stats/after_stats
-          dicts may contain numpy types (e.g. np.float64) from upstream
-          profiler/cleaner computations; convert these to native Python
-          float/int so json.dumps() doesn't choke. This matters directly
-          for cli.py's planned <name>_report.json output in Phase 8.
+    def run_assembler(
+        df: pd.DataFrame,
+        target: str,
+        task: str,
+        model_hint: str,
+        drop_threshold: float = 0.6,
+        outlier_method: str = "iqr",
+        cardinality_threshold: int = 20,
+    ) -> PrepResult
 
-    def to_dataframe(self) -> pd.DataFrame
-        — returns a pandas DataFrame with one row per ReportEntry, columns:
-          stage, column, action, rationale, severity, before_stats,
-          after_stats (the stats dicts can remain as dict objects in their
-          cells — no need to flatten for this method, unlike to_dict).
-          Empty report returns an empty DataFrame with the correct columns
-          (not a DataFrame with zero columns).
+Behavior:
+1. Run profiler.run_profiler(df, target, task, cardinality_threshold) to
+   get initial profiles + profiler ReportEntries.
+2. Split df into X (features) and y (target column).
+3. Call build_pipeline_two_phase(profiles, target, model_hint, X, y, ...)
+   from step 6.3 to get a FITTED pipeline.
+4. Transform X through the fitted pipeline to get the final cleaned +
+   engineered DataFrame. Reattach the target column (untouched, per the
+   "target column is never transformed" rule established in Cleaner and
+   Engineer) to produce the final result.df.
+5. Collect ALL ReportEntries: profiler's + cleaner_step.report_entries_ +
+   engineer_step.report_entries_, in that stage order, into one list.
+6. Construct Report(all_entries) from report.py.
+7. Construct and return PrepResult(df=final_df, pipeline=fitted_pipeline,
+   report=report_object).
 
-Type hints per convention.
+Also implement:
 
-After implementing, update CLAUDE.md's "Current focus": mark this phase of
-report.py complete under "Recent completions" — note that .plot() and
-.to_html() remain as a separate later phase per PLAN.md's implementation
-order (step 12, after assembler.py). Update PLAN.md's implementation order
-checklist (step 9 done). Set "Active work" to assembler.py (Phase 6) as
-next, since that's the next step in PLAN.md's order before report visuals.  also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
+    def transform_new_data(pipeline: Pipeline, new_df: pd.DataFrame, target: str | None = None) -> pd.DataFrame
+        — convenience function for applying an already-fitted pipeline to
+          unseen data (e.g. a test set or production batch). If target is
+          provided and present in new_df, it's set aside before transform
+          and reattached after, matching run_assembler's target-passthrough
+          behavior. This is what makes the "reusable Pipeline" promise in
+          PLAN.md's top-level description concrete and testable.
+
+Per CLAUDE.md's "no business logic in __init__.py" boundary, run_assembler
+is the function __init__.py's prepare() will call almost directly in
+Phase 8 — keep its signature aligned with PLAN.md's documented
+pf.prepare(df, target, task, model_hint, drop_threshold, outlier_method,
+cardinality_threshold) API surface.
+
+Type hints per convention. Original df not mutated.
+
+After implementing, update CLAUDE.md's "Current focus": mark assembler.py
+fully complete under "Recent completions". Update PLAN.md's implementation
+order checklist (steps 10-11 done). Set "Active work" to report.py visuals
+— .plot() and .to_html() (Phase 7, PLAN.md step 12) — as next.
+ also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
 
 
 
