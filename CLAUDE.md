@@ -61,7 +61,7 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-03
-Active work: report.py Implementation (Phase 5)
+Active work: assembler.py Implementation (Phase 6)
 
 Recent completions:
 - Scaffold the PreFlight-ML repository structure — Complete
@@ -80,6 +80,9 @@ Recent completions:
 - Implemented engineer.py scaling and skew transform functions (Sub-step 2 of 4) — Complete
 - Implemented engineer.py datetime expansion (Sub-step 3 of 4) — Complete
 - Implemented run_engineer orchestration block in engineer.py (Sub-step 4 of 4) — Complete
+- Implemented Report class core in report.py (Sub-step 1 of 3) — Complete
+- Implemented Report.show() terminal output in report.py (Sub-step 2 of 3) — Complete
+- Implemented Report.to_dict() and Report.to_dataframe() export methods (Sub-step 3 of 3) — Complete
 
 Open questions / blockers:
 - Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)

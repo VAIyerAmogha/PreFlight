@@ -72,8 +72,8 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     6.  test_cleaner     — unit tests per strategy, rare grouping cascade, VIF cap behavior (Complete)
     7.  engineer.py      — all transforms, model_hint branching, cross-fit target encoding (Complete)
     8.  test_engineer    — both model_hint modes, datetime expansion, skew handling (Complete)
-    9.  report.py        — ReportEntry log, .show(), .to_dict(), .to_dataframe()
-    10. assembler.py     — Pipeline construction, column name preservation, PrepResult assembly
+    9.  report.py        — ReportEntry log, .show(), .to_dict(), .to_dataframe() (Complete)
+    10. assembler.py     — Pipeline construction, column name preservation, PrepResult assembly (In Progress)
     11. test_assembler   — full prepare() round-trip, pipeline.transform() on held-out data
     12. report visuals   — .plot() four chart types, .to_html() embedded export
     13. __init__.py      — wire prepare(), profile(), clean(), engineer(), compare()
@@ -114,3 +114,6 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 2026-07-03: Implemented scaling and skew transform functions in `engineer.py` (Sub-step 2 of 4). Added explicit checks to prevent log1p transformation on columns with values <= -1 and zero-variance standard scaling protection, preserving mathematical safety without polluting business logic in transformation primitives.
 2026-07-03: Implemented datetime expansion in `engineer.py` (Sub-step 3 of 4). Leveraged pandas `.dt` accessors for native NaT propagation, ensuring rows with missing dates maintain their integrity rather than causing downstream pipeline crashes.
 2026-07-03: Finalized engineer orchestration block (`run_engineer`). Explicitly enforces the `model_hint` lock on transformation branching (tree vs linear) and unconditionally applies 5-fold cross-fit target encoding for high-cardinality categorical data, fully satisfying the leakage-prevention architecture constraints.
+2026-07-03: Implemented `Report` core class in `report.py` (Sub-step 1 of 3). Enforced immutability defensively by copying entry lists, and built filter queries without utilizing Pandas DataFrames to uphold the boundary rule that Report logic performs no data processing.
+2026-07-03: Implemented `Report.show()` output routine in `report.py` (Sub-step 2 of 3). Enforced ordered layout grouped strictly by processing stage (`profiler`, `cleaner`, `engineer`) with inner worst-first severity sorting, guaranteeing that critical data issues are immediately visible at the bottom of the user's terminal.
+2026-07-03: Finalized Phase 5 report serialization methods `to_dict` and `to_dataframe`. Engineered a custom recursive type caster within `to_dict` specifically to sanitize nested numpy scalar types emitted from sklearn statistics down to pure native Python structs, thereby pre-empting standard library `json.dumps()` failures in the Phase 8 CLI release.
