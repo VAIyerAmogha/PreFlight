@@ -68,8 +68,8 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     2.  types.py         — SemanticType, ColumnProfile, ReportEntry, PrepResult dataclasses (Complete)
     3.  profiler.py      — semantic type inference for all 8 types, EDA signal extraction (Complete)
     4.  test_profiler    — unit tests across numeric, categorical, datetime, ID, constant columns (Complete)
-    5.  cleaner.py       — all remediation strategies consuming ColumnProfile
-    6.  test_cleaner     — unit tests per strategy, rare grouping cascade, VIF cap behavior
+    5.  cleaner.py       — all remediation strategies consuming ColumnProfile (Complete)
+    6.  test_cleaner     — unit tests per strategy, rare grouping cascade, VIF cap behavior (Complete)
     7.  engineer.py      — all transforms, model_hint branching, cross-fit target encoding
     8.  test_engineer    — both model_hint modes, datetime expansion, skew handling
     9.  report.py        — ReportEntry log, .show(), .to_dict(), .to_dataframe()
@@ -106,3 +106,7 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 2026-07-03: Implemented target-independent structural signal functions (missing_rate, outlier_rate via IQR, cardinality, rare_categories) as pure functions without remediation logic, strictly adhering to the architectural boundary between Profiler and Cleaner.
 2026-07-03: Implemented target-dependent signal functions (correlation, mutual info, leakage detection, class imbalance, VIF), handling categorical encoding internally for MI computation without mutating global pipeline state, and capping VIF at 50 to prevent O(n²) scaling issues.
 2026-07-03: Finalized Profiler orchestration block. `run_profiler` now accurately coordinates type inference, internal metric computation, applies global VIF correctly back to mapped columns, emits non-silent `ReportEntry` warning/critical signals for detected dataset issues (e.g., high missingness, leakage suspects), and strictly respects the one-time inference rule for `SemanticType`.
+2026-07-03: Implemented base imputation functions in `cleaner.py` (Sub-step 1 of 4). These functions do not contain any threshold logic (e.g., low-missingness), but merely perform unconditional mechanical data remediation, deferring orchestration logic to a higher layer.
+2026-07-03: Implemented column- and row-level structural decision functions in `cleaner.py` (Sub-step 2 of 4). Included `drop_high_missingness_columns`, `drop_numeric_id_columns`, and `remove_duplicate_rows` as independently callable, immutable functions.
+2026-07-03: Implemented value-level remediation functions in `cleaner.py` (Sub-step 3 of 4). These functions (`winsorize_outliers`, `normalize_category_values`, `coerce_string_dates_to_datetime`, `group_rare_categories`) execute robust, stateless transformations while delegating conditional checks (e.g., missingness thresholds for winsorization) to the orchestration layer.
+2026-07-03: Finalized cleaner orchestration block (`run_cleaner`). Safely aggregates transformation functions dynamically driven by `SemanticType` and exact state logic, explicitly outputting exhaustive transformer specifications (`specs`) and transparent `ReportEntry` arrays while ensuring the DataFrame remains functionally immutable in memory.

@@ -61,7 +61,7 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-03
-Active work: cleaner.py Implementation (Phase 3)
+Active work: engineer.py Implementation (Phase 4)
 
 Recent completions:
 - Scaffold the PreFlight-ML repository structure — Complete
@@ -72,6 +72,10 @@ Recent completions:
 - Implemented target-independent structural signal functions in profiler.py (Sub-step 2 of 4) — Complete
 - Implemented target-dependent signal functions in profiler.py (Sub-step 3 of 4) — Complete
 - Implemented run_profiler orchestration in profiler.py (Sub-step 4 of 4) — Complete
+- Implemented cleaner.py base imputation functions (Sub-step 1 of 4) — Complete
+- Implemented cleaner.py column/row structural decisions (Sub-step 2 of 4) — Complete
+- Implemented cleaner.py value-level remediation functions (Sub-step 3 of 4) — Complete
+- Implemented run_cleaner orchestration in cleaner.py (Sub-step 4 of 4) — Complete
 
 Open questions / blockers:
 - Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)
