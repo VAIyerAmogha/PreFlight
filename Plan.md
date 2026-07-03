@@ -65,9 +65,9 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 ## Implementation order
 
     1.  Scaffold         — src/preflight/ layout, pyproject.toml, tests/, .gitignore, README stub (Complete)
-    2.  types.py         — SemanticType, ColumnProfile, ReportEntry, PrepResult dataclasses
-    3.  profiler.py      — semantic type inference for all 8 types, EDA signal extraction
-    4.  test_profiler    — unit tests across numeric, categorical, datetime, ID, constant columns
+    2.  types.py         — SemanticType, ColumnProfile, ReportEntry, PrepResult dataclasses (Complete)
+    3.  profiler.py      — semantic type inference for all 8 types, EDA signal extraction (Complete)
+    4.  test_profiler    — unit tests across numeric, categorical, datetime, ID, constant columns (Complete)
     5.  cleaner.py       — all remediation strategies consuming ColumnProfile
     6.  test_cleaner     — unit tests per strategy, rare grouping cascade, VIF cap behavior
     7.  engineer.py      — all transforms, model_hint branching, cross-fit target encoding
@@ -99,3 +99,10 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     2025-07-02: set_output(transform="pandas") on all transformers — column name preservation is non-negotiable for Report readability and user trust; requires sklearn >= 1.2
     2025-07-02: No automated feature selection — MI scores surfaced in Report only; dropping features silently is too destructive and requires domain judgment
     2025-07-02: Clean from scratch, nothing from old web app — the FastAPI + Next.js architecture shares no useful primitives with a pip library
+    2026-07-03: Implemented SemanticType enum with eight canonical semantic categories to establish a fixed contract between Profiler, Cleaner, and Engineer.
+2026-07-03: Implemented ColumnProfile, ReportEntry, and PrepResult as dataclasses to provide strongly typed, lightweight data transfer objects across pipeline stages.
+2026-07-03: Added runtime validation for ReportEntry.stage and ReportEntry.severity via __post_init__ since Literal annotations are not enforced at runtime by Python dataclasses.
+2026-07-03: Separated semantic type inference and mixed-type detection in Profiler to ensure inference is robust and mixed-type signals are extracted independently.
+2026-07-03: Implemented target-independent structural signal functions (missing_rate, outlier_rate via IQR, cardinality, rare_categories) as pure functions without remediation logic, strictly adhering to the architectural boundary between Profiler and Cleaner.
+2026-07-03: Implemented target-dependent signal functions (correlation, mutual info, leakage detection, class imbalance, VIF), handling categorical encoding internally for MI computation without mutating global pipeline state, and capping VIF at 50 to prevent O(n²) scaling issues.
+2026-07-03: Finalized Profiler orchestration block. `run_profiler` now accurately coordinates type inference, internal metric computation, applies global VIF correctly back to mapped columns, emits non-silent `ReportEntry` warning/critical signals for detected dataset issues (e.g., high missingness, leakage suspects), and strictly respects the one-time inference rule for `SemanticType`.

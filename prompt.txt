@@ -1,27 +1,50 @@
 Reference CLAUDE.md and PLAN.md for full context before doing anything.
 
-Task: Scaffold the PreFlight-ML repository structure exactly as defined in
-CLAUDE.md's "Navigation" section and PLAN.md's "Package structure" section.
+Task: Finish src/preflight/profiler.py by implementing the orchestration
+layer that ties together the 3 prior sub-steps (type inference, structural
+signals, target-dependent signals) into the module's public entry point.
 
-Create:
-- src/preflight/ with empty (stub) files: __init__.py, types.py, profiler.py,
-  cleaner.py, engineer.py, assembler.py, report.py, cli.py
-  - Each stub file should contain only a module docstring describing its
-    responsibility (pulled from PLAN.md's "Component responsibilities"),
-    no logic yet.
-- tests/ with empty test files: test_types.py, test_profiler.py,
-  test_cleaner.py, test_engineer.py, test_assembler.py, test_report.py,
-  test_cli.py — each with a placeholder test that asserts True, so pytest
-  collects successfully.
-- pyproject.toml using src/ layout, package name "preflight-ml", Python
-  >=3.9, dependencies from PLAN.md's "Stack" section pinned to the versions
-  listed, and a [project.scripts] entry point "preflight = preflight.cli:app".
-- .gitignore for a standard Python project (venv, __pycache__, .pytest_cache,
-  build artifacts, .egg-info, etc.)
-- README.md stub with project name, one-line description from PLAN.md's
-  "What we are building", and a placeholder "Installation" and "Usage"
-  section.
+Implement:
 
-Do not implement any real logic in any file. This step is structural only.
-After scaffolding, update CLAUDE.md's "Current focus" section: mark this
-task complete under "Recent completions". also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
+    def run_profiler(
+        df: pd.DataFrame,
+        target: str,
+        task: str,  # "regression" | "classification"
+        cardinality_threshold: int = 20,
+    ) -> tuple[list[ColumnProfile], list[ReportEntry]]:
+
+Behavior:
+- For every column except `target`, build a ColumnProfile using the
+  functions from steps 2.1–2.3.
+- Only compute target-dependent signals (correlation, MI, leakage,
+  class imbalance) where semantically valid — e.g. skip correlation for
+  CATEGORICAL_HIGH columns, per each function's own None-return contract.
+- Only compute rare_categories for CATEGORICAL_LOW / CATEGORICAL_HIGH types.
+- Run VIF once across all NUMERIC_FEATURE columns (not per-column) since
+  it requires the full numeric submatrix — call compute_vif_scores once
+  and distribute results into each ColumnProfile.
+- Every decision that produces a ColumnProfile field with signal (e.g.
+  "flagged as leakage suspect", "VIF cap triggered", "mixed types detected
+  in column X") must emit a corresponding ReportEntry with stage="profiler"
+  per CLAUDE.md's "nothing silent" rule. Purely descriptive signals (e.g. a
+  normal missing_rate of 0.05) do not need their own ReportEntry — only
+  emit entries for warning/critical-worthy signals: high missingness,
+  leakage suspicion, VIF cap triggered, mixed types detected, high
+  cardinality, high imbalance ratio.
+- Per CLAUDE.md: "Do not re-infer SemanticType after Profiler has run" —
+  this is the only place SemanticType gets computed. Make this an explicit
+  code comment marking the boundary.
+- Type hints per convention. Function should not mutate input df.
+
+After implementing, update CLAUDE.md's "Current focus": mark profiler.py
+fully complete under "Recent completions", update PLAN.md's implementation
+order checklist (steps 3-4 done), and set "Active work" to cleaner.py
+(Phase 3) as next.  also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
+
+
+
+
+
+
+
+ also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 

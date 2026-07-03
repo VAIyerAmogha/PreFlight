@@ -60,11 +60,18 @@ Start every session by reading PLAN.md, then this file.
 - Do not train or select models — PreFlight stops before model training
 
 ## Current focus
-Last updated: 2026-07-02
-Active work: Types and Profiler Implementation
+Last updated: 2026-07-03
+Active work: cleaner.py Implementation (Phase 3)
 
 Recent completions:
 - Scaffold the PreFlight-ML repository structure — Complete
+- Implement src/preflight/types.py — Complete
+- Added runtime validation for ReportEntry stage and severity fields
+- Added comprehensive unit tests for SemanticType, ColumnProfile, ReportEntry, and PrepResult
+- Implemented SemanticType inference logic in profiler.py (Sub-step 1 of 4) — Complete
+- Implemented target-independent structural signal functions in profiler.py (Sub-step 2 of 4) — Complete
+- Implemented target-dependent signal functions in profiler.py (Sub-step 3 of 4) — Complete
+- Implemented run_profiler orchestration in profiler.py (Sub-step 4 of 4) — Complete
 
 Open questions / blockers:
-- None
+- Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)
