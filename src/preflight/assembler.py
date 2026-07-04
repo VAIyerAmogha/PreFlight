@@ -137,7 +137,13 @@ class CleanerTransformer(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self, input_features=None) -> np.ndarray:
         if not hasattr(self, "fitted_profiles_"):
             raise NotFittedError("CleanerTransformer is not fitted yet.")
-        return np.array([p.name for p in self.fitted_profiles_])
+        cols = []
+        missing_cols = []
+        for p in self.fitted_profiles_:
+            cols.append(p.name)
+            if self.specs_.get(p.name, {}).get("add_missing_indicator"):
+                missing_cols.append(f"{p.name}_missing")
+        return np.array(cols + missing_cols)
 
 class EngineerTransformer(BaseEstimator, TransformerMixin):
     def __init__(

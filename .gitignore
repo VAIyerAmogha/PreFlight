@@ -33,3 +33,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Manual test artifacts
+tmp*
+*.joblib
+scratch.py
+debug.py

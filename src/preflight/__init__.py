@@ -24,6 +24,12 @@ def prepare(
     if target not in df.columns:
         raise ValueError(f"target '{target}' not found in DataFrame columns: {list(df.columns)}")
         
+    if len(df.columns) < 2:
+        raise ValueError("DataFrame must contain at least one feature column besides the target")
+        
+    if df.columns.duplicated().any():
+        raise ValueError("DataFrame contains duplicate column names")
+        
     if task not in ["classification", "regression"]:
         raise ValueError(f"task must be 'classification' or 'regression', got '{task}'")
         
@@ -50,6 +56,10 @@ def profile(
         raise ValueError("DataFrame cannot be empty")
     if target not in df.columns:
         raise ValueError(f"target '{target}' not found in DataFrame columns: {list(df.columns)}")
+    if len(df.columns) < 2:
+        raise ValueError("DataFrame must contain at least one feature column besides the target")
+    if df.columns.duplicated().any():
+        raise ValueError("DataFrame contains duplicate column names")
     if task not in ["classification", "regression"]:
         raise ValueError(f"task must be 'classification' or 'regression', got '{task}'")
         
@@ -74,6 +84,10 @@ def clean(
         raise ValueError("DataFrame cannot be empty")
     if target not in df.columns:
         raise ValueError(f"target '{target}' not found in DataFrame columns: {list(df.columns)}")
+    if len(df.columns) < 2:
+        raise ValueError("DataFrame must contain at least one feature column besides the target")
+    if df.columns.duplicated().any():
+        raise ValueError("DataFrame contains duplicate column names")
     if task not in ["classification", "regression"]:
         raise ValueError(f"task must be 'classification' or 'regression', got '{task}'")
         
@@ -102,6 +116,10 @@ def engineer(
         raise ValueError("DataFrame cannot be empty")
     if target not in df.columns:
         raise ValueError(f"target '{target}' not found in DataFrame columns: {list(df.columns)}")
+    if len(df.columns) < 2:
+        raise ValueError("DataFrame must contain at least one feature column besides the target")
+    if df.columns.duplicated().any():
+        raise ValueError("DataFrame contains duplicate column names")
     if task not in ["classification", "regression"]:
         raise ValueError(f"task must be 'classification' or 'regression', got '{task}'")
     if model_hint not in ["tree", "linear"]:

@@ -1,46 +1,32 @@
 Reference CLAUDE.md and PLAN.md for full context before doing anything.
 
-Task: Continue src/preflight/cli.py. Implement output file writing per
-PLAN.md's documented CLI outputs: "<name>_prepared.csv, <name>_pipeline.joblib,
-<name>_report.json". Sub-step 2 of 3.
+Task: Clean up the repository before packaging. This is a hygiene pass,
+no new logic.
 
-Implement:
+- Remove scratch/debug artifacts from the repo root that accumulated
+  during development (e.g. debug.py, scratch.py, test_typer.py if it's a
+  stray manual-testing file rather than part of the real tests/ suite,
+  and any tmp*_prepared.csv / tmp*_pipeline.joblib / tmp*_report.json
+  files left over from manual CLI runs).
+- Update .gitignore (from Phase 0) to explicitly exclude: tmp*, *.joblib,
+  scratch.py, debug.py, and any other pattern matching leftover manual-
+  test artifacts, so this doesn't recur.
+- Move tests/integration/ and tests/edge_cases/ (from Phases 10-11) into
+  the pytest configuration's awareness if not already — confirm
+  pyproject.toml's [tool.pytest.ini_options] testpaths includes tests/
+  recursively and the "integration" marker (registered in Phase 10.1) is
+  still correctly configured.
+- Verify README.md (stub from Phase 0) — do not fully rewrite it yet
+  (that's part of 12.2), but confirm it isn't referencing anything now
+  stale (e.g. placeholder text that says "coming soon" for features that
+  are now built).
+- Run the full test suite (`pytest tests/ -m "not integration"` for fast
+  unit tests, then `pytest tests/ -m integration` separately) and confirm
+  everything passes cleanly on a fresh clone/install after cleanup —
+  this catches any accidental breakage from deleting files.
 
-    def write_outputs(
-        result: PrepResult,
-        input_path: str,
-        output_dir: str,
-    ) -> dict[str, str]
-        — derives <name> from input_path's filename stem (e.g.
-          "train.csv" -> "train"). Writes:
-          - {output_dir}/{name}_prepared.csv — result.df via
-            df.to_csv(path, index=False)
-          - {output_dir}/{name}_pipeline.joblib — result.pipeline via
-            joblib.dump(), per the locked stack's serialization choice.
-            Skip writing this file (do not error) if result.pipeline is
-            None — this keeps write_outputs reusable for profile()/clean()/
-            engineer() results too, which have pipeline=None by design
-            from Phase 8, in case cli.py later exposes those as separate
-            subcommands.
-          - {output_dir}/{name}_report.json — result.report.to_dict() (from
-            Phase 7) written via json.dump(), or an empty {} skipped
-            gracefully if result.report is None.
-          Returns a dict mapping output type -> written file path (only
-          for files actually written), e.g. {"csv": "...", "pipeline":
-          "...", "report": "..."} — useful both for the prepare command's
-          final echo and for testing.
-
-Wire write_outputs() into the `prepare` command from sub-step 1: after a
-successful preflight.prepare() call, call write_outputs() and typer.echo
-each output path that was written, replacing sub-step 1's placeholder
-"success + shape" message with a fuller one that also reports the shape.
-
-Type hints per convention. Handle file write failures (e.g. permission
-errors) by catching OSError and re-raising as a clean typer.echo + Exit(1),
-consistent with sub-step 1's error-handling pattern.
-
-After implementing, update CLAUDE.md's "Current focus": note cli.py 1 of
-3 sub-steps remaining (integration hardening / test_cli.py completeness).also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
+After cleanup, update CLAUDE.md's "Current focus": note packaging in
+progress, 2 of 3 sub-steps remaining (pyproject.toml metadata, coverage). also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
 
 
 

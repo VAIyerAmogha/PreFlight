@@ -61,9 +61,16 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-04
-Active work: Integration testing on real datasets (Phase 10)
+Active work: TestPyPI publish (Phase 13, PLAN.md steps 19-20) as next.
 
 Recent completions:
+- Phase 12 (packaging) is FULLY complete (hygiene, pyproject.toml metadata, and >80% test coverage).
+- Added tests/edge_cases/test_degenerate_shapes.py — Phase 11 (all 3 edge-case sub-steps) is COMPLETE
+- Added tests/edge_cases/test_cardinality_extremes.py — Edge case testing in progress, 1 of 3 sub-steps remaining (degenerate DataFrame shapes)
+- Added tests/edge_cases/test_degenerate_columns.py — Edge case testing in progress, 2 of 3 sub-steps remaining (cardinality/ID extremes, degenerate DataFrame shapes)
+- Added tests/integration/test_adult_income.py — Phase 10 integration testing on all 3 datasets is COMPLETE
+- Added tests/integration/test_house_prices.py to validate regression, target-encoding, and log1p branches — Complete
+- Added tests/integration/test_titanic.py as the first real-dataset integration test — Complete
 - cli.py FULLY complete (Sub-step 3 of 3)
 - Implemented cli.py output file writing logic (Sub-step 2 of 3) — Complete
 - Implemented cli.py typer app skeleton and argument validation (Sub-step 1 of 3) — Complete

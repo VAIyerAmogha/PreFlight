@@ -79,9 +79,9 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     13. __init__.py      — wire prepare(), profile(), clean(), engineer(), compare() (Complete)
     14. cli.py           — typer CLI, file I/O, output naming (Complete)
     15. test_cli         — CLI integration tests (Complete)
-    16. integration      — real datasets: Titanic, House Prices, Adult Income (In Progress)
-    17. edge cases       — all-null columns, single-category, 100% cardinality, zero-variance
-    18. packaging        — pyproject.toml metadata, classifiers, README.md, test coverage to 80%
+    16. [x] integration      — real datasets: Titanic, House Prices, Adult Income
+    17. [x] edge cases       — degenerate cols (Complete), cardinality/ID extremes (Complete), degenerate DataFrame shapes (Complete)
+    18. [x] packaging        — [x] hygiene pass, [x] pyproject.toml metadata, [x] test coverage to 80%
     19. testpypi         — build + upload to TestPyPI, verify install on clean venv
     20. publish          — twine upload to PyPI, tag v0.1.0
 
@@ -128,3 +128,10 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 2026-07-04: Implemented initial CLI skeleton in cli.py using Typer. Early validation errors (file not found, invalid CSV, ValueError from PreFlight) are caught and handled with clean stderr echos and Exit(1) instead of raw stack traces, enforcing good CLI hygiene.
 2026-07-04: Implemented write_outputs() in cli.py handling conditional joblib and json serialization. Opted to fail fast on OSError during file writing and map those to CLI error echoes to ensure users are immediately alerted to permission or disk issues.
 2026-07-04: Hardened cli.py with strict CLI-layer defensiveness (e.g. range-checking for thresholds, intercepting empty/null payloads, parsing exceptions) to provide a polished terminal UX without polluting core library primitives.
+2026-07-04: Added tests/integration/test_titanic.py for the full prepare() round-trip on a real-world dataset (Titanic). Fixed CleanerTransformer get_feature_names_out to properly emit generated indicator column names, ensuring pandas set_output behaves deterministically.
+2026-07-04: Added tests/integration/test_house_prices.py to validate the pipeline on regression tasks with high cardinality categoricals and skewed features. Rigorously tested cross-fit target encoding, log1p transformation gates, and verified that target columns remain rigorously untouched.
+2026-07-04: Added tests/integration/test_adult_income.py as the final dataset integration test, verifying class imbalance detection, consistent encoding on medium-cardinality boundaries, and explicitly asserting the absence of `.predict()` methods to enforce architectural scope.
+    2026-07-04: Added tests/edge_cases/test_degenerate_columns.py to validate the pipeline gracefully handles degenerate columns (all-null, single-category, constant numeric) without crashing and properly flags or drops them according to Profiler and Cleaner rules.
+    2026-07-04: Added tests/edge_cases/test_cardinality_extremes.py to validate the pipeline gracefully handles cardinality and variance extremes, confirming that high-cardinality strings are properly smoothed by cross-fit target encoding and near-zero variance numerics are safely scaled.
+    2026-07-04: Added tests/edge_cases/test_degenerate_shapes.py to validate the pipeline robustly fast-fails on single-column, empty, and duplicate-column DataFrames, and handles single-row DataFrames gracefully without raw exceptions.
+    2026-07-04: Performed repository hygiene pass, removing manual test artifacts and explicitly updating .gitignore to exclude them. Added pytest testpaths and markers to pyproject.toml to ensure clean test runs.

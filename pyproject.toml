@@ -7,7 +7,32 @@ name = "preflight-ml"
 version = "0.1.0"
 description = "A pip-installable Python library that takes a raw pandas DataFrame and returns a cleaned DataFrame, a reusable sklearn Pipeline, and a structured Report — automatically."
 readme = "README.md"
+license = {text = "MIT License"}
+authors = [
+    {name = "VAIyerAmogha"}
+]
+keywords = [
+    "machine-learning",
+    "preprocessing",
+    "pandas",
+    "scikit-learn",
+    "feature-engineering"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License"
+]
 requires-python = ">=3.9"
+
+[project.urls]
+Homepage = "https://github.com/VAIyerAmogha/PreFlight"
+Repository = "https://github.com/VAIyerAmogha/PreFlight"
 dependencies = [
     "scikit-learn",
     "pandas",
@@ -21,7 +46,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest"
+    "pytest",
+    "seaborn"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: mark test as an integration test"
 ]
 
 [project.scripts]
@@ -29,3 +61,10 @@ preflight = "preflight.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/preflight"]
+
+[tool.coverage.run]
+source = ["src/preflight"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 80
