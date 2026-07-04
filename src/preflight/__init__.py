@@ -84,7 +84,7 @@ def profile(
     return PrepResult(
         df=df,
         pipeline=None,
-        report=Report(profiler_entries),
+        report=Report(profiler_entries, df=df, profiles=profiles, target=target),
     )
 
 
@@ -121,7 +121,7 @@ def clean(
     return PrepResult(
         df=df_clean,
         pipeline=None,
-        report=Report(all_entries),
+        report=Report(all_entries, df=df_clean, profiles=surviving_profiles, target=target),
     )
 
 
@@ -163,7 +163,7 @@ def engineer(
     return PrepResult(
         df=df_eng,
         pipeline=None,
-        report=Report(all_entries),
+        report=Report(all_entries, df=df_eng, profiles=surviving_profiles, target=target),
     )
 
 

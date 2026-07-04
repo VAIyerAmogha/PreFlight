@@ -144,7 +144,9 @@ def _validate_inputs(
     ValueError
         On any structural problem or a classification + continuous-target mismatch.
     """
-    # 1. Non-empty
+    # 1. Type and Non-empty
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(f"DataFrame required, got {type(df)}")
     if len(df) == 0:
         raise ValueError("DataFrame cannot be empty")
 

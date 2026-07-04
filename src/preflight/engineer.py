@@ -244,6 +244,14 @@ def generate_datetime_cyclical_features(df: pd.DataFrame, profiles: list[ColumnP
         if col not in df_out.columns:
             continue
         series = df_out[col]
+        if not pd.api.types.is_datetime64_any_dtype(series):
+            try:
+                from preflight.cleaner import coerce_string_dates_to_datetime
+                series = coerce_string_dates_to_datetime(series)
+            except ImportError:
+                series = pd.to_datetime(series, errors='coerce')
+            df_out[col] = series
+                
         if config.datetime_cyclical:
             df_out[f"{col}_month_sin"] = np.sin(2 * np.pi * series.dt.month / 12)
             df_out[f"{col}_month_cos"] = np.cos(2 * np.pi * series.dt.month / 12)
@@ -497,6 +505,12 @@ def add_features(
     skipped_cols = []
     cluster_info = {}
     
+    df_raw = getattr(result.report, "_df", None)
+    if df_raw is None:
+        df_raw = df_out.copy()
+    else:
+        df_raw = df_raw.copy()
+    
     # 1. Interactions
     if feature_config.interactions:
         df_int, reps = generate_interaction_features(df_out, profiles_to_use, target_to_use, feature_config)
@@ -512,8 +526,8 @@ def add_features(
                 
     # 2. Datetimes
     if feature_config.datetime_cyclical or feature_config.datetime_deltas or feature_config.datetime_reference_col:
-        df_dt, reps = generate_datetime_cyclical_features(df_out, profiles_to_use, feature_config)
-        for col in df_dt.columns.difference(df_out.columns):
+        df_dt, reps = generate_datetime_cyclical_features(df_raw, profiles_to_use, feature_config)
+        for col in df_dt.columns.difference(df_raw.columns):
             if col in result.df.columns:
                 skipped_cols.append(col)
                 new_entries.append(ReportEntry(stage="engineer", column=col, action="skipped_duplicate_feature", rationale=f"Skipped generated datetime feature {col} due to name collision.", severity="warning"))

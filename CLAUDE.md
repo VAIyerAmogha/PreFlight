@@ -61,9 +61,8 @@ Start every session by reading PLAN.md, then this file.
 - Do not train or select models — PreFlight stops before model training
 
 ## Current focus
-Last updated: 2026-07-04
-Active work: TestPyPI publish (Phase 13, PLAN.md steps 19-20) as next.
-v0.2.0 Phase 1 (task/target mismatch validation) — COMPLETE. Phase 2 (opt-in feature engineering) — COMPLETE. Phase 3 (add_features post-hoc engineering) — COMPLETE. Phase 4 (Report readability) — COMPLETE. Phase 5 (CLI exposes FeatureConfig) — COMPLETE.
+Last updated: 2026-07-05
+Active work: v0.2.0 feature work complete, pending manual republish to PyPI as pypreflight v0.2.0.
 
 Recent completions:
 - v0.2.0 Phase 5: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.

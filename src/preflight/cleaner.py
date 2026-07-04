@@ -95,6 +95,24 @@ def drop_numeric_id_columns(
     new_df = df.drop(columns=cols_to_drop)
     return new_df, cols_to_drop
 
+def drop_constant_columns(
+    df: pd.DataFrame,
+    profiles: list[ColumnProfile],
+) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Drops all columns where profile.semantic_type == SemanticType.CONSTANT.
+    Returns (new df, list of dropped column names).
+    """
+    cols_to_drop = [
+        p.name for p in profiles 
+        if p.semantic_type == SemanticType.CONSTANT and p.name in df.columns
+    ]
+    if not cols_to_drop:
+        return df.copy(), []
+    
+    new_df = df.drop(columns=cols_to_drop)
+    return new_df, cols_to_drop
+
 def remove_duplicate_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """
     Returns (deduplicated df, count of rows removed).
@@ -215,8 +233,16 @@ def run_cleaner(
             rationale="Column is a NUMERIC_ID", severity="warning"
         ))
         
+    # 3.5 Drop CONSTANT columns
+    df, dropped_constant = drop_constant_columns(df, profiles)
+    for col in dropped_constant:
+        report.append(ReportEntry(
+            stage="cleaner", column=col, action="drop_column",
+            rationale="Column is constant", severity="warning"
+        ))
+        
     # Prune profiles
-    dropped_all = set(dropped_missing + dropped_id)
+    dropped_all = set(dropped_missing + dropped_id + dropped_constant)
     surviving_profiles = [p for p in profiles if p.name not in dropped_all]
     
     # 4. Iterate over surviving columns

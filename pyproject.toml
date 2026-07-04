@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pypreflight"
-version = "0.1.0"
+version = "0.2.0"
 description = "A pip-installable Python library that takes a raw pandas DataFrame and returns a cleaned DataFrame, a reusable sklearn Pipeline, and a structured Report — automatically."
 readme = "README.md"
 license = {text = "MIT License"}
