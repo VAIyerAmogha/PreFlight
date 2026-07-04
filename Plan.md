@@ -89,6 +89,8 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     Phase 1  [x] task/target mismatch validation — validation.py, _validate_inputs(), _validate_task_target_match(); classification+continuous raises at API boundary; regression+low-cardinality warns via ReportEntry (COMPLETE)
     Phase 2  [x] opt-in feature engineering — types.py FeatureConfig, engineer.py generate_interaction_features/datetime_cyclical/cluster_features, run_engineer() modified but defaults to all-off; v0.1.0 behavior is the guaranteed fallback (COMPLETE)
     Phase 3  [x] add_features post-hoc engineering — engineer.py add_features() and FeatureAugmenterTransformer, __init__.py export (COMPLETE)
+    Phase 4  [x] Report readability improvements — report.py charts share color/sizing constants, .show() groups by stage with severity symbols and truncates info-level by default (COMPLETE)
+    Phase 5  [x] CLI exposes FeatureConfig — cli.py added flags to `prepare`; feature_config stays None unless explicitly set, preserving v0.1.0 output (COMPLETE)
 
 ## Environment variables
     None. PreFlight-ML requires no environment variables, API keys, or external services.
@@ -143,3 +145,5 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     2026-07-04: task/target mismatch validated at the API boundary before any stage runs; classification+continuous raises, regression+low-cardinality warns. Extracted all repeated validation blocks from prepare/profile/clean/engineer into _validate_inputs() in validation.py. _validate_task_target_match() uses a dual-threshold heuristic (>20 unique values AND >5% of row count) to avoid false positives on small integer-class datasets.
     2026-07-04: FeatureConfig defaults to all-off; v0.1.0 behavior is the guaranteed fallback. Opt-in feature engineering (interactions, datetime, clustering) is safely scoped to run_engineer without modifying the default pipeline logic.
     2026-07-04: add_features() lets FeatureConfig be applied post-hoc to an existing PrepResult without rerunning Profiler/Cleaner; returns a new PrepResult, never mutates the input; requires a full prepare() result with profiles/target available.
+    2026-07-04: Report chart functions share one color palette/sizing logic and return Figure objects; .show() groups by stage, uses severity symbols, and truncates info-level entries by default with a verbose=True override.
+    2026-07-04: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.

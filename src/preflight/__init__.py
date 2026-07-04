@@ -12,6 +12,8 @@ from preflight.profiler import run_profiler
 from preflight.cleaner import run_cleaner
 from preflight.engineer import run_engineer, add_features
 from preflight.validation import _validate_inputs
+from typing import Optional
+from preflight.types import FeatureConfig
 
 
 def prepare(
@@ -22,6 +24,7 @@ def prepare(
     drop_threshold: float = 0.6,
     outlier_method: str = "iqr",
     cardinality_threshold: int = 20,
+    feature_config: Optional[FeatureConfig] = None,
 ) -> PrepResult:
     warning = _validate_inputs(df, target, task, model_hint=model_hint)
     # warning is handled inside assembler via the profiler entries; we surface it
@@ -47,6 +50,11 @@ def prepare(
         )
         # Report.entries is a read-only property (returns a copy); mutate _entries directly.
         result.report._entries.insert(0, entry)
+        
+    if feature_config is not None:
+        # Applies feature engineering post-hoc and returns a new PrepResult
+        result = add_features(result, feature_config, target=target)
+        
     return result
 
 

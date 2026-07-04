@@ -8,6 +8,22 @@ import html
 import base64
 from io import BytesIO
 
+# Presentation Constants
+SEVERITY_SYMBOLS = {"info": "·", "warning": "⚠", "critical": "✕"}
+SEVERITY_COLORS = {"info": "#f5f5f5", "warning": "#fff3e0", "critical": "#ffebee"}
+CHART_PALETTE = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3", "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD"]
+
+def _truncate_label(label: str, max_len: int = 20) -> str:
+    if not isinstance(label, str):
+        label = str(label)
+    if len(label) > max_len:
+        return label[:max_len-3] + "..."
+    return label
+
+def _calc_figsize(n_elements: int) -> tuple[float, float]:
+    width = min(20.0, max(8.0, 0.4 * n_elements))
+    return (width, 6.0)
+
 class Report:
     """
     Report owns all display and export logic for PreFlight-ML.
@@ -72,7 +88,7 @@ class Report:
                 counts[e.severity] = 1
         return counts
 
-    def show(self, severity_filter: Optional[str] = None) -> None:
+    def show(self, severity_filter: Optional[str] = None, verbose: bool = False) -> None:
         if not self._entries:
             print("No decisions logged in the report.")
             return
@@ -96,13 +112,24 @@ class Report:
             if not stage_entries:
                 continue
 
-            print(f"\n--- {stage.upper()} ---")
+            print(f"\n=== {stage.upper()} ===")
             stage_entries.sort(key=lambda e: severity_order.get(e.severity, 3))
 
+            info_count = 0
             for e in stage_entries:
-                print(f"  [{e.severity.upper()}] Column: {e.column}")
+                if not verbose and e.severity == "info":
+                    info_count += 1
+                    if info_count > 5:
+                        continue
+
+                symbol = SEVERITY_SYMBOLS.get(e.severity, "-")
+                print(f"  {symbol} [{e.severity.upper()}] Column: {e.column}")
                 print(f"    Action: {e.action}")
                 print(f"    Rationale: {e.rationale}")
+                
+            if not verbose and info_count > 5:
+                hidden = info_count - 5
+                print(f"  ... {hidden} more info-level entries — call .show(verbose=True) to see all")
 
     def to_dict(self) -> dict:
         def _make_serializable(val):
@@ -227,9 +254,9 @@ class Report:
             "table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }",
             "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
             "th { background-color: #f2f2f2; }",
-            ".severity-critical { background-color: #ffebee; color: #c62828; }",
-            ".severity-warning { background-color: #fff3e0; color: #ef6c00; }",
-            ".severity-info { background-color: #f5f5f5; color: #424242; }",
+            ".severity-critical { background-color: " + SEVERITY_COLORS["critical"] + "; color: #c62828; }",
+            ".severity-warning { background-color: " + SEVERITY_COLORS["warning"] + "; color: #ef6c00; }",
+            ".severity-info { background-color: " + SEVERITY_COLORS["info"] + "; color: #424242; }",
             ".summary { margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; }",
             ".plot-container { margin-bottom: 30px; text-align: center; }",
             ".plot-container img { max-width: 100%; height: auto; border: 1px solid #ddd; }",
@@ -316,14 +343,19 @@ def plot_correlation_heatmap(df: pd.DataFrame, numeric_columns: list[str]) -> Fi
     corr = df[numeric_columns].corr()
     
     # Explicitly create figure to avoid global state issues in notebook/script reuse
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=_calc_figsize(len(numeric_columns)))
     im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1)
     fig.colorbar(im, ax=ax)
     
     ax.set_xticks(np.arange(len(numeric_columns)))
     ax.set_yticks(np.arange(len(numeric_columns)))
-    ax.set_xticklabels(numeric_columns, rotation=45, ha="right")
-    ax.set_yticklabels(numeric_columns)
+    
+    labels = [_truncate_label(c) for c in numeric_columns]
+    rotation = 45 if len(numeric_columns) > 8 else 0
+    ha = "right" if rotation == 45 else "center"
+    
+    ax.set_xticklabels(labels, rotation=rotation, ha=ha)
+    ax.set_yticklabels(labels)
     
     ax.set_title("Numeric Features Correlation Heatmap")
     fig.tight_layout()
@@ -342,11 +374,16 @@ def plot_missingness_heatmap(df: pd.DataFrame) -> Figure:
     missing_matrix = plot_df.isna().values
     
     # Explicitly create figure to avoid global state issues
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=_calc_figsize(len(df.columns)))
     im = ax.imshow(missing_matrix, cmap="binary", aspect="auto", interpolation="none")
     
     ax.set_xticks(np.arange(len(df.columns)))
-    ax.set_xticklabels(df.columns, rotation=90)
+    
+    labels = [_truncate_label(c) for c in df.columns]
+    rotation = 45 if len(df.columns) > 8 else 0
+    ha = "right" if rotation == 45 else "center"
+    
+    ax.set_xticklabels(labels, rotation=rotation, ha=ha)
     ax.set_yticks([])
     ax.set_ylabel(f"Records (n={len(plot_df)})")
     ax.set_title("Missingness Heatmap (Black = Missing)")
@@ -373,10 +410,20 @@ def plot_mutual_info_bar_chart(profiles: list[ColumnProfile]) -> Figure:
     scores = [x[1] for x in mi_data]
     
     # Explicitly create figure to avoid global state issues
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.barh(names, scores, color="skyblue")
+    height = min(20.0, max(6.0, 0.4 * len(names)))
+    fig, ax = plt.subplots(figsize=(8, height))
+    bars = ax.barh(names, scores, color=CHART_PALETTE[0], label="Mutual Info")
+    
+    # Add value annotations
+    ax.bar_label(bars, fmt='%.3f', padding=3)
+    
+    trunc_names = [_truncate_label(n) for n in names]
+    ax.set_yticks(np.arange(len(names)))
+    ax.set_yticklabels(trunc_names)
+    
     ax.set_xlabel("Mutual Information")
     ax.set_title("Mutual Information with Target")
+    ax.legend(loc="lower right")
     fig.tight_layout()
     return fig
 
@@ -390,15 +437,24 @@ def plot_class_distribution(target: pd.Series) -> Figure:
         raise ValueError("Target has more than 20 unique values, inappropriate for class distribution plot.")
         
     # Explicitly create figure to avoid global state issues
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=_calc_figsize(len(val_counts)))
     
-    x_labels = [str(x) for x in val_counts.index]
-    ax.bar(x_labels, val_counts.values, color="coral")
+    x_labels = [_truncate_label(str(x)) for x in val_counts.index]
+    bars = ax.bar(x_labels, val_counts.values, color=CHART_PALETTE[1], label="Class Count")
+    
+    # Add value annotations
+    ax.bar_label(bars, fmt='%d', padding=3)
+    
     ax.set_xlabel("Target Class")
     ax.set_ylabel("Count")
     ax.set_title("Target Class Distribution")
+    
+    rotation = 45 if len(val_counts) > 8 else 0
+    ha = "right" if rotation == 45 else "center"
+    
     ax.set_xticks(np.arange(len(val_counts)))
-    ax.set_xticklabels(x_labels, rotation=45, ha="right")
+    ax.set_xticklabels(x_labels, rotation=rotation, ha=ha)
+    ax.legend()
     
     fig.tight_layout()
     return fig
