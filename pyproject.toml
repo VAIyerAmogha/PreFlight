@@ -30,9 +30,6 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 
-[project.urls]
-Homepage = "https://github.com/VAIyerAmogha/PreFlight"
-Repository = "https://github.com/VAIyerAmogha/PreFlight"
 dependencies = [
     "scikit-learn",
     "pandas",
@@ -43,6 +40,10 @@ dependencies = [
     "typer",
     "joblib"
 ]
+
+[project.urls]
+Homepage = "https://github.com/VAIyerAmogha/PreFlight"
+Repository = "https://github.com/VAIyerAmogha/PreFlight"
 
 [project.optional-dependencies]
 dev = [

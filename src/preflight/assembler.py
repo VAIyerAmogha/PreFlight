@@ -351,7 +351,12 @@ def run_assembler(
     all_entries = profiler_report + cleaner_step.report_entries_ + engineer_step.report_entries_
     
     # 6. Construct Report
-    report = Report(all_entries)
+    report = Report(
+        entries=all_entries,
+        df=df,
+        profiles=profiles,
+        target=target
+    )
     
     # 7. Return PrepResult
     return PrepResult(
