@@ -5,7 +5,53 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold
 import scipy.stats
-from preflight.types import ColumnProfile, ReportEntry, SemanticType
+import itertools
+from typing import Optional
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, TransformerMixin
+from preflight.report import Report
+from preflight.types import ColumnProfile, ReportEntry, SemanticType, FeatureConfig, PrepResult
+
+class FeatureAugmenterTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, config: FeatureConfig, profiles: list[ColumnProfile], target: str, cluster_info: dict, skipped_cols: list[str]):
+        self.config = config
+        self.profiles = profiles
+        self.target = target
+        self.cluster_info = cluster_info
+        self.skipped_cols = skipped_cols
+
+    def fit(self, X: pd.DataFrame, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X_out = X.copy()
+        if self.config.interactions:
+            X_int, _ = generate_interaction_features(X_out, self.profiles, self.target, self.config)
+            for col in X_int.columns.difference(X_out.columns):
+                if col not in self.skipped_cols:
+                    X_out[col] = X_int[col]
+                    
+        if self.config.datetime_cyclical or self.config.datetime_deltas or self.config.datetime_reference_col:
+            X_dt, _ = generate_datetime_cyclical_features(X_out, self.profiles, self.config)
+            for col in X_dt.columns.difference(X_out.columns):
+                if col not in self.skipped_cols:
+                    X_out[col] = X_dt[col]
+                    
+        if self.config.clustering and self.cluster_info and "model" in self.cluster_info:
+            model = self.cluster_info["model"]
+            features = self.cluster_info["features"]
+            X_clust = X_out[features].fillna(0)
+            if "cluster_label" not in self.skipped_cols:
+                X_out["cluster_label"] = model.predict(X_clust)
+            if "cluster_dist_to_centroid" not in self.skipped_cols:
+                dists = model.transform(X_clust)
+                X_out["cluster_dist_to_centroid"] = dists.min(axis=1)
+                
+        return X_out
+
 
 def ordinal_encode(series: pd.Series) -> tuple[pd.Series, dict]:
     """
@@ -155,12 +201,130 @@ def expand_datetime(series: pd.Series) -> pd.DataFrame:
     
     return df
 
+def generate_interaction_features(df: pd.DataFrame, profiles: list[ColumnProfile], target: str, config: FeatureConfig) -> tuple[pd.DataFrame, list[ReportEntry]]:
+    df_out = df.copy()
+    reports = []
+    
+    numeric_profiles = [p for p in profiles if p.semantic_type == SemanticType.NUMERIC_FEATURE]
+    scored_profiles = []
+    for p in numeric_profiles:
+        score = 0.0
+        if p.correlation_with_target is not None and not pd.isna(p.correlation_with_target):
+            score = max(score, abs(p.correlation_with_target))
+        if p.mutual_info_with_target is not None and not pd.isna(p.mutual_info_with_target):
+            score = max(score, abs(p.mutual_info_with_target))
+        scored_profiles.append((p.name, score))
+        
+    scored_profiles.sort(key=lambda x: x[1], reverse=True)
+    top_cols = [x[0] for x in scored_profiles[:config.interaction_top_k] if x[0] in df_out.columns]
+    
+    for a, b in itertools.combinations(top_cols, 2):
+        if "ratio" in config.interaction_types:
+            col_name = f"{a}_div_{b}"
+            df_out[col_name] = df_out[a] / df_out[b].replace(0, np.nan)
+            reports.append(ReportEntry(stage="engineer", column=col_name, action="created_interaction", rationale=f"Ratio of {a} and {b}", severity="info"))
+        if "product" in config.interaction_types:
+            col_name = f"{a}_times_{b}"
+            df_out[col_name] = df_out[a] * df_out[b]
+            reports.append(ReportEntry(stage="engineer", column=col_name, action="created_interaction", rationale=f"Product of {a} and {b}", severity="info"))
+        if "difference" in config.interaction_types:
+            col_name = f"{a}_minus_{b}"
+            df_out[col_name] = df_out[a] - df_out[b]
+            reports.append(ReportEntry(stage="engineer", column=col_name, action="created_interaction", rationale=f"Difference of {a} and {b}", severity="info"))
+            
+    return df_out, reports
+
+def generate_datetime_cyclical_features(df: pd.DataFrame, profiles: list[ColumnProfile], config: FeatureConfig) -> tuple[pd.DataFrame, list[ReportEntry]]:
+    df_out = df.copy()
+    reports = []
+    
+    dt_cols = [p.name for p in profiles if p.semantic_type in (SemanticType.DATETIME_NATIVE, SemanticType.DATETIME_STRING)]
+    
+    for col in dt_cols:
+        if col not in df_out.columns:
+            continue
+        series = df_out[col]
+        if config.datetime_cyclical:
+            df_out[f"{col}_month_sin"] = np.sin(2 * np.pi * series.dt.month / 12)
+            df_out[f"{col}_month_cos"] = np.cos(2 * np.pi * series.dt.month / 12)
+            df_out[f"{col}_dayofweek_sin"] = np.sin(2 * np.pi * series.dt.dayofweek / 7)
+            df_out[f"{col}_dayofweek_cos"] = np.cos(2 * np.pi * series.dt.dayofweek / 7)
+            is_weekend = series.dt.dayofweek >= 5
+            df_out[f"{col}_is_weekend"] = is_weekend.where(series.notna(), np.nan)
+            
+            reports.append(ReportEntry(stage="engineer", column=col, action="datetime_cyclical", rationale=f"Cyclical features and is_weekend for {col}", severity="info"))
+            
+    if config.datetime_deltas and len(dt_cols) >= 2:
+        for a, b in itertools.combinations(dt_cols, 2):
+            if a in df_out.columns and b in df_out.columns:
+                col_name = f"{a}_to_{b}_days"
+                df_out[col_name] = (df_out[b] - df_out[a]).dt.total_seconds() / (24 * 3600)
+                reports.append(ReportEntry(stage="engineer", column=col_name, action="datetime_deltas", rationale=f"Days between {a} and {b}", severity="info"))
+                
+    if config.datetime_reference_col and config.datetime_reference_col in dt_cols:
+        ref = config.datetime_reference_col
+        if ref in df_out.columns:
+            for col in dt_cols:
+                if col != ref and col in df_out.columns:
+                    col_name = f"{col}_days_since_ref"
+                    df_out[col_name] = (df_out[col] - df_out[ref]).dt.total_seconds() / (24 * 3600)
+                    reports.append(ReportEntry(stage="engineer", column=col_name, action="datetime_reference", rationale=f"Days since reference {ref} for {col}", severity="info"))
+                    
+    return df_out, reports
+
+def generate_cluster_features(df: pd.DataFrame, profiles: list[ColumnProfile], config: FeatureConfig) -> tuple[pd.DataFrame, list[ReportEntry], dict]:
+    df_out = df.copy()
+    reports = []
+    
+    if config.cluster_features == "numeric_only":
+        features = [p.name for p in profiles if p.semantic_type == SemanticType.NUMERIC_FEATURE and p.name in df_out.columns]
+    else:
+        features = [f for f in config.cluster_features if f in df_out.columns]
+        
+    if not features:
+        return df_out, reports, {}
+        
+    X = df_out[features].fillna(0)
+    
+    if config.cluster_k == "auto":
+        best_k = 2
+        best_score = -1
+        models = {}
+        for k in range(2, min(11, len(X))):
+            if k >= len(X):
+                break
+            km = KMeans(n_clusters=k, random_state=42, n_init="auto")
+            labels = km.fit_predict(X)
+            if len(set(labels)) > 1:
+                score = silhouette_score(X, labels)
+                models[k] = (km, score)
+                if score > best_score:
+                    best_score = score
+                    best_k = k
+        if best_score == -1:
+            best_k = 2
+            best_model = KMeans(n_clusters=best_k, random_state=42, n_init="auto").fit(X)
+        else:
+            best_model = models[best_k][0]
+    else:
+        best_k = config.cluster_k
+        best_model = KMeans(n_clusters=best_k, random_state=42, n_init="auto").fit(X)
+        
+    df_out["cluster_label"] = best_model.labels_
+    dists = best_model.transform(X)
+    df_out["cluster_dist_to_centroid"] = dists.min(axis=1)
+    
+    reports.append(ReportEntry(stage="engineer", column="cluster_label", action="cluster_features", rationale=f"KMeans clustering with k={best_k} on {len(features)} features", severity="info"))
+    
+    return df_out, reports, {"model": best_model, "features": features}
+
 def run_engineer(
     df: pd.DataFrame,
     profiles: list[ColumnProfile],
     target: str,
     model_hint: str,
     cardinality_threshold: int = 20,
+    feature_config: Optional[FeatureConfig] = None,
 ) -> tuple[pd.DataFrame, list[ReportEntry], dict]:
     """
     Orchestrates the feature engineering phase based on column profiles and model_hint.
@@ -267,4 +431,122 @@ def run_engineer(
                 # Tree models do not need numeric scaling or log transform
                 specs[col] = {"transform": "passthrough"}
                 
+    if feature_config is not None:
+        if feature_config.interactions:
+            df_out, rep = generate_interaction_features(df_out, profiles, target, feature_config)
+            report.extend(rep)
+            
+        if feature_config.datetime_cyclical or feature_config.datetime_deltas or feature_config.datetime_reference_col:
+            dt_df, rep = generate_datetime_cyclical_features(df, profiles, feature_config)
+            new_cols = dt_df.columns.difference(df.columns)
+            df_out = df_out.join(dt_df[new_cols])
+            report.extend(rep)
+            
+        if feature_config.clustering:
+            df_out, rep, fitted = generate_cluster_features(df_out, profiles, feature_config)
+            report.extend(rep)
+            if fitted:
+                specs["_clustering"] = {"transform": "cluster_features", "fitted_info": fitted}
+                
     return df_out, report, specs
+
+
+def add_features(
+    result: PrepResult,
+    feature_config: FeatureConfig,
+    profiles: Optional[list[ColumnProfile]] = None,
+    target: Optional[str] = None
+) -> PrepResult:
+    """
+    Applies FeatureConfig-driven feature engineering to an ALREADY-PREPARED PrepResult,
+    without rerunning Profiler/Cleaner from scratch.
+    """
+    if result.pipeline is None:
+        raise ValueError("add_features() requires a full prepare() result with a pipeline.")
+        
+    profiles_to_use = profiles if profiles is not None else getattr(result.report, "profiles", getattr(result.report, "_profiles", None))
+    target_to_use = target if target is not None else getattr(result.report, "target", getattr(result.report, "_target", None))
+    
+    if profiles_to_use is None or target_to_use is None:
+        raise ValueError("add_features() requires profiles and target. Pass them explicitly or use a full prepare() result.")
+        
+    all_off = not (
+        feature_config.interactions or
+        feature_config.datetime_cyclical or
+        feature_config.datetime_deltas or
+        feature_config.datetime_reference_col or
+        feature_config.clustering
+    )
+    
+    if all_off:
+        entry = ReportEntry(
+            stage="engineer", column="dataset", action="add_features_skipped", 
+            rationale="No features requested in FeatureConfig.", severity="info"
+        )
+        new_report = Report(
+            result.report.entries + [entry], 
+            result.report._df, 
+            result.report._profiles, 
+            result.report._target
+        )
+        new_pipeline = Pipeline(steps=result.pipeline.steps)
+        return PrepResult(df=result.df.copy(), pipeline=new_pipeline, report=new_report)
+
+    df_out = result.df.copy()
+    new_entries = []
+    skipped_cols = []
+    cluster_info = {}
+    
+    # 1. Interactions
+    if feature_config.interactions:
+        df_int, reps = generate_interaction_features(df_out, profiles_to_use, target_to_use, feature_config)
+        for col in df_int.columns.difference(df_out.columns):
+            if col in result.df.columns:
+                skipped_cols.append(col)
+                new_entries.append(ReportEntry(stage="engineer", column=col, action="skipped_duplicate_feature", rationale=f"Skipped generated interaction feature {col} due to name collision.", severity="warning"))
+            else:
+                df_out[col] = df_int[col]
+        for rep in reps:
+            if rep.column not in skipped_cols:
+                new_entries.append(rep)
+                
+    # 2. Datetimes
+    if feature_config.datetime_cyclical or feature_config.datetime_deltas or feature_config.datetime_reference_col:
+        df_dt, reps = generate_datetime_cyclical_features(df_out, profiles_to_use, feature_config)
+        for col in df_dt.columns.difference(df_out.columns):
+            if col in result.df.columns:
+                skipped_cols.append(col)
+                new_entries.append(ReportEntry(stage="engineer", column=col, action="skipped_duplicate_feature", rationale=f"Skipped generated datetime feature {col} due to name collision.", severity="warning"))
+            else:
+                df_out[col] = df_dt[col]
+        for rep in reps:
+            if rep.column not in skipped_cols:
+                new_entries.append(rep)
+                
+    # 3. Clustering
+    if feature_config.clustering:
+        df_clust, reps, cluster_info = generate_cluster_features(df_out, profiles_to_use, feature_config)
+        for col in ["cluster_label", "cluster_dist_to_centroid"]:
+            if col in df_clust.columns:
+                if col in result.df.columns:
+                    skipped_cols.append(col)
+                    new_entries.append(ReportEntry(stage="engineer", column=col, action="skipped_duplicate_feature", rationale=f"Skipped generated cluster feature {col} due to name collision.", severity="warning"))
+                else:
+                    df_out[col] = df_clust[col]
+        for rep in reps:
+            if rep.column not in skipped_cols:
+                new_entries.append(rep)
+                
+    new_report = Report(
+        result.report.entries + new_entries, 
+        result.report._df, 
+        result.report._profiles, 
+        result.report._target
+    )
+    
+    augmenter = FeatureAugmenterTransformer(feature_config, profiles_to_use, target_to_use, cluster_info, skipped_cols)
+    augmenter.is_fitted_ = True
+    step = ("augmenter", augmenter)
+    new_pipeline = Pipeline(steps=result.pipeline.steps + [step])
+    
+    return PrepResult(df=df_out, pipeline=new_pipeline, report=new_report)

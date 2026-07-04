@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Literal, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, Literal, TYPE_CHECKING, Union
 import pandas as pd
 
 if TYPE_CHECKING:
@@ -62,6 +62,29 @@ class ReportEntry:
             raise ValueError(
                 f"Invalid severity '{self.severity}'. Expected one of {valid_severities}."
             )
+
+@dataclass
+class FeatureConfig:
+    interactions: bool = False
+    interaction_top_k: int = 5
+    interaction_types: list[str] = field(default_factory=lambda: ["ratio", "product"])
+    datetime_cyclical: bool = False
+    datetime_deltas: bool = False
+    datetime_reference_col: Optional[str] = None
+    clustering: bool = False
+    cluster_k: Union[int, str] = "auto"
+    cluster_features: Union[str, list[str]] = "numeric_only"
+
+    def __post_init__(self):
+        valid_interaction_types = {"ratio", "product", "difference"}
+        if not set(self.interaction_types).issubset(valid_interaction_types):
+            raise ValueError(f"interaction_types must be a subset of {valid_interaction_types}")
+        if self.interaction_top_k < 1:
+            raise ValueError("interaction_top_k must be >= 1")
+        if self.cluster_k != "auto" and (not isinstance(self.cluster_k, int) or self.cluster_k <= 0):
+            raise ValueError("cluster_k must be 'auto' or a positive integer")
+        if self.cluster_features != "numeric_only" and not isinstance(self.cluster_features, list):
+            raise ValueError("cluster_features must be 'numeric_only' or a list of column names")
 
 @dataclass
 class PrepResult:

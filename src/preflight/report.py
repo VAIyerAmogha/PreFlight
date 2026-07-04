@@ -32,6 +32,22 @@ class Report:
     def entries(self) -> list[ReportEntry]:
         return list(self._entries)
 
+    @property
+    def profiles(self) -> list[ColumnProfile] | None:
+        return self._profiles
+
+    @profiles.setter
+    def profiles(self, value: list[ColumnProfile] | None) -> None:
+        self._profiles = value
+
+    @property
+    def target(self) -> str | None:
+        return self._target
+
+    @target.setter
+    def target(self, value: str | None) -> None:
+        self._target = value
+
     def filter_by_severity(self, severity: str) -> list[ReportEntry]:
         valid_severities = {"info", "warning", "critical"}
         if severity not in valid_severities:

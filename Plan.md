@@ -85,6 +85,11 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     19. testpypi         — build + upload to TestPyPI, verify install on clean venv
     20. publish          — twine upload to PyPI, tag v0.1.0
 
+## v0.2.0 roadmap
+    Phase 1  [x] task/target mismatch validation — validation.py, _validate_inputs(), _validate_task_target_match(); classification+continuous raises at API boundary; regression+low-cardinality warns via ReportEntry (COMPLETE)
+    Phase 2  [x] opt-in feature engineering — types.py FeatureConfig, engineer.py generate_interaction_features/datetime_cyclical/cluster_features, run_engineer() modified but defaults to all-off; v0.1.0 behavior is the guaranteed fallback (COMPLETE)
+    Phase 3  [x] add_features post-hoc engineering — engineer.py add_features() and FeatureAugmenterTransformer, __init__.py export (COMPLETE)
+
 ## Environment variables
     None. PreFlight-ML requires no environment variables, API keys, or external services.
 
@@ -135,3 +140,6 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     2026-07-04: Added tests/edge_cases/test_cardinality_extremes.py to validate the pipeline gracefully handles cardinality and variance extremes, confirming that high-cardinality strings are properly smoothed by cross-fit target encoding and near-zero variance numerics are safely scaled.
     2026-07-04: Added tests/edge_cases/test_degenerate_shapes.py to validate the pipeline robustly fast-fails on single-column, empty, and duplicate-column DataFrames, and handles single-row DataFrames gracefully without raw exceptions.
     2026-07-04: Performed repository hygiene pass, removing manual test artifacts and explicitly updating .gitignore to exclude them. Added pytest testpaths and markers to pyproject.toml to ensure clean test runs.
+    2026-07-04: task/target mismatch validated at the API boundary before any stage runs; classification+continuous raises, regression+low-cardinality warns. Extracted all repeated validation blocks from prepare/profile/clean/engineer into _validate_inputs() in validation.py. _validate_task_target_match() uses a dual-threshold heuristic (>20 unique values AND >5% of row count) to avoid false positives on small integer-class datasets.
+    2026-07-04: FeatureConfig defaults to all-off; v0.1.0 behavior is the guaranteed fallback. Opt-in feature engineering (interactions, datetime, clustering) is safely scoped to run_engineer without modifying the default pipeline logic.
+    2026-07-04: add_features() lets FeatureConfig be applied post-hoc to an existing PrepResult without rerunning Profiler/Cleaner; returns a new PrepResult, never mutates the input; requires a full prepare() result with profiles/target available.

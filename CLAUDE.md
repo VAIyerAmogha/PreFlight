@@ -12,6 +12,7 @@ Start every session by reading PLAN.md, then this file.
     src/preflight/
       __init__.py     — public API: prepare(), profile(), clean(), engineer(), compare()
       types.py        — SemanticType enum, ColumnProfile, ReportEntry dataclasses
+      validation.py   — _validate_inputs(), _validate_task_target_match() API boundary helpers
       profiler.py     — semantic type inference, all EDA signal extraction
       cleaner.py      — per-column remediation strategies
       engineer.py     — encoding, scaling, datetime expansion
@@ -62,8 +63,12 @@ Start every session by reading PLAN.md, then this file.
 ## Current focus
 Last updated: 2026-07-04
 Active work: TestPyPI publish (Phase 13, PLAN.md steps 19-20) as next.
+v0.2.0 Phase 1 (task/target mismatch validation) — COMPLETE. Phase 2 (opt-in feature engineering) — COMPLETE. Phase 3 (add_features post-hoc engineering) — COMPLETE.
 
 Recent completions:
+- v0.2.0 Phase 3: Implemented add_features() public API in __init__.py and engineer.py to apply FeatureConfig to an existing PrepResult post-hoc without rerunning Profiler/Cleaner.
+- v0.2.0 Phase 2: Added FeatureConfig and three opt-in feature-engineering steps (interactions, datetime cyclical/deltas/reference, clustering) to the Engineer stage.
+- v0.2.0 Phase 1: task/target mismatch validation added (validation.py). classification+continuous raises before any stage; regression+low-cardinality warns via ReportEntry. All four public functions now call _validate_inputs(). tests/test_validation.py added (28 tests).
 - Phase 12 (packaging) is FULLY complete (hygiene, pyproject.toml metadata, and >80% test coverage).
 - Added tests/edge_cases/test_degenerate_shapes.py — Phase 11 (all 3 edge-case sub-steps) is COMPLETE
 - Added tests/edge_cases/test_cardinality_extremes.py — Edge case testing in progress, 1 of 3 sub-steps remaining (degenerate DataFrame shapes)
@@ -107,3 +112,8 @@ Recent completions:
 
 Open questions / blockers:
 - Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)
+
+## Decision log addendum
+17. task/target mismatch validated at the API boundary before any stage runs; classification+continuous raises, regression+low-cardinality warns (2026-07-04)
+18. FeatureConfig defaults to all-off; v0.1.0 behavior is the guaranteed fallback (2026-07-04)
+19. add_features() lets FeatureConfig be applied post-hoc to an existing PrepResult without rerunning Profiler/Cleaner; returns a new PrepResult, never mutates the input; requires a full prepare() result with profiles/target available (2026-07-04)

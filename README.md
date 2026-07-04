@@ -2,13 +2,13 @@
 
 A pip-installable Python library that takes a raw pandas DataFrame and returns a cleaned DataFrame, a reusable sklearn Pipeline, and a structured Report — automatically.
 
-![PyPI version placeholder] ![License placeholder]
+[![PyPI version](https://badge.fury.io/py/pypreflight.svg)](https://badge.fury.io/py/pypreflight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Installation
 
 ```bash
 # Coming soon to PyPI!
-# pip install preflight-ml
+pip install pypreflight
 
 # For now, install from source:
 git clone https://github.com/VAIyerAmogha/PreFlight.git
