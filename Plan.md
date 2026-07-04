@@ -75,11 +75,11 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     9.  report.py        — ReportEntry log, .show(), .to_dict(), .to_dataframe() (Complete)
     10. assembler.py     — Pipeline construction, column name preservation, PrepResult assembly (Complete)
     11. test_assembler   — full prepare() round-trip, pipeline.transform() on held-out data (Complete)
-    12. report visuals   — .plot() four chart types, .to_html() embedded export
-    13. __init__.py      — wire prepare(), profile(), clean(), engineer(), compare()
-    14. cli.py           — typer CLI, file I/O, output naming
-    15. test_cli         — CLI integration tests
-    16. integration      — real datasets: Titanic, House Prices, Adult Income
+    12. report visuals   — .plot() four chart types, .to_html() embedded export (Complete)
+    13. __init__.py      — wire prepare(), profile(), clean(), engineer(), compare() (Complete)
+    14. cli.py           — typer CLI, file I/O, output naming (Complete)
+    15. test_cli         — CLI integration tests (Complete)
+    16. integration      — real datasets: Titanic, House Prices, Adult Income (In Progress)
     17. edge cases       — all-null columns, single-category, 100% cardinality, zero-variance
     18. packaging        — pyproject.toml metadata, classifiers, README.md, test coverage to 80%
     19. testpypi         — build + upload to TestPyPI, verify install on clean venv
@@ -121,3 +121,10 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 2026-07-03: Implemented `EngineerTransformer` in `assembler.py` (Sub-step 2 of 4). Ensures strict output column matching regardless of training-vs-test category drift by statically recording and automatically padding missing dummy variables with `False` values at inference. Guarantees safety during deployment against novel or missing target encoding classes by falling back onto frozen global means.
 2026-07-03: Implemented two-phase Pipeline construction logic (`build_pipeline` and `build_pipeline_two_phase`) in `assembler.py` (Sub-step 3 of 4). Solved the severe architectural coupling problem (where `EngineerTransformer` absolutely requires `CleanerTransformer`'s dynamic column-drop outputs to initialize) without breaking core Scikit-learn Pipeline mechanics. Implemented a strict two-phase fit routine that manually steps through the cleaner, extracts the post-cleaning profiles, constructs the engineer stage dynamically, and then packages them together into a pre-fitted Pipeline strictly enforcing pandas DataFrame output formatting.
 2026-07-03: Finalized Phase 6 orchestration `run_assembler` and `transform_new_data` ensuring that target columns remain rigorously decoupled from all preprocessing transformations, preserving raw labels for supervised model training and downstream alignment.
+2026-07-03: Designed Phase 7 `report.py` visual generators as completely standalone pure functions that each explicitly instantiate and close over their own independent `Figure` and `Axes` objects. This was a deliberate architectural choice to prevent catastrophic state bleed between consecutive Matplotlib charts when invoked inside interactive global contexts (like Jupyter notebooks).
+2026-07-03: Extended the Report constructor to optionally accept df, profiles, and target. This maintains the Phase 5 boundary where core report features only read ReportEntry[], while providing the necessary state to the visual layer (.plot()) without silently breaking constructor contracts.
+2026-07-04: Implemented prepare() in __init__.py as a thin wrapper that strictly performs input validation before delegating to the assembler, keeping business logic strictly out of the __init__.py namespace.
+2026-07-04: Implemented profile(), clean(), and engineer() exploratory functions in __init__.py using the pure stateless orchestration functions rather than sklearn Transformers. This adheres to the API requirement that intermediate functions do not emit fitted Pipelines and purely facilitate interactive data inspection.
+2026-07-04: Implemented initial CLI skeleton in cli.py using Typer. Early validation errors (file not found, invalid CSV, ValueError from PreFlight) are caught and handled with clean stderr echos and Exit(1) instead of raw stack traces, enforcing good CLI hygiene.
+2026-07-04: Implemented write_outputs() in cli.py handling conditional joblib and json serialization. Opted to fail fast on OSError during file writing and map those to CLI error echoes to ensure users are immediately alerted to permission or disk issues.
+2026-07-04: Hardened cli.py with strict CLI-layer defensiveness (e.g. range-checking for thresholds, intercepting empty/null payloads, parsing exceptions) to provide a polished terminal UX without polluting core library primitives.

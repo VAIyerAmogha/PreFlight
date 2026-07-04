@@ -1,62 +1,46 @@
 Reference CLAUDE.md and PLAN.md for full context before doing anything.
 
-Task: Finish src/preflight/assembler.py. Implement the top-level
-orchestration function that produces a full PrepResult per PLAN.md's
-"Assembler — consumes all transformer specs, builds sklearn Pipeline,
-assembles PrepResult and Report" responsibility.
+Task: Continue src/preflight/cli.py. Implement output file writing per
+PLAN.md's documented CLI outputs: "<name>_prepared.csv, <name>_pipeline.joblib,
+<name>_report.json". Sub-step 2 of 3.
 
 Implement:
 
-    def run_assembler(
-        df: pd.DataFrame,
-        target: str,
-        task: str,
-        model_hint: str,
-        drop_threshold: float = 0.6,
-        outlier_method: str = "iqr",
-        cardinality_threshold: int = 20,
-    ) -> PrepResult
+    def write_outputs(
+        result: PrepResult,
+        input_path: str,
+        output_dir: str,
+    ) -> dict[str, str]
+        — derives <name> from input_path's filename stem (e.g.
+          "train.csv" -> "train"). Writes:
+          - {output_dir}/{name}_prepared.csv — result.df via
+            df.to_csv(path, index=False)
+          - {output_dir}/{name}_pipeline.joblib — result.pipeline via
+            joblib.dump(), per the locked stack's serialization choice.
+            Skip writing this file (do not error) if result.pipeline is
+            None — this keeps write_outputs reusable for profile()/clean()/
+            engineer() results too, which have pipeline=None by design
+            from Phase 8, in case cli.py later exposes those as separate
+            subcommands.
+          - {output_dir}/{name}_report.json — result.report.to_dict() (from
+            Phase 7) written via json.dump(), or an empty {} skipped
+            gracefully if result.report is None.
+          Returns a dict mapping output type -> written file path (only
+          for files actually written), e.g. {"csv": "...", "pipeline":
+          "...", "report": "..."} — useful both for the prepare command's
+          final echo and for testing.
 
-Behavior:
-1. Run profiler.run_profiler(df, target, task, cardinality_threshold) to
-   get initial profiles + profiler ReportEntries.
-2. Split df into X (features) and y (target column).
-3. Call build_pipeline_two_phase(profiles, target, model_hint, X, y, ...)
-   from step 6.3 to get a FITTED pipeline.
-4. Transform X through the fitted pipeline to get the final cleaned +
-   engineered DataFrame. Reattach the target column (untouched, per the
-   "target column is never transformed" rule established in Cleaner and
-   Engineer) to produce the final result.df.
-5. Collect ALL ReportEntries: profiler's + cleaner_step.report_entries_ +
-   engineer_step.report_entries_, in that stage order, into one list.
-6. Construct Report(all_entries) from report.py.
-7. Construct and return PrepResult(df=final_df, pipeline=fitted_pipeline,
-   report=report_object).
+Wire write_outputs() into the `prepare` command from sub-step 1: after a
+successful preflight.prepare() call, call write_outputs() and typer.echo
+each output path that was written, replacing sub-step 1's placeholder
+"success + shape" message with a fuller one that also reports the shape.
 
-Also implement:
+Type hints per convention. Handle file write failures (e.g. permission
+errors) by catching OSError and re-raising as a clean typer.echo + Exit(1),
+consistent with sub-step 1's error-handling pattern.
 
-    def transform_new_data(pipeline: Pipeline, new_df: pd.DataFrame, target: str | None = None) -> pd.DataFrame
-        — convenience function for applying an already-fitted pipeline to
-          unseen data (e.g. a test set or production batch). If target is
-          provided and present in new_df, it's set aside before transform
-          and reattached after, matching run_assembler's target-passthrough
-          behavior. This is what makes the "reusable Pipeline" promise in
-          PLAN.md's top-level description concrete and testable.
-
-Per CLAUDE.md's "no business logic in __init__.py" boundary, run_assembler
-is the function __init__.py's prepare() will call almost directly in
-Phase 8 — keep its signature aligned with PLAN.md's documented
-pf.prepare(df, target, task, model_hint, drop_threshold, outlier_method,
-cardinality_threshold) API surface.
-
-Type hints per convention. Original df not mutated.
-
-After implementing, update CLAUDE.md's "Current focus": mark assembler.py
-fully complete under "Recent completions". Update PLAN.md's implementation
-order checklist (steps 10-11 done). Set "Active work" to report.py visuals
-— .plot() and .to_html() (Phase 7, PLAN.md step 12) — as next.
- also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
-
+After implementing, update CLAUDE.md's "Current focus": note cli.py 1 of
+3 sub-steps remaining (integration hardening / test_cli.py completeness).also update the plan.md with relavant entries under "Architecture decisions log" and "Implementation order" sections. 
 
 
 

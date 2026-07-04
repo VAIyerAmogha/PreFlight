@@ -60,12 +60,19 @@ Start every session by reading PLAN.md, then this file.
 - Do not train or select models — PreFlight stops before model training
 
 ## Current focus
-Last updated: 2026-07-03
-Active work: report.py visuals — .plot() and .to_html() (Phase 7)
+Last updated: 2026-07-04
+Active work: Integration testing on real datasets (Phase 10)
 
 Recent completions:
+- cli.py FULLY complete (Sub-step 3 of 3)
+- Implemented cli.py output file writing logic (Sub-step 2 of 3) — Complete
+- Implemented cli.py typer app skeleton and argument validation (Sub-step 1 of 3) — Complete
+- Implemented compare() to diff PrepResults in __init__.py (Sub-step 3 of 3) — Complete
+- __init__.py fully complete
+- Implemented partial-stage public functions (profile, clean, engineer) in __init__.py (Sub-step 2 of 3) — Complete
+- Implemented prepare() entry point with input validation in __init__.py (Sub-step 1 of 3) — Complete
 - Scaffold the PreFlight-ML repository structure — Complete
-- Implement src/preflight/types.py — Complete
+- Implemented src/preflight/types.py — Complete
 - Added runtime validation for ReportEntry stage and severity fields
 - Added comprehensive unit tests for SemanticType, ColumnProfile, ReportEntry, and PrepResult
 - Implemented SemanticType inference logic in profiler.py (Sub-step 1 of 4) — Complete
@@ -87,6 +94,9 @@ Recent completions:
 - Implemented EngineerTransformer wrapper in assembler.py (Sub-step 2 of 4) — Complete
 - Implemented two-phase Pipeline construction in assembler.py (Sub-step 3 of 4) — Complete
 - Implemented run_assembler and transform_new_data orchestration (Sub-step 4 of 4) — Complete
+- Implemented report.py standalone charting functions (Sub-step 1 of 3) — Complete
+- Implemented Report constructor extension and unified .plot() method in report.py (Sub-step 2 of 3) — Complete
+- Implemented Report.to_html() and Report.save_html() fully offline generators (Sub-step 3 of 3) — Complete
 
 Open questions / blockers:
 - Should ColumnProfile be frozen/immutable? (Currently it's a standard dataclass)
