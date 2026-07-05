@@ -140,10 +140,11 @@ def profile(
     df: pd.DataFrame,
     target: str,
     task: str = "classification",
+    model_hint: str = "tree",
     cardinality_threshold: int = 20,
     column_types: Optional[dict[str, SemanticType]] = None,
 ) -> PrepResult:
-    warning = _validate_inputs(df, target, task, column_types=column_types)
+    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
 
     profiles, profiler_entries = run_profiler(
         df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types
@@ -171,12 +172,13 @@ def clean(
     df: pd.DataFrame,
     target: str,
     task: str = "classification",
+    model_hint: str = "tree",
     drop_threshold: float = 0.6,
     outlier_method: str = "iqr",
     cardinality_threshold: int = 20,
     column_types: Optional[dict[str, SemanticType]] = None,
 ) -> PrepResult:
-    warning = _validate_inputs(df, target, task, column_types=column_types)
+    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
 
     profiles, profiler_entries = run_profiler(
         df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types
@@ -272,6 +274,8 @@ def _compute_decision_diff(actions_a: dict[str, set[str]], actions_b: dict[str, 
 def compare(a: PrepResult, b: PrepResult) -> dict:
     if a is None or b is None:
         raise ValueError("You must provide two preparation results to compare them. Check that neither result is empty.")
+    if a.df is None or b.df is None:
+        raise ValueError("We cannot compare these results because they are missing their datasets.")
     cols_a = set(a.df.columns)
     cols_b = set(b.df.columns)
 

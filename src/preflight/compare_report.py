@@ -17,15 +17,22 @@ from preflight.report import (
 import preflight
 
 def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> None:
-    # 1. Call existing compare() function as source of truth
-    diff = preflight.compare(result_a, result_b)
-    
+    if result_a is not None and not isinstance(result_a, PrepResult):
+        raise TypeError("The first argument must be a PrepResult object. Please provide a valid PrepResult from preflight.prepare().")
+    if result_b is not None and not isinstance(result_b, PrepResult):
+        raise TypeError("The second argument must be a PrepResult object. Please provide a valid PrepResult from preflight.prepare().")
+
+    if result_a is None or result_b is None:
+        raise ValueError("You must provide two preparation results to compare them. Check that neither result is empty.")
+
+    if result_a.df is None or result_b.df is None:
+         raise ValueError("We cannot compare these results because they are missing their datasets.")
+
     if result_a.report is None or result_b.report is None:
         raise ValueError("We cannot generate a comparison PDF because one or both of the results are missing their report.")
 
-    # Check for wild uncomparable states
-    if result_a.df is None or result_b.df is None:
-         raise ValueError("We cannot compare these results because they are missing their datasets.")
+    # 1. Call existing compare() function as source of truth
+    diff = preflight.compare(result_a, result_b)
 
     counts_a = diff.get("report_entry_counts_a", {}) or {}
     counts_b = diff.get("report_entry_counts_b", {}) or {}

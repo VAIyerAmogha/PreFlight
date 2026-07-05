@@ -94,7 +94,7 @@ class TestSemanticTypeEnum:
     def test_all_eight_values_exist(self):
         expected = {
             "NUMERIC_FEATURE", "NUMERIC_ID", "CATEGORICAL_LOW", "CATEGORICAL_HIGH",
-            "DATETIME_NATIVE", "DATETIME_STRING", "BOOLEAN", "CONSTANT",
+            "DATETIME_NATIVE", "DATETIME_STRING", "BOOLEAN", "CONSTANT", "TEXT",
         }
         actual = {member.name for member in SemanticType}
         assert actual == expected

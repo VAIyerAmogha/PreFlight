@@ -125,16 +125,19 @@ def target_encode_cross_fit(
     
     Returns (encoded series, a fitted mapping dict computed on the FULL dataset).
     """
+    target_numeric = target
     if not pd.api.types.is_numeric_dtype(target):
-        raise ValueError("The target column must be numeric to perform target encoding on categorical features.")
-    
+        unique_vals = sorted(target.dropna().unique())
+        mapping_labels = {val: idx for idx, val in enumerate(unique_vals)}
+        target_numeric = target.map(mapping_labels)
+        
     encoded = pd.Series(index=series.index, dtype=float)
-    global_mean = target.mean()
+    global_mean = target_numeric.mean()
     
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
     
     series_np = series.values
-    target_np = target.values
+    target_np = target_numeric.values
     
     for train_idx, val_idx in kf.split(series_np):
         train_series = pd.Series(series_np[train_idx], index=train_idx)
@@ -147,7 +150,7 @@ def target_encode_cross_fit(
         mapped = val_series.map(smoothed).fillna(global_mean)
         encoded.iloc[val_idx] = mapped.values
         
-    stats_full = target.groupby(series).agg(['count', 'mean'])
+    stats_full = target_numeric.groupby(series).agg(['count', 'mean'])
     smoothed_full = (stats_full['count'] * stats_full['mean'] + smoothing * global_mean) / (stats_full['count'] + smoothing)
     mapping_dict = smoothed_full.to_dict()
     
@@ -442,6 +445,15 @@ def run_engineer(
         raise ValueError(f"The model_hint must be exactly 'tree' or 'linear', but you provided '{model_hint}'.")
         
     df_out = df.copy()
+    
+    original_target_series = None
+    if target in df_out.columns:
+        original_target_series = df_out[target].copy()
+        if not pd.api.types.is_numeric_dtype(df_out[target]):
+            unique_vals = sorted(df_out[target].dropna().unique())
+            mapping = {val: idx for idx, val in enumerate(unique_vals)}
+            df_out[target] = df_out[target].map(mapping)
+            
     report = []
     specs = {}
     
@@ -563,6 +575,9 @@ def run_engineer(
             if text_info and text_info.get("vectorizers"):
                 specs["_text_features"] = {"transform": "text_features", "fitted_info": text_info}
                 
+    if original_target_series is not None:
+        df_out[target] = original_target_series
+        
     return df_out, report, specs
 
 

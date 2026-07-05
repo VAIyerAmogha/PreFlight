@@ -6,7 +6,7 @@ from preflight.types import SemanticType, ColumnProfile, ReportEntry, PrepResult
 def test_semantic_type_has_exactly_8_members():
     expected = {
         "NUMERIC_FEATURE", "NUMERIC_ID", "CATEGORICAL_LOW", "CATEGORICAL_HIGH",
-        "DATETIME_NATIVE", "DATETIME_STRING", "BOOLEAN", "CONSTANT",
+        "DATETIME_NATIVE", "DATETIME_STRING", "BOOLEAN", "CONSTANT", "TEXT",
     }
     actual = {m.name for m in SemanticType}
     assert actual == expected

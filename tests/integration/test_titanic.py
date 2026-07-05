@@ -79,3 +79,22 @@ def test_compare_tree_vs_linear_shows_column_diff(titanic_df):
     linear_result = pf.prepare(titanic_df, target="target", task="classification", model_hint="linear")
     diff = pf.compare(tree_result, linear_result)
     assert len(diff["columns_only_in_b"]) > 0
+
+def test_prepare_with_string_target(titanic_df):
+    df_str = titanic_df.copy()
+    df_str["target"] = df_str["target"].map({0: "No", 1: "Yes"})
+    df_str["cabin_high_card"] = [f"Cabin_{i % 50}" for i in range(len(df_str))]
+    
+    result = pf.prepare(df_str, target="target", task="classification", model_hint="tree")
+    
+    assert result.df is not None
+    assert result.pipeline is not None
+    assert result.report is not None
+    
+    assert not pd.api.types.is_numeric_dtype(result.df["target"])
+    assert set(result.df["target"].unique()) == {"No", "Yes"}
+    assert pd.api.types.is_numeric_dtype(result.df["cabin_high_card"])
+    
+    holdout = df_str.drop(columns=["target"]).iloc[:10]
+    transformed = result.pipeline.transform(holdout)
+    assert pd.api.types.is_numeric_dtype(transformed["cabin_high_card"])

@@ -309,6 +309,18 @@ If your DataFrame has feature signals PreFlight surfaces (mutual information, co
 
 ---
 
+## Known limitations
+
+These are documented, intentional boundaries of the current release — not bugs waiting to be fixed, but things worth knowing before you rely on them:
+
+- **Complex unit-suffix parsing.** Simple numeric-with-unit strings (e.g. `"1248 CC"`, `"74 bhp"`) are automatically parsed into numeric columns. More complex, nested expressions (e.g. `"190Nm@ 2000rpm"`) are not — they'll fall back to being treated as a high-cardinality categorical. If you have columns like this, clean them with a quick regex before passing them in, or use `column_types` to tell PreFlight how to treat them.
+
+- **Saved pipelines require `pypreflight` installed wherever they're loaded.** `result.pipeline` uses PreFlight's own custom transformers internally. If you save it with `joblib` and load it later in a different environment (e.g. a production server), that environment needs `pypreflight` installed too — it's not a fully standalone, dependency-free sklearn pipeline.
+
+- **Columns mixing short labels and long free text can go either way.** If a string column contains a blend of short category-like values and longer descriptive text, it may get classified as `TEXT` and go through basic text feature generation instead of being treated as a category — which can blur category structure that would otherwise be useful. If you know a column should be treated as categorical regardless of string length, use `column_types` to force it.
+
+---
+
 ## FAQ
 
 **Does this train a model?**

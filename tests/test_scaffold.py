@@ -42,12 +42,19 @@ def test_package_importable():
     assert mod is not None
 
 def test_pytest_collects_with_no_errors():
+    import sys
     result = subprocess.run(
-        ["pytest", "tests/", "--collect-only", "-q"],
+        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q"],
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
 def test_cli_entrypoint_registered():
-    result = subprocess.run(["preflight", "--help"], capture_output=True, text=True)
+    import sys
+    from pathlib import Path
+    bin_dir = Path(sys.executable).parent
+    preflight_bin = str(bin_dir / "preflight")
+    if not Path(preflight_bin).exists() and not Path(preflight_bin + ".exe").exists():
+        preflight_bin = "preflight"
+    result = subprocess.run([preflight_bin, "--help"], capture_output=True, text=True)
     assert result.returncode == 0

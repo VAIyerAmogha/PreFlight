@@ -14,6 +14,7 @@ from preflight.cleaner import (
     normalize_category_values,
     coerce_string_dates_to_datetime,
     group_rare_categories,
+    coerce_numeric_string_column,
 )
 from preflight.engineer import run_engineer, expand_datetime
 
@@ -68,19 +69,25 @@ class CleanerTransformer(BaseEstimator, TransformerMixin):
                 
             # Winsorization bounds logic
             if p.semantic_type == SemanticType.NUMERIC_FEATURE and "outlier_method" in self.specs_[col]:
-                series = X[col]
+                series = df_clean[col]
                 method = self.specs_[col]["outlier_method"]
                 if method == "iqr":
                     q1 = series.quantile(0.25)
                     q3 = series.quantile(0.75)
                     iqr = q3 - q1
-                    self.specs_[col]["lower_bound"] = q1 - 1.5 * iqr
-                    self.specs_[col]["upper_bound"] = q3 + 1.5 * iqr
+                    if iqr > 0:
+                        self.specs_[col]["lower_bound"] = q1 - 1.5 * iqr
+                        self.specs_[col]["upper_bound"] = q3 + 1.5 * iqr
+                    else:
+                        self.specs_[col].pop("outlier_method", None)
                 elif method == "zscore":
                     mean = series.mean()
                     std = series.std()
-                    self.specs_[col]["lower_bound"] = mean - 3 * std
-                    self.specs_[col]["upper_bound"] = mean + 3 * std
+                    if std > 0:
+                        self.specs_[col]["lower_bound"] = mean - 3 * std
+                        self.specs_[col]["upper_bound"] = mean + 3 * std
+                    else:
+                        self.specs_[col].pop("outlier_method", None)
 
         return self
 
@@ -104,6 +111,12 @@ class CleanerTransformer(BaseEstimator, TransformerMixin):
                 
             spec = self.specs_.get(col, {})
             stype = p.semantic_type
+            
+            # Numeric coercion if the column was detected/coerced to numeric at fit time
+            if spec.get("coerce_to_numeric"):
+                coerced, _ = coerce_numeric_string_column(X_out[col])
+                if coerced is not None:
+                    X_out[col] = coerced
             
             # Category normalization applies to both CATEGORICAL_LOW and CATEGORICAL_HIGH
             if stype in (SemanticType.CATEGORICAL_LOW, SemanticType.CATEGORICAL_HIGH):
@@ -179,10 +192,15 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
         self.output_columns_ = cols
         
         if y is not None:
-            if isinstance(y, pd.Series):
-                global_mean = y.mean()
+            y_series = pd.Series(y) if not isinstance(y, pd.Series) else y
+            if not pd.api.types.is_numeric_dtype(y_series):
+                unique_vals = sorted(y_series.dropna().unique())
+                mapping = {val: idx for idx, val in enumerate(unique_vals)}
+                y_numeric = y_series.map(mapping)
             else:
-                global_mean = pd.Series(y).mean()
+                y_numeric = y_series
+
+            global_mean = y_numeric.mean()
             for p in self.profiles:
                 if p.semantic_type == SemanticType.CATEGORICAL_HIGH:
                     if p.name in self.specs_ and isinstance(self.specs_[p.name], dict):

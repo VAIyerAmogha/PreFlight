@@ -9,7 +9,7 @@ runner = CliRunner()
 def test_cli_input_path_not_exist():
     result = runner.invoke(app, ["prepare", "nonexistent.csv", "--target", "price"])
     assert result.exit_code == 1
-    assert "input_path must exist" in result.stderr or "input_path must exist" in result.stdout
+    assert "We could not find your input file" in result.stderr or "We could not find your input file" in result.stdout
 
 def test_cli_input_path_not_csv():
     with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
@@ -18,7 +18,7 @@ def test_cli_input_path_not_csv():
     try:
         result = runner.invoke(app, ["prepare", path, "--target", "price"])
         assert result.exit_code == 1
-        assert "be a .csv file" in result.stderr or "be a .csv file" in result.stdout
+        assert "does not end in '.csv'" in result.stderr or "does not end in '.csv'" in result.stdout
     finally:
         os.remove(path)
 

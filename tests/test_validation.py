@@ -71,7 +71,7 @@ class TestValidateTaskTargetMatch:
 
     def test_classification_continuous_raises(self, continuous_target_df):
         """300 unique float values + classification must raise."""
-        with pytest.raises(ValueError, match="looks continuous"):
+        with pytest.raises(ValueError, match="looks like a continuous"):
             _validate_task_target_match(continuous_target_df["price"], task="classification")
 
     def test_classification_binary_target_ok(self, binary_target_df):
@@ -138,7 +138,7 @@ class TestValidateInputs:
             _validate_inputs(df, target="b", task="classification")
 
     def test_missing_target_raises(self, binary_target_df):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ValueError, match="does not exist"):
             _validate_inputs(binary_target_df, target="nonexistent", task="classification")
 
     def test_single_column_raises(self):
@@ -194,7 +194,7 @@ class TestPublicAPIValidation:
 
         monkeypatch.setattr(asm, "run_assembler", mock_run_assembler)
 
-        with pytest.raises(ValueError, match="looks continuous"):
+        with pytest.raises(ValueError, match="looks like a continuous"):
             pf.prepare(continuous_target_df, target="price", task="classification")
 
         assert called == [], "run_assembler must not be reached when mismatch is detected"
@@ -214,17 +214,17 @@ class TestPublicAPIValidation:
 
         monkeypatch.setattr(prof, "run_profiler", mock_run_profiler)
 
-        with pytest.raises(ValueError, match="looks continuous"):
+        with pytest.raises(ValueError, match="looks like a continuous"):
             pf.profile(continuous_target_df, target="price", task="classification")
 
         assert called == [], "run_profiler must not be reached when mismatch is detected"
 
     def test_clean_raises_for_continuous_classification(self, continuous_target_df):
-        with pytest.raises(ValueError, match="looks continuous"):
+        with pytest.raises(ValueError, match="looks like a continuous"):
             pf.clean(continuous_target_df, target="price", task="classification")
 
     def test_engineer_raises_for_continuous_classification(self, continuous_target_df):
-        with pytest.raises(ValueError, match="looks continuous"):
+        with pytest.raises(ValueError, match="looks like a continuous"):
             pf.engineer(continuous_target_df, target="price", task="classification")
 
     def test_regression_low_cardinality_produces_warning_entry_in_prepare(

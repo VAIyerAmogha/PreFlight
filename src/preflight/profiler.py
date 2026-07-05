@@ -7,6 +7,7 @@ from sklearn.preprocessing import OrdinalEncoder
 from dateutil.parser import parse, ParserError
 
 from .types import SemanticType, ColumnProfile, ReportEntry
+from preflight.cleaner import coerce_numeric_string_column
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,10 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
     if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
         sample_size = min(100, len(non_null))
         sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
-        avg_len = sample.astype(str).str.len().mean()
-        if avg_len > 20:
+        sample_str = sample.astype(str)
+        avg_len = sample_str.str.len().mean()
+        avg_words = sample_str.str.split().str.len().mean()
+        if avg_len > 50 or (avg_len > 30 and avg_words >= 5):
             return SemanticType.TEXT
 
     # 2. CONSTANT (single unique non-null value, or all-null)
@@ -60,6 +63,15 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
     # 4. NUMERIC_ID and NUMERIC_FEATURE
     if pd.api.types.is_numeric_dtype(series):
         name_lower = str(series.name).lower() if series.name else ""
+        
+        # Check if the numeric column is actually a zip/postal code (categorical)
+        cat_patterns = ["zip", "postal", "postcode"]
+        if any(pat in name_lower for pat in cat_patterns):
+            if n_unique < cardinality_threshold:
+                return SemanticType.CATEGORICAL_LOW
+            else:
+                return SemanticType.CATEGORICAL_HIGH
+                
         is_high_cardinality = (n_unique / total_len >= 0.95) if total_len > 0 else False
         
         id_patterns = ["id", "_id", "pk", "index"]
@@ -79,7 +91,7 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
         return SemanticType.NUMERIC_FEATURE
         
     # 5. DATETIME_STRING (object/string dtype parsing to date)
-    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series) or pd.api.types.is_categorical_dtype(series):
+    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series) or isinstance(series.dtype, pd.CategoricalDtype):
         # Sample to avoid slow date parsing on huge datasets
         sample_size = min(100, len(non_null))
         sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
@@ -104,8 +116,10 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
         if n_unique >= cardinality_threshold or uniqueness_ratio >= 0.1:
             sample_size = min(100, len(non_null))
             sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
-            avg_len = sample.astype(str).str.len().mean()
-            if avg_len > 20:
+            sample_str = sample.astype(str)
+            avg_len = sample_str.str.len().mean()
+            avg_words = sample_str.str.split().str.len().mean()
+            if avg_len > 50 or (avg_len > 30 and avg_words >= 5):
                 return SemanticType.TEXT
 
     # 7. CATEGORICAL (LOW and HIGH)
@@ -264,6 +278,7 @@ def run_profiler(
     profiles: List[ColumnProfile] = []
     reports: List[ReportEntry] = []
     
+    df = df.copy()
     target_series = df[target] if target in df.columns else None
     numeric_feature_cols = []
     
@@ -272,6 +287,65 @@ def run_profiler(
             continue
             
         series = df[col]
+        
+        # Detect and coerce string columns containing numeric values with units or whitespace
+        # Skip coercion for zip/postal codes to preserve leading zeros and categorality
+        name_lower = str(col).lower()
+        cat_patterns = ["zip", "postal", "postcode"]
+        matches_cat_pattern = any(pat in name_lower for pat in cat_patterns)
+        
+        coerced_series = None
+        unit = None
+        if not matches_cat_pattern:
+            coerced_series, unit = coerce_numeric_string_column(series)
+            
+        if coerced_series is not None:
+            total_len = len(series)
+            n_unique = series.nunique()
+            is_high_cardinality = (n_unique / total_len >= 0.95) if total_len > 0 else False
+            
+            if is_high_cardinality:
+                name_lower = str(col).lower()
+                id_patterns = ["id", "_id", "pk", "index"]
+                matches_id_pattern = any(pat in name_lower for pat in id_patterns)
+                
+                try:
+                    coerced_non_null = coerced_series.dropna()
+                    is_integer = (coerced_non_null % 1 == 0).all() if len(coerced_non_null) > 0 else False
+                except Exception:
+                    is_integer = False
+                is_monotonic = coerced_series.is_monotonic_increasing or coerced_series.is_monotonic_decreasing
+                
+                if matches_id_pattern or (is_monotonic and is_integer):
+                    series = coerced_series
+                    df[col] = coerced_series
+                    reports.append(ReportEntry(
+                        stage="profiler", column=col, action="coerce_numeric",
+                        rationale=f"Inferred string column as numeric ID. Cleaned unit/whitespace suffix: '{unit}'." if unit else "Inferred string column as numeric ID by stripping whitespace.",
+                        severity="info"
+                    ))
+                elif is_integer and not unit:
+                    reports.append(ReportEntry(
+                        stage="profiler", column=col, action="skip_coerce",
+                        rationale="Classified as high-cardinality categorical / ID-like despite looking numeric.",
+                        severity="info"
+                    ))
+                else:
+                    series = coerced_series
+                    df[col] = coerced_series
+                    reports.append(ReportEntry(
+                        stage="profiler", column=col, action="coerce_numeric",
+                        rationale=f"Inferred string column as numeric. Cleaned unit/whitespace suffix: '{unit}'." if unit else "Inferred string column as numeric by stripping whitespace.",
+                        severity="info"
+                    ))
+            else:
+                series = coerced_series
+                df[col] = coerced_series
+                reports.append(ReportEntry(
+                    stage="profiler", column=col, action="coerce_numeric",
+                    rationale=f"Inferred string column as numeric. Cleaned unit/whitespace suffix: '{unit}'." if unit else "Inferred string column as numeric by stripping whitespace.",
+                    severity="info"
+                ))
         
         # ------------------------------------------------------------------
         # Do not re-infer SemanticType after Profiler has run

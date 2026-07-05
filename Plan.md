@@ -1,5 +1,8 @@
 # PLAN.md
 
+## Status & Current Focus
+- **v1.0.0 Stress-Test / Fix / Verification Cycle**: 100% Complete. All blocker bugs and silent data degradations are resolved, verified on original datasets, and proven generalized on a fresh HR Employee Attrition dataset. All test suites pass.
+
 ## What we are building
 PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-style researchers. It accepts a raw pandas DataFrame and a target column name, and returns a cleaned and feature-engineered DataFrame, a reusable serializable scikit-learn Pipeline, and a structured Report that logs every automated decision with its rationale. The goal is to eliminate mechanical data preparation work without creating a black box — every transform is explainable and every output is reproducible on unseen data.
 
@@ -167,3 +170,8 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     28. 2026-07-05: save_compare_pdf() — visual before/after PDF diff report built on compare(), reuses Phase 6 chart/PDF infrastructure.
     29. 2026-07-05: CLI consolidation pass — all v1.0.0 flags verified complete and consistent with the Python API.
     30. 2026-07-05: Library-wide error message simplification pass — plain language, no internal jargon, no raw tracebacks reach the user.
+    31. 2026-07-05: Internal Target Label Encoding — Coerces string-labeled classification targets to numeric integers (based on lexicographically sorted order) internally within target_encode_cross_fit and run_engineer/fit to support target encoding of high-cardinality features, while retaining original string labels in all user-facing reports and returned dataframes.
+    32. 2026-07-05: Outlier Winsorization Collapse Protection — Prevented outlier winsorization from collapsing low-variance or zero-inflated columns by checking for zero IQR or standard deviation before applying bounds clipping. Added explicit, non-silent `ReportEntry` logs indicating when winsorization is skipped to protect column variance.
+    33. 2026-07-05: Numeric Coercion of String Columns — Integrated a robust numeric string-coercion mechanism in both `run_profiler` and `run_cleaner`/`CleanerTransformer`. It automatically parses string columns containing whitespace and common unit suffixes (like CC, kmpl, bhp, Nm) into float columns if at least 95% of non-missing values are parseable.
+    34. 2026-07-05: Robust Subprocess Testing and Environment Validation — Resolved shell path dependency issues by using `sys.executable` to run pytest in subprocesses and dynamically checking local virtualenv binary folders for `preflight`. Prevented infinite recursion in `test_coverage_gate.py` by explicitly ignoring itself in recursive pytest calls.
+    35. 2026-07-05: Completed the formal v1.0.0 verification and generalization pass on a fresh HR Employee Attrition dataset, ensuring all blockers and silent data issues are resolved.

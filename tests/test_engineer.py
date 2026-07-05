@@ -107,3 +107,15 @@ def test_original_df_not_mutated(sample_df_and_profiles):
     original = df.copy()
     run_engineer(df, profiles, target="target", model_hint="tree")
     pd.testing.assert_frame_equal(df, original)
+
+def test_string_classification_target(sample_df_and_profiles):
+    df, profiles = sample_df_and_profiles
+    df = df.copy()
+    df["target"] = np.random.choice(["No", "Yes"], len(df))
+    df_out, report, specs = run_engineer(df, profiles, target="target", model_hint="tree")
+    assert pd.api.types.is_numeric_dtype(df_out["zip_high_card"])
+    assert not pd.api.types.is_numeric_dtype(df_out["target"])
+    pd.testing.assert_series_equal(
+        df_out["target"].reset_index(drop=True),
+        df["target"].reset_index(drop=True),
+    )

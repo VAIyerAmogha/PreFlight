@@ -93,3 +93,20 @@ def test_no_report_entry_for_benign_signals(sample_df):
     # age has low missingness, no leakage — shouldn't spam entries
     age_entries = [e for e in entries if e.column == "age"]
     assert len(age_entries) <= 1  # at most one, e.g. only if something's actually notable
+
+def test_zip_code_categorical_classification():
+    n = 100
+    df = pd.DataFrame({
+        "zip_code": [f"{np.random.randint(10000, 99999)}" for _ in range(n)],
+        "postal_code": [np.random.randint(10000, 99999) for _ in range(n)],
+        "postcode": [np.random.randint(10000, 99999) for _ in range(n)],
+        "normal_numeric": np.random.normal(50, 5, n),
+        "target": np.random.choice([0, 1], n),
+    })
+    profiles, _ = run_profiler(df, target="target", task="classification")
+    by_name = {p.name: p for p in profiles}
+    
+    assert by_name["zip_code"].semantic_type in (SemanticType.CATEGORICAL_HIGH, SemanticType.CATEGORICAL_LOW)
+    assert by_name["postal_code"].semantic_type in (SemanticType.CATEGORICAL_HIGH, SemanticType.CATEGORICAL_LOW)
+    assert by_name["postcode"].semantic_type in (SemanticType.CATEGORICAL_HIGH, SemanticType.CATEGORICAL_LOW)
+    assert by_name["normal_numeric"].semantic_type == SemanticType.NUMERIC_FEATURE

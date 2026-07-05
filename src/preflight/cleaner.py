@@ -4,6 +4,8 @@ median/mode/constant imputation, missing indicators, column drops, outlier winso
 import pandas as pd
 import numpy as np
 import dateutil.parser
+import re
+from typing import Tuple, Optional
 from preflight.types import ColumnProfile, SemanticType, ReportEntry
 
 def add_missing_indicator(series: pd.Series) -> pd.Series:
@@ -137,11 +139,15 @@ def winsorize_outliers(series: pd.Series, method: str = "iqr") -> pd.Series:
         q1 = series.quantile(0.25)
         q3 = series.quantile(0.75)
         iqr = q3 - q1
+        if iqr == 0:
+            return series
         lower = q1 - 1.5 * iqr
         upper = q3 + 1.5 * iqr
     elif method == "zscore":
         mean = series.mean()
         std = series.std()
+        if std == 0:
+            return series
         lower = mean - 3 * std
         upper = mean + 3 * std
     else:
@@ -313,6 +319,18 @@ def run_cleaner(
                 ))
                 
         elif stype == SemanticType.NUMERIC_FEATURE:
+            if not pd.api.types.is_numeric_dtype(df[col]):
+                coerced, unit = coerce_numeric_string_column(df[col])
+                if coerced is not None:
+                    df[col] = coerced
+                    specs[col]["coerce_to_numeric"] = True
+                    report.append(ReportEntry(
+                        stage="cleaner", column=col, action="coerce_numeric",
+                        rationale=f"Coerced string column to numeric (unit: '{unit}' stripped)" if unit else "Coerced string column to numeric (whitespace stripped)",
+                        severity="info"
+                    ))
+                    current_missing_rate = float(df[col].isna().mean())
+            
             if current_missing_rate > 0:
                 missing_ind = add_missing_indicator(df[col])
                 df[missing_ind.name] = missing_ind
@@ -331,17 +349,35 @@ def run_cleaner(
                     ))
             
             if current_missing_rate <= 0.30:
-                before_clip = df[col].copy()
-                df[col] = winsorize_outliers(df[col], method=outlier_method)
-                specs[col]["outlier_method"] = outlier_method
-                changed = (before_clip != df[col]).sum()
-                if changed > 0:
-                    sev = "warning" if (changed / len(df)) > 0.1 else "info"
+                # Check if IQR or std is zero before winsorizing to avoid collapsing the column to a constant
+                skip_reason = None
+                if outlier_method == "iqr":
+                    q1 = df[col].quantile(0.25)
+                    q3 = df[col].quantile(0.75)
+                    if q3 - q1 == 0:
+                        skip_reason = "IQR is 0 (majority value dominates)"
+                elif outlier_method == "zscore":
+                    if df[col].std() == 0:
+                        skip_reason = "standard deviation is 0"
+                
+                if skip_reason:
                     report.append(ReportEntry(
-                        stage="cleaner", column=col, action="winsorize_outliers",
-                        rationale=f"Winsorized {changed} outliers via {outlier_method}",
-                        severity=sev
+                        stage="cleaner", column=col, action="skip_winsorize",
+                        rationale=f"Skipped winsorization: {skip_reason} to prevent column collapse",
+                        severity="info"
                     ))
+                else:
+                    before_clip = df[col].copy()
+                    df[col] = winsorize_outliers(df[col], method=outlier_method)
+                    specs[col]["outlier_method"] = outlier_method
+                    changed = (before_clip != df[col]).sum()
+                    if changed > 0:
+                        sev = "warning" if (changed / len(df)) > 0.1 else "info"
+                        report.append(ReportEntry(
+                            stage="cleaner", column=col, action="winsorize_outliers",
+                            rationale=f"Winsorized {changed} outliers via {outlier_method}",
+                            severity=sev
+                        ))
             else:
                 report.append(ReportEntry(
                     stage="cleaner", column=col, action="skip_winsorize",
@@ -357,3 +393,72 @@ def run_cleaner(
             ))
             
     return df, surviving_profiles, report, specs
+
+
+def coerce_numeric_string_column(series: pd.Series) -> Tuple[Optional[pd.Series], Optional[str]]:
+    """
+    Tries to parse an object/string column as numeric.
+    Detects and strips whitespace and common unit suffixes (like CC, kmpl, bhp, Nm).
+    Returns (coerced_series, common_unit_suffix) if at least 95% of non-missing values
+    can be parsed, otherwise (None, None).
+    """
+    if not (pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series) or isinstance(series.dtype, pd.CategoricalDtype)):
+        return None, None
+        
+    non_null = series.dropna()
+    if len(non_null) == 0:
+        return None, None
+        
+    non_null_str = non_null.astype(str).str.strip()
+    missing_indicators = {"", "nan", "none", "null", "na", "n/a", "-", "?"}
+    non_empty = non_null_str[~non_null_str.str.lower().isin(missing_indicators)]
+    if len(non_empty) == 0:
+        return None, None
+        
+    num_pat = re.compile(r'^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(.*)$')
+    
+    parsed_vals = []
+    suffixes = []
+    success_count = 0
+    
+    for val in non_empty:
+        m = num_pat.match(val)
+        if m:
+            success_count += 1
+            parsed_vals.append(float(m.group(1)))
+            suffix = m.group(2).strip()
+            if suffix:
+                suffixes.append(suffix)
+        else:
+            pass
+            
+    if success_count / len(non_empty) >= 0.95:
+        if suffixes:
+            suffix_counts = pd.Series(suffixes).value_counts()
+            most_common_ratio = suffix_counts.iloc[0] / len(suffixes)
+            if most_common_ratio < 0.90 or len(suffix_counts) > 5:
+                return None, None
+                
+        coerced = pd.Series(index=series.index, dtype=float, name=series.name)
+        
+        for idx, val in series.items():
+            if pd.isna(val):
+                coerced.loc[idx] = np.nan
+            else:
+                val_str = str(val).strip()
+                if val_str.lower() in missing_indicators:
+                    coerced.loc[idx] = np.nan
+                else:
+                    m = num_pat.match(val_str)
+                    if m:
+                        coerced.loc[idx] = float(m.group(1))
+                    else:
+                        coerced.loc[idx] = np.nan
+                        
+        common_unit = None
+        if suffixes:
+            common_unit = pd.Series(suffixes).value_counts().index[0]
+            
+        return coerced, common_unit
+        
+    return None, None
