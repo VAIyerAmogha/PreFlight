@@ -69,6 +69,7 @@ def prepare(
     cluster_features: str = typer.Option("numeric_only", "--cluster-features", help="Comma-separated cluster features"),
     column_type: Optional[list[str]] = typer.Option(None, "--column-type", help="Override semantic type for a column (format colname:TYPE)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run full decision logic without transforming data or fitting a pipeline"),
+    save_pdf: Optional[str] = typer.Option(None, "--save-pdf", help="Save graphical PDF report to this path"),
 ) -> None:
     if preset is not None and preset not in PRESETS:
         typer.echo(f"Error: Invalid preset '{preset}'. Valid presets are: {list(PRESETS.keys())}", err=True)
@@ -193,6 +194,10 @@ def prepare(
         raise typer.Exit(code=1)
         
     written_paths = write_outputs(result, input_path, output_dir)
+    
+    if save_pdf and result.report is not None:
+        result.report.save_pdf(save_pdf)
+        written_paths["pdf"] = save_pdf
     
     if verbose and result.report is not None:
         result.report.show()

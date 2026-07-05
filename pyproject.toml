@@ -48,7 +48,8 @@ Repository = "https://github.com/VAIyerAmogha/PreFlight"
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "seaborn"
+    "seaborn",
+    "pypdf"
 ]
 
 [tool.pytest.ini_options]

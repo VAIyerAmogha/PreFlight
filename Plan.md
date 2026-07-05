@@ -97,8 +97,9 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     Phase 2  [x] Text feature generation (COMPLETE)
     Phase 3  [x] Manual SemanticType overrides (COMPLETE)
     Phase 4  [x] Config presets (COMPLETE)
-    Phase 5  [x] dry_run / preview mode
-    Phase 6  [ ] graphic PDF report export
+    Phase 5  [x] dry_run / preview mode (COMPLETE)
+    Phase 6  [x] graphic PDF report export (COMPLETE)
+    Phase 7  [x] PDF comparison report for compare()
 
 ## Environment variables
     None. PreFlight-ML requires no environment variables, API keys, or external services.
@@ -160,3 +161,5 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     24. 2026-07-05: column_types manual SemanticType override, applied post-inference, validated at API boundary.
     25. 2026-07-05: PRESETS dict + preset param on prepare(), explicit kwargs always override preset values.
     26. 2026-07-05: dry_run param on prepare() — full decision logic runs, no transform/no pipeline fit, returns original df untouched.
+    27. 2026-07-05: Report.save_pdf() — graphic-first PDF export reusing existing chart functions and severity palette, appendix table last.
+    28. 2026-07-05: save_compare_pdf() — visual before/after PDF diff report built on compare(), reuses Phase 6 chart/PDF infrastructure.

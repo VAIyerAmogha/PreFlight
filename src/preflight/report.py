@@ -332,7 +332,117 @@ class Report:
         with open(path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-def plot_correlation_heatmap(df: pd.DataFrame, numeric_columns: list[str]) -> Figure:
+    def save_pdf(self, path: str, include_appendix: bool = True) -> None:
+        from matplotlib.backends.backend_pdf import PdfPages
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as patches
+
+        counts = self.summary_counts()
+        
+        with PdfPages(path) as pdf:
+            # --- Page 1: Cover Page ---
+            fig, ax = plt.subplots(figsize=(10, 8))
+            ax.axis('off')
+            
+            ax.text(0.5, 0.9, "PreFlight-ML Preparation Report", ha='center', va='center', fontsize=24, fontweight='bold', color="#2c3e50")
+            
+            shape_str = f"{self._df.shape[0]} rows × {self._df.shape[1]} columns" if self._df is not None else "Unknown"
+            ax.text(0.5, 0.82, f"Dataset Shape: {shape_str}", ha='center', va='center', fontsize=14)
+            ax.text(0.5, 0.77, f"Target: {self._target if self._target else 'Unknown'}", ha='center', va='center', fontsize=14)
+            
+            ax.text(0.5, 0.65, "Severity Counts", ha='center', va='center', fontsize=18, fontweight='bold')
+            
+            y_start = 0.55
+            for sev in ["critical", "warning", "info"]:
+                count = counts.get(sev, 0)
+                ax.text(0.5, y_start, f"{sev.upper()}: {count}", ha='center', va='center', fontsize=16,
+                        bbox=dict(facecolor=SEVERITY_COLORS.get(sev, "#ffffff"), edgecolor='#dddddd', boxstyle='round,pad=1', alpha=1.0))
+                y_start -= 0.12
+            
+            pdf.savefig(fig)
+            plt.close(fig)
+            
+            # --- Following Pages: Pipeline Stages ---
+            stages = ["profiler", "cleaner", "engineer"]
+            stage_kinds = {
+                "profiler": ["missingness", "class_distribution"],
+                "cleaner": ["correlation"],
+                "engineer": ["mutual_info"]
+            }
+            
+            for stage in stages:
+                stage_entries = [e for e in self._entries if e.stage == stage]
+                kinds = stage_kinds[stage]
+                
+                stage_figs = []
+                for k in kinds:
+                    try:
+                        figs = self.plot(kind=k)
+                        stage_figs.extend(figs)
+                    except Exception:
+                        pass
+                
+                # Stage header
+                fig, ax = plt.subplots(figsize=(8, 2))
+                ax.axis('off')
+                ax.text(0.5, 0.6, f"Stage: {stage.capitalize()}", ha='center', va='center', fontsize=18, fontweight='bold')
+                ax.text(0.5, 0.2, f"{len(stage_entries)} decisions logged", ha='center', va='center', fontsize=14)
+                pdf.savefig(fig)
+                plt.close(fig)
+                
+                if stage_figs:
+                    for s_fig in stage_figs:
+                        pdf.savefig(s_fig)
+                        plt.close(s_fig)
+                else:
+                    fig, ax = plt.subplots(figsize=(8, 2))
+                    ax.axis('off')
+                    ax.text(0.5, 0.5, "No chartable content", ha='center', va='center', fontsize=12, style='italic', color='gray')
+                    pdf.savefig(fig)
+                    plt.close(fig)
+                    
+            # --- Appendix ---
+            if include_appendix and self._entries:
+                rows_per_page = 35
+                for i in range(0, len(self._entries), rows_per_page):
+                    chunk = self._entries[i:i+rows_per_page]
+                    fig, ax = plt.subplots(figsize=(10, 11))
+                    ax.axis('off')
+                    
+                    if i == 0:
+                        ax.text(0.5, 0.95, "Appendix: All Report Entries", ha='center', va='center', fontsize=16, fontweight='bold')
+                    
+                    y_pos = 0.9 if i == 0 else 0.95
+                    
+                    ax.text(0.05, y_pos, "SEV", fontsize=9, fontweight='bold')
+                    ax.text(0.12, y_pos, "COLUMN", fontsize=9, fontweight='bold')
+                    ax.text(0.32, y_pos, "ACTION", fontsize=9, fontweight='bold')
+                    ax.text(0.55, y_pos, "RATIONALE", fontsize=9, fontweight='bold')
+                    
+                    y_pos -= 0.015
+                    ax.plot([0.05, 0.95], [y_pos, y_pos], color='black', lw=1)
+                    y_pos -= 0.02
+                    
+                    for e in chunk:
+                        sev = e.severity.upper()[:4]
+                        col = _truncate_label(e.column, 15) if e.column else ""
+                        act = _truncate_label(e.action, 25) if e.action else ""
+                        rat = _truncate_label(e.rationale, 60) if e.rationale else ""
+                        
+                        rect = patches.Rectangle((0.04, y_pos-0.012), 0.92, 0.024, facecolor=SEVERITY_COLORS.get(e.severity, "#ffffff"), edgecolor='none')
+                        ax.add_patch(rect)
+                        
+                        ax.text(0.05, y_pos, sev, fontsize=8, va='center')
+                        ax.text(0.12, y_pos, col, fontsize=8, va='center')
+                        ax.text(0.32, y_pos, act, fontsize=8, va='center')
+                        ax.text(0.55, y_pos, rat, fontsize=8, va='center')
+                        
+                        y_pos -= 0.024
+                        
+                    pdf.savefig(fig)
+                    plt.close(fig)
+
+def plot_correlation_heatmap(df: pd.DataFrame, numeric_columns: list[str], ax=None) -> Figure:
     """
     Computes a Pearson correlation matrix across numeric_columns and renders it as a heatmap.
     Uses its own Figure/Axes to avoid global pyplot state interference.
@@ -342,8 +452,11 @@ def plot_correlation_heatmap(df: pd.DataFrame, numeric_columns: list[str]) -> Fi
     
     corr = df[numeric_columns].corr()
     
-    # Explicitly create figure to avoid global state issues in notebook/script reuse
-    fig, ax = plt.subplots(figsize=_calc_figsize(len(numeric_columns)))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=_calc_figsize(len(numeric_columns)))
+    else:
+        fig = ax.figure
+
     im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1)
     fig.colorbar(im, ax=ax)
     
@@ -361,7 +474,7 @@ def plot_correlation_heatmap(df: pd.DataFrame, numeric_columns: list[str]) -> Fi
     fig.tight_layout()
     return fig
 
-def plot_missingness_heatmap(df: pd.DataFrame) -> Figure:
+def plot_missingness_heatmap(df: pd.DataFrame, ax=None) -> Figure:
     """
     Renders a heatmap of null positions across all columns using a binary colormap.
     Uses its own Figure/Axes to avoid global pyplot state interference.
@@ -373,8 +486,11 @@ def plot_missingness_heatmap(df: pd.DataFrame) -> Figure:
         
     missing_matrix = plot_df.isna().values
     
-    # Explicitly create figure to avoid global state issues
-    fig, ax = plt.subplots(figsize=_calc_figsize(len(df.columns)))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=_calc_figsize(len(df.columns)))
+    else:
+        fig = ax.figure
+
     im = ax.imshow(missing_matrix, cmap="binary", aspect="auto", interpolation="none")
     
     ax.set_xticks(np.arange(len(df.columns)))
@@ -390,7 +506,7 @@ def plot_missingness_heatmap(df: pd.DataFrame) -> Figure:
     fig.tight_layout()
     return fig
 
-def plot_mutual_info_bar_chart(profiles: list[ColumnProfile]) -> Figure:
+def plot_mutual_info_bar_chart(profiles: list[ColumnProfile], ax=None) -> Figure:
     """
     Horizontal bar chart of mutual_info_with_target per column, sorted descending.
     Uses its own Figure/Axes to avoid global pyplot state interference.
@@ -409,9 +525,12 @@ def plot_mutual_info_bar_chart(profiles: list[ColumnProfile]) -> Figure:
     names = [x[0] for x in mi_data]
     scores = [x[1] for x in mi_data]
     
-    # Explicitly create figure to avoid global state issues
-    height = min(20.0, max(6.0, 0.4 * len(names)))
-    fig, ax = plt.subplots(figsize=(8, height))
+    if ax is None:
+        height = min(20.0, max(6.0, 0.4 * len(names)))
+        fig, ax = plt.subplots(figsize=(8, height))
+    else:
+        fig = ax.figure
+
     bars = ax.barh(names, scores, color=CHART_PALETTE[0], label="Mutual Info")
     
     # Add value annotations
@@ -427,7 +546,7 @@ def plot_mutual_info_bar_chart(profiles: list[ColumnProfile]) -> Figure:
     fig.tight_layout()
     return fig
 
-def plot_class_distribution(target: pd.Series) -> Figure:
+def plot_class_distribution(target: pd.Series, ax=None) -> Figure:
     """
     Bar chart of value counts for a classification target.
     Uses its own Figure/Axes to avoid global pyplot state interference.
@@ -436,8 +555,11 @@ def plot_class_distribution(target: pd.Series) -> Figure:
     if len(val_counts) > 20:
         raise ValueError("Target has more than 20 unique values, inappropriate for class distribution plot.")
         
-    # Explicitly create figure to avoid global state issues
-    fig, ax = plt.subplots(figsize=_calc_figsize(len(val_counts)))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=_calc_figsize(len(val_counts)))
+    else:
+        fig = ax.figure
+
     
     x_labels = [_truncate_label(str(x)) for x in val_counts.index]
     bars = ax.bar(x_labels, val_counts.values, color=CHART_PALETTE[1], label="Class Count")

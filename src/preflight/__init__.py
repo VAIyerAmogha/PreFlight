@@ -2,12 +2,13 @@
 exposes prepare(), profile(), clean(), engineer(), compare(), add_features() as public API
 """
 
-__all__ = ["prepare", "profile", "clean", "engineer", "compare", "add_features"]
+__all__ = ["prepare", "profile", "clean", "engineer", "compare", "add_features", "save_compare_pdf"]
 
 import pandas as pd
 from preflight import assembler
 from preflight.types import PrepResult, ReportEntry
 from preflight.report import Report
+from preflight.compare_report import save_compare_pdf
 from preflight.profiler import run_profiler
 from preflight.cleaner import run_cleaner
 from preflight.engineer import run_engineer, add_features
@@ -268,6 +269,8 @@ def _compute_decision_diff(actions_a: dict[str, set[str]], actions_b: dict[str, 
 
 
 def compare(a: PrepResult, b: PrepResult) -> dict:
+    if a is None or b is None:
+        raise ValueError("Both PrepResult objects must be provided for comparison.")
     cols_a = set(a.df.columns)
     cols_b = set(b.df.columns)
 

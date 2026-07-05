@@ -60,11 +60,12 @@ Start every session by reading PLAN.md, then this file.
 - Do not use WidthType.PERCENTAGE anywhere in sklearn ColumnTransformer widths
 - Do not train or select models — PreFlight stops before model training
 
-## Current focus
+Current focus:
 Last updated: 2026-07-05
-Active work: Phase 6 (graphic PDF report export).
+Active work: Phase 8 (CLI updates for all new v1.0.0 flags).
 
 Recent completions:
+- v1.0.0 Phase 7: Added `save_compare_pdf()` function for visual comparison of two PrepResults in a PDF.
 - v0.2.0 Phase 5: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.
 - v0.2.0 Phase 4: Improved Report readability. Added shared color/sizing constants to charts, grouped .show() by stage, added severity symbols and verbose toggle.
 - v0.2.0 Phase 3: Implemented add_features() public API in __init__.py and engineer.py to apply FeatureConfig to an existing PrepResult post-hoc without rerunning Profiler/Cleaner.
@@ -125,3 +126,5 @@ Open questions / blockers:
 24. column_types manual SemanticType override, applied post-inference, validated at API boundary (2026-07-05)
 25. PRESETS dict + preset param on prepare(), explicit kwargs always override preset values (2026-07-05)
 26. dry_run param on prepare() — full decision logic runs, no transform/no pipeline fit, returns original df untouched (2026-07-05)
+27. Report.save_pdf() — graphic-first PDF export reusing existing chart functions and severity palette, appendix table last (2026-07-05)
+28. pf.save_compare_pdf() — visual before/after PDF diff report built on compare(), reuses Phase 6 chart/PDF infrastructure (2026-07-05)
