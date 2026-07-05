@@ -101,6 +101,7 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     Phase 6  [x] graphic PDF report export (COMPLETE)
     Phase 7  [x] PDF comparison report for compare() (COMPLETE)
     Phase 8  [x] CLI updates for all new v1.0.0 flags (COMPLETE)
+    Phase 8.1 [x] Library-wide error message simplification (COMPLETE)
 
 ## Environment variables
     None. PreFlight-ML requires no environment variables, API keys, or external services.

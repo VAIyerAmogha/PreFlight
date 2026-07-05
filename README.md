@@ -2,51 +2,49 @@
 
 **Automated, auditable DataFrame preprocessing for ML workflows.**
 
-PreFlight takes a raw pandas DataFrame and a target column, and returns a cleaned dataset, a reusable `sklearn` Pipeline, and a structured report explaining every decision it made along the way. Nothing happens silently.
+PreFlight takes a raw pandas DataFrame and a target column, and returns three things:
+
+- a **cleaned, feature-engineered DataFrame**
+- a **reusable, fitted scikit-learn `Pipeline`**
+- a **structured audit `Report`** of every automated decision — nothing happens silently
+
+```python
+import preflight as pf
+
+result = pf.prepare(df, target="price", task="regression")
+
+result.df           # cleaned + engineered DataFrame
+result.pipeline      # fitted sklearn Pipeline — reusable on new data
+result.report.show() # human-readable audit of every decision made
+```
+
+> Distribution name on PyPI is `pypreflight`. Import name and CLI command are both `preflight`.
+
+---
+
+## Install
 
 ```bash
 pip install pypreflight
 ```
 
-> **Note:** the PyPI distribution is named `pypreflight`, but you still `import preflight` and use the `preflight` CLI command.
+```python
+import preflight as pf
+```
 
-- **GitHub**: [github.com/VAIyerAmogha/PreFlight](https://github.com/VAIyerAmogha/PreFlight)
-- **PyPI**: [pypi.org/project/pypreflight](https://pypi.org/project/pypreflight/)
-- **License**: MIT
-- **Python**: 3.9+
-
----
-
-## Table of Contents
-
-- [Why PreFlight](#why-preflight)
-- [Quickstart](#quickstart)
-- [How it works](#how-it-works)
-- [Core API](#core-api)
-  - [`prepare()`](#prepare)
-  - [`profile()` / `clean()` / `engineer()`](#profile--clean--engineer)
-  - [`compare()`](#compare)
-  - [`add_features()`](#add_features)
-- [Feature engineering with `FeatureConfig`](#feature-engineering-with-featureconfig)
-- [The Report](#the-report)
-- [Command line interface](#command-line-interface)
-- [Semantic types](#semantic-types)
-- [`model_hint`: tree vs. linear](#model_hint-tree-vs-linear)
-- [Scope](#scope)
-- [FAQ](#faq)
+Requires Python 3.9+.
 
 ---
 
 ## Why PreFlight
 
-Most preprocessing code is either a pile of one-off `pandas` snippets that don't survive contact with new data, or a black-box pipeline that makes decisions you can't see or explain. PreFlight aims to sit in between:
+Most preprocessing code is either:
+- hand-rolled per-project boilerplate that silently makes assumptions, or
+- a black-box AutoML pipeline that decides things for you and doesn't explain why.
 
-- **One function call** — `pf.prepare(df, target="price")` handles missing values, outliers, encoding, scaling, and datetime features.
-- **A reusable Pipeline** — every transformation is captured in a fitted `sklearn.Pipeline`, so you can call `.transform()` on new data (a test set, production data) and get identical results.
-- **A full audit trail** — every automated decision (a column dropped, a value imputed, an encoding chosen) is logged in a structured `Report`, with a plain-English reason.
-- **No silent behavior** — if something happens to your data, you can always find out why.
+PreFlight sits in between: it automates the tedious parts (missing values, encoding, scaling, outliers, feature generation) while logging **every decision it makes and why**, so you can trust — and inspect — what happened to your data before it reaches a model.
 
-PreFlight never trains or selects a model. It stops right before that step, handing you a clean `DataFrame` and pipeline ready for whatever model you choose.
+It deliberately **never selects features for you and never trains a model**. It stops right before that line, on purpose.
 
 ---
 
@@ -58,14 +56,15 @@ import preflight as pf
 
 df = pd.read_csv("train.csv")
 
-result = pf.prepare(df, target="price", task="regression", model_hint="linear")
+result = pf.prepare(df, target="price", task="regression")
 
-result.df          # cleaned, feature-engineered DataFrame
-result.pipeline     # fitted sklearn Pipeline — reusable on new data
-result.report.show()  # human-readable audit log of every decision made
+print(result.df.head())
+result.report.show()                   # readable summary in the console
+result.report.save_html("report.html")
+result.report.save_pdf("report.pdf")   # graphic-first PDF report
 ```
 
-Apply the same pipeline to new data later:
+To use the fitted pipeline on new data later:
 
 ```python
 new_data = pd.read_csv("test.csv")
@@ -74,97 +73,90 @@ transformed = result.pipeline.transform(new_data)
 
 ---
 
-## How it works
-
-PreFlight runs your data through four internal stages:
+## The 4-stage pipeline
 
 ```
-Profiler  →  Cleaner  →  Engineer  →  Assembler
+Profiler → Cleaner → Engineer → Assembler
 ```
 
 | Stage | What it does |
 |---|---|
-| **Profiler** | Infers each column's semantic type (numeric, categorical, datetime, etc.) and computes diagnostic signals — missingness, outlier rate, cardinality, correlation/mutual information with the target, VIF, leakage suspicion. Never modifies data. |
-| **Cleaner** | Imputes missing values, handles outliers, drops unusable columns (constants, IDs, duplicates), groups rare categories. |
-| **Engineer** | Encodes categoricals, scales/transforms numerics, expands datetime columns, and (optionally) generates new engineered features — see [`FeatureConfig`](#feature-engineering-with-featureconfig). |
-| **Assembler** | Packages everything into a fitted `sklearn.Pipeline` and a `PrepResult` (`df`, `pipeline`, `report`). |
+| **Profiler** | Infers each column's semantic type (numeric, categorical, datetime, text, boolean, constant, ID) and computes EDA signals — no data is changed here. |
+| **Cleaner** | Handles missing values, outliers, and rare categories based on what the Profiler found. |
+| **Engineer** | Encodes, scales, expands datetimes, and (optionally) generates new features. |
+| **Assembler** | Builds the final `sklearn.Pipeline` and packages the `Report`. |
 
-Every stage writes to the same `Report`, so the full history of what happened to your data is available in one place.
+You can call each stage individually for inspection:
+
+```python
+pf.profile(df, target="price")   # inspect inferred types only
+pf.clean(df, target="price")     # see cleaning decisions
+pf.engineer(df, target="price")  # see encoding/scaling decisions
+```
+
+These return the same `PrepResult` shape as `prepare()`, but with `pipeline=None` — they're for inspection, not production use.
 
 ---
 
 ## Core API
 
-### `prepare()`
-
-The main entry point. Runs all four stages and returns a fitted pipeline.
+### `pf.prepare(...)`
 
 ```python
 pf.prepare(
     df,
-    target,                      # str: name of the target column
-    task="classification",       # "classification" | "regression"
-    model_hint="tree",            # "tree" | "linear"
-    drop_threshold=0.5,           # missingness fraction above which a column is dropped
-    outlier_method="winsorize",   # outlier handling strategy
-    cardinality_threshold=20,     # categorical cardinality cutoff (low vs high)
-    feature_config=None,          # optional FeatureConfig — see below
+    target: str,
+    task: str = "classification",            # or "regression"
+    model_hint: str = "tree",                # or "linear"
+    drop_threshold: float = 0.6,
+    outlier_method: str = "iqr",
+    cardinality_threshold: int = 20,
+    feature_config: FeatureConfig | None = None,
+    column_types: dict[str, SemanticType] | None = None,
+    preset: str | None = None,               # "fast" or "thorough"
+    dry_run: bool = False,
 ) -> PrepResult
 ```
 
-Returns a `PrepResult` with:
-- `result.df` — cleaned, engineered DataFrame
-- `result.pipeline` — fitted, reusable `sklearn.Pipeline`
-- `result.report` — structured audit log (a `Report` object)
+**`model_hint`** controls encoding/scaling strategy:
 
-### `profile()` / `clean()` / `engineer()`
+| | `model_hint="tree"` | `model_hint="linear"` |
+|---|---|---|
+| Low-cardinality categorical | ordinal encoding | one-hot encoding |
+| Scaling | none | `StandardScaler` |
+| Skewed numerics | untouched | `log1p` transform |
+| High-cardinality categorical | cross-fit (5-fold) target encoding in both cases | same |
 
-Stateless, single-stage versions for inspecting intermediate output. Each returns a `PrepResult` with `pipeline=None` — useful for debugging or understanding what a single stage would do without committing to the full pipeline.
+### `pf.profile()` / `pf.clean()` / `pf.engineer()`
 
-```python
-pf.profile(df, target, task="classification", cardinality_threshold=20)
-pf.clean(df, target, task="classification", drop_threshold=0.5, outlier_method="winsorize")
-pf.engineer(df, target, task="classification", model_hint="tree", feature_config=None)
-```
+Same signature family as `prepare()` minus the arguments that don't apply to that stage. All return `pipeline=None`.
 
-### `compare()`
+### `pf.compare(result_a, result_b)`
 
-Diffs two `PrepResult` objects — useful for comparing different settings (e.g. `model_hint="tree"` vs `"linear"`, or two `FeatureConfig`s).
+Diffs two `PrepResult` objects — shape, columns, report entry counts, and decision differences. Prints a summary and returns a dict.
 
-```python
-result_a = pf.prepare(df, target="price", model_hint="tree")
-result_b = pf.prepare(df, target="price", model_hint="linear")
+### `pf.add_features(result, feature_config)`
 
-diff = pf.compare(result_a, result_b)
-# prints a summary: shape differences, column differences, report entry counts
-```
-
-### `add_features()`
-
-Apply new `FeatureConfig` options to a result you've **already prepared**, without rerunning Profiler/Cleaner from scratch.
+Applies a `FeatureConfig` to an **already-prepared** `PrepResult`, without rerunning the Profiler or Cleaner:
 
 ```python
-from preflight.types import FeatureConfig
-
-result = pf.prepare(df, target="price")
-
-# later, without starting over:
-config = FeatureConfig(clustering=True, cluster_k=4)
-result2 = pf.add_features(result, config)
+base = pf.prepare(df, target="price", task="regression")
+enriched = pf.add_features(base, pf.FeatureConfig(interactions=True))
 ```
 
-`result2` is a brand-new `PrepResult` — the original `result` is left untouched. `result2.pipeline` includes the new step, so `result2.pipeline.transform(new_data)` reproduces the same engineered features on new data.
-
-> `add_features()` requires a `PrepResult` from `prepare()` (i.e. one with a fitted pipeline) — it will raise a clear error if given output from `profile()`, `clean()`, or `engineer()`.
+- Requires `result.pipeline` to not be `None` — i.e. must come from `prepare()`, not `profile()`/`clean()`/`engineer()`.
+- Never mutates the input `result`.
+- Can be called multiple times in sequence to stack different configs.
+- Column name collisions are skipped with a warning, never silently overwritten.
 
 ---
 
-## Feature engineering with `FeatureConfig`
+## Feature engineering — `FeatureConfig`
 
-By default, PreFlight's Engineer stage only encodes, scales, and expands datetime columns — nothing more. `FeatureConfig` lets you opt in to additional, automatically-generated features. **Everything is off by default** — passing no `FeatureConfig` produces identical output to earlier versions.
+All feature generation is **off by default**. Nothing changes in your output unless you explicitly turn it on.
 
 ```python
-from preflight.types import FeatureConfig
+from preflight import FeatureConfig
 
 config = FeatureConfig(
     interactions=True,
@@ -173,149 +165,169 @@ config = FeatureConfig(
 
     datetime_cyclical=True,
     datetime_deltas=True,
-    datetime_reference_col=None,
+    datetime_reference_col="signup_date",
 
     clustering=True,
-    cluster_k="auto",
+    cluster_k="auto",              # or an explicit int
     cluster_features="numeric_only",
+
+    text_features=True,            # basic text stats: length, word count, has_text
+    text_tfidf=True,               # adds a small TF-IDF-lite feature set
+    text_tfidf_top_k=20,
 )
 
-result = pf.prepare(df, target="price", model_hint="linear", feature_config=config)
+result = pf.prepare(df, target="price", task="regression", feature_config=config)
 ```
 
-| Option | Type | Default | What it does |
-|---|---|---|---|
-| `interactions` | `bool` | `False` | Generate ratio/product/difference features between your most target-relevant numeric columns. |
-| `interaction_top_k` | `int` | `5` | How many top numeric columns (by correlation/mutual information with target) are considered as candidates. |
-| `interaction_types` | `list[str]` | `["ratio", "product"]` | Which combinations to generate: `"ratio"`, `"product"`, `"difference"`. |
-| `datetime_cyclical` | `bool` | `False` | Adds `sin`/`cos` encodings of month and day-of-week, plus `is_weekend`. |
-| `datetime_deltas` | `bool` | `False` | Adds day-difference features between pairs of datetime columns. |
-| `datetime_reference_col` | `str \| None` | `None` | If set, adds "days since this column" for every other datetime column. |
-| `clustering` | `bool` | `False` | Adds a `cluster_label` and `cluster_dist_to_centroid` column via KMeans. |
-| `cluster_k` | `int \| "auto"` | `"auto"` | Number of clusters, or `"auto"` to pick automatically via silhouette score. |
-| `cluster_features` | `"numeric_only" \| list[str]` | `"numeric_only"` | Which columns to cluster on. |
+| Category | What it generates |
+|---|---|
+| **Interactions** | Ratio/product columns between the top-K target-correlated numeric columns, zero-guarded. |
+| **Datetime** | Cyclical sin/cos month & day-of-week, weekend flags, cross-column date deltas. |
+| **Clustering** | KMeans cluster label + distance-to-centroid, with automatic or manual K. |
+| **Text** | Character length, word count, a `has_text` flag, and (optionally) a capped TF-IDF-lite term set. This is intentionally basic — full NLP (embeddings, sentiment, language models) is out of scope. |
 
-Every generated column is logged in the `Report` with a plain-English reason — call `result.report.show()` to see exactly what was created and why.
+Every generated column gets a logged reason in the `Report` — nothing is added silently.
+
+---
+
+## Manual column type overrides
+
+Auto-inference is good, but not perfect for every dataset. Force a column's type directly:
+
+```python
+from preflight import SemanticType
+
+result = pf.prepare(
+    df,
+    target="price",
+    column_types={"zip_code": SemanticType.CATEGORICAL_LOW},
+)
+```
+
+Overrides are applied **after** auto-inference and logged in the Report, stating both the original inferred type and the forced type. Overriding a nonexistent column or the target column itself raises a clear error before anything runs.
+
+---
+
+## Presets — less to configure
+
+```python
+pf.prepare(df, target="price", preset="fast")       # speed-favoring defaults
+pf.prepare(df, target="price", preset="thorough")    # completeness-favoring defaults
+```
+
+Any parameter you also pass explicitly always overrides the preset's value for that parameter. Using a preset is logged in the Report so it's never a hidden configuration.
+
+---
+
+## Preview mode — `dry_run`
+
+See what PreFlight *would* do, without touching your data or fitting a pipeline:
+
+```python
+preview = pf.prepare(df, target="price", dry_run=True)
+
+preview.df        # your original DataFrame, completely untouched
+preview.pipeline  # None
+preview.report.show()  # the full, real decision log — same as a real run
+```
+
+Useful for trusting the library on a new dataset before committing to a real transform.
 
 ---
 
 ## The Report
 
-`result.report` is a first-class part of every `PrepResult` — it's how PreFlight stays auditable instead of a black box.
-
 ```python
-result.report.show()             # grouped, readable terminal summary
-result.report.show(verbose=True) # show every entry, no truncation
-result.report.to_dict()          # structured dict export
-result.report.to_dataframe()     # entries as a DataFrame (stage, column, action, rationale, severity)
-result.report.plot()             # correlation heatmap, missingness heatmap, MI bar chart, class distribution
-result.report.to_html("report.html")  # self-contained HTML export, no external references
+result.report.show()                       # console summary, grouped by stage
+result.report.show(severity_filter="warning")
+result.report.plot(kind="all")             # list of matplotlib Figures
+result.report.to_html()                    # HTML string
+result.report.save_html("report.html")
+result.report.save_pdf("report.pdf")       # graphic-first PDF export
+result.report.summary_counts()             # {'info': 132, 'warning': 14, 'critical': 0}
+result.report.to_dataframe()
+result.report.to_dict()
 ```
 
-`.show()` groups entries by stage and marks severity with symbols — `⚠` for warnings, `✕` for critical issues, `·` for informational entries. By default, long lists of informational entries are summarized; pass `verbose=True` to see everything.
+`.save_pdf()` produces a visual, chart-led PDF: a summary cover page, per-stage chart pages, and a compact appendix table last — built for skimming, not just archiving.
+
+To compare two results visually:
+
+```python
+pf.save_compare_pdf(result_a, result_b, "comparison.pdf")
+```
 
 ---
 
-## Command line interface
+## CLI
 
 ```bash
-preflight prepare train.csv --target price --task regression --model-hint linear
+preflight prepare train.csv --target price --task regression
 ```
 
-This writes three files next to your input: `train_prepared.csv`, `train_pipeline.joblib`, and `train_report.json`.
-
-**Common options:**
-
-| Flag | Description |
-|---|---|
-| `--target` | Name of the target column (required) |
-| `--task` | `classification` or `regression` |
-| `--model-hint` | `tree` or `linear` |
-| `--drop-threshold` | Missingness fraction above which a column is dropped |
-| `--outlier-method` | Outlier handling strategy |
-| `--cardinality-threshold` | Cutoff between low- and high-cardinality categoricals |
-| `--verbose` | Print the full report to the console |
-
-**Feature engineering flags (v0.2.0+):**
-
-| Flag | Description |
-|---|---|
-| `--interactions` / `--no-interactions` | Enable numeric interaction features |
-| `--interaction-top-k` | Number of top columns considered for interactions |
-| `--interaction-types` | Comma-separated: `ratio,product,difference` |
-| `--datetime-cyclical` / `--no-datetime-cyclical` | Enable cyclical datetime features |
-| `--datetime-deltas` / `--no-datetime-deltas` | Enable cross-column date deltas |
-| `--datetime-reference-col` | Column to compute "days since" against |
-| `--clustering` / `--no-clustering` | Enable cluster-based features |
-| `--cluster-k` | `auto` or an integer |
-| `--cluster-features` | Comma-separated column list, or `numeric_only` |
-
-Example with feature engineering enabled:
+Common flags:
 
 ```bash
 preflight prepare train.csv --target price --task regression \
+  --model-hint linear \
+  --preset thorough \
+  --column-type "zip_code:CATEGORICAL_LOW" \
+  --text-features --text-tfidf --text-tfidf-top-k 15 \
   --interactions --interaction-top-k 5 \
-  --clustering --cluster-k auto
+  --clustering --cluster-k auto \
+  --dry-run \
+  --save-pdf report.pdf
 ```
+
+Run `preflight prepare --help` for the full flag list.
 
 ---
 
 ## Semantic types
 
-The Profiler classifies every column into one of eight semantic types, which determines how Cleaner and Engineer treat it:
-
 | Type | Meaning |
 |---|---|
-| `NUMERIC_FEATURE` | A regular numeric column |
-| `NUMERIC_ID` | A numeric column that looks like an identifier (dropped by Cleaner) |
-| `CATEGORICAL_LOW` | A categorical column below the cardinality threshold |
-| `CATEGORICAL_HIGH` | A categorical column above the cardinality threshold (always cross-fit target encoded) |
-| `DATETIME_NATIVE` | Already a proper datetime dtype |
-| `DATETIME_STRING` | A string column that parses as a date |
-| `BOOLEAN` | A true/false column |
-| `CONSTANT` | A column with only one unique value (dropped by Cleaner) |
-
----
-
-## `model_hint`: tree vs. linear
-
-`model_hint` tells Engineer which family of downstream model you plan to use, since tree-based and linear models want different preprocessing:
-
-| | `model_hint="tree"` | `model_hint="linear"` |
-|---|---|---|
-| Low-cardinality categorical | Ordinal encoding | One-hot encoding |
-| Numeric scaling | None | `StandardScaler` |
-| Skewed numeric columns | Untouched | `log1p` transform |
-| High-cardinality categorical | Cross-fit (5-fold) target encoding | Cross-fit (5-fold) target encoding |
-
-High-cardinality categoricals are **always** cross-fit target encoded regardless of `model_hint`, since naive target encoding would leak the target into the features.
+| `NUMERIC_FEATURE` | Ordinary numeric column |
+| `NUMERIC_ID` | Numeric but identifier-like (excluded from most transforms) |
+| `CATEGORICAL_LOW` | Low-cardinality categorical |
+| `CATEGORICAL_HIGH` | High-cardinality categorical (cross-fit target encoded) |
+| `DATETIME_NATIVE` | Already a datetime dtype |
+| `DATETIME_STRING` | String that parses as a date |
+| `BOOLEAN` | Two-valued column |
+| `CONSTANT` | Single unique value (flagged, not useful) |
+| `TEXT` | Free text — long, high-uniqueness strings |
 
 ---
 
 ## Scope
 
-**In scope (v0.1–v0.2):** tabular data, supervised learning, CSV/DataFrame input, regression and classification, numeric/categorical/datetime features, optional interaction/datetime/cluster feature engineering.
+**In scope:** tabular data, supervised learning, CSV/DataFrame input, regression + classification, numeric/categorical/datetime/text features, optional interaction/datetime/cluster/text feature engineering.
 
-**Out of scope (for now):** text columns, time series, multi-label targets, image data, automated feature *selection* (mutual information scores are surfaced in the Report, never used to drop columns), and resampling techniques like SMOTE.
+**Explicitly out of scope:** full NLP (embeddings, transformers, sentiment analysis), time series, multi-label targets, image data, automated feature *selection*, SMOTE/resampling, model training or selection of any kind.
+
+If your DataFrame has feature signals PreFlight surfaces (mutual information, correlation) — it will tell you about them in the Report, but it will never act on them by dropping or selecting features for you.
 
 ---
 
 ## FAQ
 
-**Does PreFlight train models?**
-No. `result.pipeline` has `.fit()` and `.transform()`, but never `.predict()`. Model training and selection is intentionally left to you.
+**Does this train a model?**
+No. The `Pipeline` returned has `.fit()` and `.transform()`, never `.predict()`. Model training is intentionally out of scope.
 
-**What happens if I mix up `task` and my data?**
-PreFlight checks this before doing any work. If you pass `task="classification"` on data that looks continuous, you'll get a clear error suggesting `task="regression"` instead of a confusing crash. The reverse case (regression on a low-cardinality target) produces a warning in the Report rather than an error, since that's sometimes legitimate.
+**Will it silently drop my columns?**
+Only above `drop_threshold` missingness, and every drop is logged in the Report with a reason.
 
-**Will using `FeatureConfig` change my existing results?**
-No. Every `FeatureConfig` option defaults to off. If you don't pass `feature_config`, behavior is identical to earlier versions.
+**Can I use the pipeline on new data later?**
+Yes — `result.pipeline.transform(new_data)` reproduces the exact same transformation, including any fitted feature generators (frozen KMeans centroids, learned TF-IDF vocabulary, etc.).
 
-**Can I see exactly why a column was dropped or transformed?**
-Yes — call `result.report.show()`. Every automated decision has a logged rationale.
+**What if I disagree with an auto-inferred column type?**
+Use `column_types` to override it directly — see above.
+
+**Is text handling here "AI-powered"?**
+No. Text support is intentionally basic (length, word count, TF-IDF-lite) — a lightweight signal boost, not an NLP pipeline.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](https://github.com/VAIyerAmogha/PreFlight/blob/main/LICENSE).
+MIT

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.0] - 2026-07-05
+### Added
+- TEXT semantic type + detection + stats (Phase 1).
+- Opt-in text feature generation via FeatureConfig.text_features/text_tfidf (Phase 2).
+- Manual SemanticType override via `column_types` (Phase 3).
+- Config presets via `preset="fast"|"thorough"` (Phase 4).
+- Dry run preview mode on `prepare()` (Phase 5).
+- Graphic-first PDF export via `Report.save_pdf()` (Phase 6).
+- Visual comparison PDF via `pf.save_compare_pdf()` (Phase 7).
+
+### Changed
+- CLI updated with flags for all new features above, consolidated and verified (Phase 8).
+- Library-wide error messages simplified to plain language (Phase 8.1).
+
 ## [0.2.0] - 2026-07-05
 ### Added
 - Task/target mismatch validation: prepare()/profile()/clean()/engineer()

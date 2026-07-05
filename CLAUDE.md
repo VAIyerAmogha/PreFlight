@@ -62,7 +62,7 @@ Start every session by reading PLAN.md, then this file.
 
 Current focus:
 Last updated: 2026-07-05
-Active work: Phase 9 (docs + v1.0.0 release).
+Active work: v1.0.0 is feature-complete and ready for the build/publish steps. Note that README.md is being manually maintained by the user going forward and should not be auto-edited by future prompts unless explicitly requested.
 
 Recent completions:
 - v1.0.0 Phase 7: Added `save_compare_pdf()` function for visual comparison of two PrepResults in a PDF.
