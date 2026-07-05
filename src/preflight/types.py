@@ -100,3 +100,27 @@ class PrepResult:
     df: pd.DataFrame
     pipeline: Optional['Pipeline']
     report: Optional['Report']
+
+_UNSET = object()
+
+PRESETS: Dict[str, Dict[str, Any]] = {
+    "fast": {
+        "drop_threshold": 0.8,
+        "outlier_method": "zscore",
+        "cardinality_threshold": 50,
+        "feature_config": None,
+    },
+    "thorough": {
+        "drop_threshold": 0.2,
+        "outlier_method": "iqr",
+        "cardinality_threshold": 20,
+        "feature_config": FeatureConfig(
+            interactions=True,
+            datetime_cyclical=True,
+            datetime_deltas=True,
+            clustering=True,
+            text_features=True,
+            text_tfidf=True,
+        ),
+    },
+}

@@ -62,7 +62,7 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-05
-Active work: Phase 2 of v1.0.0 upgrade complete (TEXT feature generation). Next step is Phase 3 (manual SemanticType overrides).
+Active work: Phase 6 (graphic PDF report export).
 
 Recent completions:
 - v0.2.0 Phase 5: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.
@@ -122,3 +122,6 @@ Open questions / blockers:
 21. CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users (2026-07-04)
 22. TEXT SemanticType detection + stats: Added TEXT to SemanticType enum and basic stats to ColumnProfile. TEXT columns currently pass through Cleaner and Engineer untouched; feature generation is deferred to Phase 2 (2026-07-05)
 23. FeatureConfig.text_features / text_tfidf — opt-in text feature generation: generates basic stats (char_length, word_count, has_text) and optionally capped TF-IDF features for TEXT columns (2026-07-05)
+24. column_types manual SemanticType override, applied post-inference, validated at API boundary (2026-07-05)
+25. PRESETS dict + preset param on prepare(), explicit kwargs always override preset values (2026-07-05)
+26. dry_run param on prepare() — full decision logic runs, no transform/no pipeline fit, returns original df untouched (2026-07-05)

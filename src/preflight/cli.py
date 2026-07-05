@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 import pandas as pd
 import preflight
-from preflight.types import PrepResult, FeatureConfig
+from preflight.types import PrepResult, FeatureConfig, SemanticType, PRESETS
 from typing import Optional
 
 app = typer.Typer(rich_markup_mode=None)
@@ -52,9 +52,10 @@ def prepare(
     target: str = typer.Option(..., "--target", help="Target column name"),
     task: str = typer.Option("classification", "--task", help="regression|classification"),
     model_hint: str = typer.Option("tree", "--model-hint", help="tree|linear"),
-    drop_threshold: float = typer.Option(0.6, "--drop-threshold"),
-    outlier_method: str = typer.Option("iqr", "--outlier-method"),
-    cardinality_threshold: int = typer.Option(20, "--cardinality-threshold"),
+    preset: Optional[str] = typer.Option(None, "--preset", help="Named configuration preset"),
+    drop_threshold: Optional[float] = typer.Option(None, "--drop-threshold"),
+    outlier_method: Optional[str] = typer.Option(None, "--outlier-method"),
+    cardinality_threshold: Optional[int] = typer.Option(None, "--cardinality-threshold"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", help="Directory for output files"),
     verbose: bool = typer.Option(False, "--verbose", help="Show full decision log inline"),
     interactions: bool = typer.Option(False, "--interactions/--no-interactions", help="Enable feature interactions"),
@@ -66,12 +67,18 @@ def prepare(
     clustering: bool = typer.Option(False, "--clustering/--no-clustering", help="Enable KMeans clustering features"),
     cluster_k: str = typer.Option("auto", "--cluster-k", help="Number of clusters or 'auto'"),
     cluster_features: str = typer.Option("numeric_only", "--cluster-features", help="Comma-separated cluster features"),
+    column_type: Optional[list[str]] = typer.Option(None, "--column-type", help="Override semantic type for a column (format colname:TYPE)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Run full decision logic without transforming data or fitting a pipeline"),
 ) -> None:
-    if not (0 <= drop_threshold <= 1):
+    if preset is not None and preset not in PRESETS:
+        typer.echo(f"Error: Invalid preset '{preset}'. Valid presets are: {list(PRESETS.keys())}", err=True)
+        raise typer.Exit(code=1)
+
+    if drop_threshold is not None and not (0 <= drop_threshold <= 1):
         typer.echo(f"Error: drop-threshold must be between 0 and 1, got {drop_threshold}", err=True)
         raise typer.Exit(code=1)
     
-    if cardinality_threshold <= 0:
+    if cardinality_threshold is not None and cardinality_threshold <= 0:
         typer.echo(f"Error: cardinality-threshold must be > 0, got {cardinality_threshold}", err=True)
         raise typer.Exit(code=1)
         
@@ -141,17 +148,46 @@ def prepare(
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
             
+    parsed_column_types = None
+    if column_type:
+        parsed_column_types = {}
+        for ct in column_type:
+            parts = ct.split(":", 1)
+            if len(parts) != 2:
+                typer.echo(f"Error: Invalid format for --column-type '{ct}'. Expected format is colname:TYPE", err=True)
+                raise typer.Exit(code=1)
+            cname, ctype_str = parts
+            try:
+                ctype_enum = SemanticType[ctype_str]
+            except KeyError:
+                typer.echo(f"Error: '{ctype_str}' is not a valid SemanticType", err=True)
+                raise typer.Exit(code=1)
+            parsed_column_types[cname] = ctype_enum
+            
+    kwargs = {
+        "df": df,
+        "target": target,
+        "task": task,
+        "model_hint": model_hint,
+    }
+    
+    if preset is not None:
+        kwargs["preset"] = preset
+    if drop_threshold is not None:
+        kwargs["drop_threshold"] = drop_threshold
+    if outlier_method is not None:
+        kwargs["outlier_method"] = outlier_method
+    if cardinality_threshold is not None:
+        kwargs["cardinality_threshold"] = cardinality_threshold
+    if use_feature_config:
+        kwargs["feature_config"] = feature_config
+    if parsed_column_types is not None:
+        kwargs["column_types"] = parsed_column_types
+    if dry_run:
+        kwargs["dry_run"] = True
+
     try:
-        result = preflight.prepare(
-            df=df,
-            target=target,
-            task=task,
-            model_hint=model_hint,
-            drop_threshold=drop_threshold,
-            outlier_method=outlier_method,
-            cardinality_threshold=cardinality_threshold,
-            feature_config=feature_config
-        )
+        result = preflight.prepare(**kwargs)
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)

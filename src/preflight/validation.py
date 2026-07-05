@@ -12,6 +12,8 @@ from typing import Optional
 
 import pandas as pd
 
+from preflight.types import SemanticType
+
 # ---------------------------------------------------------------------------
 # Heuristic thresholds — documented so they are easy to tune.
 # ---------------------------------------------------------------------------
@@ -108,6 +110,7 @@ def _validate_inputs(
     target: str,
     task: str,
     model_hint: Optional[str] = None,
+    column_types: Optional[dict[str, SemanticType]] = None,
 ) -> Optional[str]:
     """Run all standard API boundary checks for the four public functions.
 
@@ -180,4 +183,15 @@ def _validate_inputs(
 
     # 7. Task / target mismatch — may raise (classification+continuous) or warn
     warning = _validate_task_target_match(df[target], task)
+
+    # 8. Validate column_types overrides
+    if column_types is not None:
+        for col, stype in column_types.items():
+            if col == target:
+                raise ValueError(f"column_types override references the target column '{col}', which is not allowed")
+            if col not in df.columns:
+                raise ValueError(f"column_types override references column '{col}' which does not exist in DataFrame")
+            if not isinstance(stype, SemanticType):
+                raise ValueError(f"column_types override for '{col}' is not a valid SemanticType")
+
     return warning

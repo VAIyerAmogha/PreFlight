@@ -95,7 +95,10 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
 ## v1.0.0 roadmap
     Phase 1  [x] TEXT SemanticType detection + stats (COMPLETE)
     Phase 2  [x] Text feature generation (COMPLETE)
-    Phase 3  [ ] Manual SemanticType overrides
+    Phase 3  [x] Manual SemanticType overrides (COMPLETE)
+    Phase 4  [x] Config presets (COMPLETE)
+    Phase 5  [x] dry_run / preview mode
+    Phase 6  [ ] graphic PDF report export
 
 ## Environment variables
     None. PreFlight-ML requires no environment variables, API keys, or external services.
@@ -154,3 +157,6 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     21. 2026-07-04: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.
     22. 2026-07-05: TEXT SemanticType detection + stats: Added TEXT to SemanticType enum and basic stats to ColumnProfile. TEXT columns currently pass through Cleaner and Engineer untouched; feature generation is deferred to Phase 2.
     23. 2026-07-05: FeatureConfig.text_features / text_tfidf — opt-in text feature generation: added generator for character length, word count, has_text boolean, and bounded TF-IDF term vectors. Collisions gracefully skipped.
+    24. 2026-07-05: column_types manual SemanticType override, applied post-inference, validated at API boundary.
+    25. 2026-07-05: PRESETS dict + preset param on prepare(), explicit kwargs always override preset values.
+    26. 2026-07-05: dry_run param on prepare() — full decision logic runs, no transform/no pipeline fit, returns original df untouched.

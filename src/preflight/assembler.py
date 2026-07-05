@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.exceptions import NotFittedError
+from typing import Optional
 
 from preflight.types import ColumnProfile, SemanticType, PrepResult
 from preflight.profiler import run_profiler
@@ -318,10 +319,11 @@ def run_assembler(
     drop_threshold: float = 0.6,
     outlier_method: str = "iqr",
     cardinality_threshold: int = 20,
+    column_types: Optional[dict[str, SemanticType]] = None,
 ) -> PrepResult:
     # 1. Run profiler
     profiles, profiler_report = run_profiler(
-        df, target, task, cardinality_threshold
+        df, target, task, cardinality_threshold, column_types
     )
     
     # 2. Split df into X and y

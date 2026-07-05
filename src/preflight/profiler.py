@@ -37,7 +37,15 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
     n_unique = non_null.nunique()
     total_len = len(series)
     
-    # 1. CONSTANT (single unique non-null value, or all-null)
+    # 1. TEXT (check before CONSTANT to allow long identical strings to be processed as text)
+    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+        sample_size = min(100, len(non_null))
+        sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
+        avg_len = sample.astype(str).str.len().mean()
+        if avg_len > 20:
+            return SemanticType.TEXT
+
+    # 2. CONSTANT (single unique non-null value, or all-null)
     if n_unique <= 1:
         return SemanticType.CONSTANT
         
@@ -90,7 +98,7 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
             if success_count / len(sample) > 0.9:
                 return SemanticType.DATETIME_STRING
 
-    # 6. TEXT
+    # 6. TEXT (Remaining logic for non-constant text columns)
     if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
         uniqueness_ratio = n_unique / len(non_null) if len(non_null) > 0 else 0
         if n_unique >= cardinality_threshold or uniqueness_ratio >= 0.1:
@@ -246,6 +254,7 @@ def run_profiler(
     target: str,
     task: str,
     cardinality_threshold: int = 20,
+    column_types: Optional[dict[str, SemanticType]] = None,
 ) -> Tuple[List[ColumnProfile], List[ReportEntry]]:
     """
     Orchestrate the profiling stage across all columns.
@@ -352,6 +361,24 @@ def run_profiler(
             
         profiles.append(profile)
         
+    if column_types:
+        for p in profiles:
+            if p.name in column_types:
+                orig_type = p.semantic_type
+                p.semantic_type = column_types[p.name]
+                reports.append(ReportEntry(
+                    stage="profiler",
+                    column=p.name,
+                    action="manual_semantic_type_override",
+                    rationale=f"column '{p.name}' forced to {p.semantic_type.name} (auto-inferred was {orig_type.name})",
+                    severity="info"
+                ))
+                # Update numeric_feature_cols list so global signals are computed accurately
+                if p.semantic_type == SemanticType.NUMERIC_FEATURE and p.name not in numeric_feature_cols:
+                    numeric_feature_cols.append(p.name)
+                elif p.semantic_type != SemanticType.NUMERIC_FEATURE and p.name in numeric_feature_cols:
+                    numeric_feature_cols.remove(p.name)
+                    
     # 3. Global Signals: VIF
     if numeric_feature_cols:
         vif_scores, capped = compute_vif_scores(df, numeric_feature_cols)

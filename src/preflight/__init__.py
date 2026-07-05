@@ -13,7 +13,7 @@ from preflight.cleaner import run_cleaner
 from preflight.engineer import run_engineer, add_features
 from preflight.validation import _validate_inputs
 from typing import Optional
-from preflight.types import FeatureConfig
+from preflight.types import FeatureConfig, SemanticType, PRESETS, _UNSET
 
 
 def prepare(
@@ -21,25 +21,101 @@ def prepare(
     target: str,
     task: str = "classification",
     model_hint: str = "tree",
-    drop_threshold: float = 0.6,
-    outlier_method: str = "iqr",
-    cardinality_threshold: int = 20,
-    feature_config: Optional[FeatureConfig] = None,
+    drop_threshold: float = _UNSET,
+    outlier_method: str = _UNSET,
+    cardinality_threshold: int = _UNSET,
+    feature_config: Optional[FeatureConfig] = _UNSET,
+    column_types: Optional[dict[str, SemanticType]] = _UNSET,
+    preset: Optional[str] = None,
+    dry_run: bool = False,
 ) -> PrepResult:
-    warning = _validate_inputs(df, target, task, model_hint=model_hint)
-    # warning is handled inside assembler via the profiler entries; we surface it
-    # by injecting a ReportEntry into the returned Report below if needed.
-    # assembler.run_assembler owns Report construction, so we pass the warning text
-    # through as an optional annotation appended after assembly.
-    result = assembler.run_assembler(
-        df=df,
-        target=target,
-        task=task,
-        model_hint=model_hint,
-        drop_threshold=drop_threshold,
-        outlier_method=outlier_method,
-        cardinality_threshold=cardinality_threshold,
-    )
+    if not isinstance(dry_run, bool):
+        raise TypeError(f"dry_run must be a boolean, got {type(dry_run).__name__}")
+
+    actual_drop_threshold = 0.6
+    actual_outlier_method = "iqr"
+    actual_cardinality_threshold = 20
+    actual_feature_config = None
+    actual_column_types = None
+
+    if preset is not None:
+        if preset not in PRESETS:
+            raise ValueError(f"Invalid preset '{preset}'. Valid presets are: {list(PRESETS.keys())}")
+        p_dict = PRESETS[preset]
+        actual_drop_threshold = p_dict.get("drop_threshold", actual_drop_threshold)
+        actual_outlier_method = p_dict.get("outlier_method", actual_outlier_method)
+        actual_cardinality_threshold = p_dict.get("cardinality_threshold", actual_cardinality_threshold)
+        actual_feature_config = p_dict.get("feature_config", actual_feature_config)
+
+    if drop_threshold is not _UNSET:
+        actual_drop_threshold = drop_threshold
+    if outlier_method is not _UNSET:
+        actual_outlier_method = outlier_method
+    if cardinality_threshold is not _UNSET:
+        actual_cardinality_threshold = cardinality_threshold
+    if feature_config is not _UNSET:
+        actual_feature_config = feature_config
+    if column_types is not _UNSET:
+        actual_column_types = column_types
+
+    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=actual_column_types)
+
+    if dry_run:
+        profiles, profiler_entries = run_profiler(
+            df=df, target=target, task=task, cardinality_threshold=actual_cardinality_threshold, column_types=actual_column_types
+        )
+        df_clean, surviving_profiles, cleaner_entries, _ = run_cleaner(
+            df=df, profiles=profiles, target=target, drop_threshold=actual_drop_threshold, outlier_method=actual_outlier_method
+        )
+        _, engineer_entries, _ = run_engineer(
+            df=df_clean, profiles=surviving_profiles, target=target, model_hint=model_hint, 
+            cardinality_threshold=actual_cardinality_threshold, feature_config=actual_feature_config
+        )
+        
+        all_entries = profiler_entries + cleaner_entries + engineer_entries
+        info_entry = ReportEntry(
+            stage="profiler",
+            column="dataset",
+            action="dry_run",
+            rationale="dry run mode enabled: no data was transformed and no pipeline was fitted.",
+            severity="info"
+        )
+        all_entries.insert(0, info_entry)
+        
+        report = Report(all_entries, df=df, profiles=surviving_profiles, target=target)
+        result = PrepResult(df=df, pipeline=None, report=report)
+    else:
+        # warning is handled inside assembler via the profiler entries; we surface it
+        # by injecting a ReportEntry into the returned Report below if needed.
+        # assembler.run_assembler owns Report construction, so we pass the warning text
+        # through as an optional annotation appended after assembly.
+        result = assembler.run_assembler(
+            df=df,
+            target=target,
+            task=task,
+            model_hint=model_hint,
+            drop_threshold=actual_drop_threshold,
+            outlier_method=actual_outlier_method,
+            cardinality_threshold=actual_cardinality_threshold,
+            column_types=actual_column_types,
+        )
+        
+    if preset is not None and result.report is not None:
+        preset_expanded = {
+            "drop_threshold": actual_drop_threshold,
+            "outlier_method": actual_outlier_method,
+            "cardinality_threshold": actual_cardinality_threshold,
+            "feature_config": str(actual_feature_config) if actual_feature_config else None,
+        }
+        preset_entry = ReportEntry(
+            stage="profiler",
+            column="__all__",
+            action="apply_preset",
+            rationale=f"Applied preset '{preset}'. Expanded parameters: {preset_expanded}",
+            severity="info",
+        )
+        result.report._entries.insert(0, preset_entry)
+        
     if warning is not None and result.report is not None:
         entry = ReportEntry(
             stage="profiler",
@@ -51,9 +127,9 @@ def prepare(
         # Report.entries is a read-only property (returns a copy); mutate _entries directly.
         result.report._entries.insert(0, entry)
         
-    if feature_config is not None:
+    if not dry_run and actual_feature_config is not None:
         # Applies feature engineering post-hoc and returns a new PrepResult
-        result = add_features(result, feature_config, target=target)
+        result = add_features(result, actual_feature_config, target=target)
         
     return result
 
@@ -63,11 +139,12 @@ def profile(
     target: str,
     task: str = "classification",
     cardinality_threshold: int = 20,
+    column_types: Optional[dict[str, SemanticType]] = None,
 ) -> PrepResult:
-    warning = _validate_inputs(df, target, task)
+    warning = _validate_inputs(df, target, task, column_types=column_types)
 
     profiles, profiler_entries = run_profiler(
-        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold
+        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types
     )
 
     if warning is not None:
@@ -95,11 +172,12 @@ def clean(
     drop_threshold: float = 0.6,
     outlier_method: str = "iqr",
     cardinality_threshold: int = 20,
+    column_types: Optional[dict[str, SemanticType]] = None,
 ) -> PrepResult:
-    warning = _validate_inputs(df, target, task)
+    warning = _validate_inputs(df, target, task, column_types=column_types)
 
     profiles, profiler_entries = run_profiler(
-        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold
+        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types
     )
     df_clean, surviving_profiles, cleaner_entries, specs = run_cleaner(
         df=df, profiles=profiles, target=target,
@@ -133,11 +211,12 @@ def engineer(
     drop_threshold: float = 0.6,
     outlier_method: str = "iqr",
     cardinality_threshold: int = 20,
+    column_types: Optional[dict[str, SemanticType]] = None,
 ) -> PrepResult:
-    warning = _validate_inputs(df, target, task, model_hint=model_hint)
+    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
 
     profiles, profiler_entries = run_profiler(
-        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold
+        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types
     )
     df_clean, surviving_profiles, cleaner_entries, specs_c = run_cleaner(
         df=df, profiles=profiles, target=target,
