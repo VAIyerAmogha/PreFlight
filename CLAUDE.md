@@ -62,7 +62,7 @@ Start every session by reading PLAN.md, then this file.
 
 Current focus:
 Last updated: 2026-07-05
-Active work: Phase 8 (CLI updates for all new v1.0.0 flags).
+Active work: Phase 9 (docs + v1.0.0 release).
 
 Recent completions:
 - v1.0.0 Phase 7: Added `save_compare_pdf()` function for visual comparison of two PrepResults in a PDF.
@@ -128,3 +128,4 @@ Open questions / blockers:
 26. dry_run param on prepare() — full decision logic runs, no transform/no pipeline fit, returns original df untouched (2026-07-05)
 27. Report.save_pdf() — graphic-first PDF export reusing existing chart functions and severity palette, appendix table last (2026-07-05)
 28. pf.save_compare_pdf() — visual before/after PDF diff report built on compare(), reuses Phase 6 chart/PDF infrastructure (2026-07-05)
+29. CLI consolidation pass — all v1.0.0 flags verified complete and consistent with the Python API (2026-07-05)

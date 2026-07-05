@@ -58,15 +58,18 @@ def prepare(
     cardinality_threshold: Optional[int] = typer.Option(None, "--cardinality-threshold"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", help="Directory for output files"),
     verbose: bool = typer.Option(False, "--verbose", help="Show full decision log inline"),
-    interactions: bool = typer.Option(False, "--interactions/--no-interactions", help="Enable feature interactions"),
-    interaction_top_k: int = typer.Option(5, "--interaction-top-k", help="Top K features to interact"),
-    interaction_types: str = typer.Option("ratio,product", "--interaction-types", help="Comma-separated interaction types"),
-    datetime_cyclical: bool = typer.Option(False, "--datetime-cyclical/--no-datetime-cyclical", help="Enable cyclical datetime features"),
-    datetime_deltas: bool = typer.Option(False, "--datetime-deltas/--no-datetime-deltas", help="Enable datetime delta features"),
+    interactions: Optional[bool] = typer.Option(None, "--interactions/--no-interactions", help="Enable feature interactions"),
+    interaction_top_k: Optional[int] = typer.Option(None, "--interaction-top-k", help="Top K features to interact"),
+    interaction_types: Optional[str] = typer.Option(None, "--interaction-types", help="Comma-separated interaction types"),
+    datetime_cyclical: Optional[bool] = typer.Option(None, "--datetime-cyclical/--no-datetime-cyclical", help="Enable cyclical datetime features"),
+    datetime_deltas: Optional[bool] = typer.Option(None, "--datetime-deltas/--no-datetime-deltas", help="Enable datetime delta features"),
     datetime_reference_col: Optional[str] = typer.Option(None, "--datetime-reference-col", help="Reference datetime column"),
-    clustering: bool = typer.Option(False, "--clustering/--no-clustering", help="Enable KMeans clustering features"),
-    cluster_k: str = typer.Option("auto", "--cluster-k", help="Number of clusters or 'auto'"),
-    cluster_features: str = typer.Option("numeric_only", "--cluster-features", help="Comma-separated cluster features"),
+    clustering: Optional[bool] = typer.Option(None, "--clustering/--no-clustering", help="Enable KMeans clustering features"),
+    cluster_k: Optional[str] = typer.Option(None, "--cluster-k", help="Number of clusters or 'auto'"),
+    cluster_features: Optional[str] = typer.Option(None, "--cluster-features", help="Comma-separated cluster features"),
+    text_features: Optional[bool] = typer.Option(None, "--text-features/--no-text-features", help="Enable text feature engineering"),
+    text_tfidf: Optional[bool] = typer.Option(None, "--text-tfidf/--no-text-tfidf", help="Enable TF-IDF vectorization for text"),
+    text_tfidf_top_k: Optional[int] = typer.Option(None, "--text-tfidf-top-k", help="Top K features for TF-IDF"),
     column_type: Optional[list[str]] = typer.Option(None, "--column-type", help="Override semantic type for a column (format colname:TYPE)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run full decision logic without transforming data or fitting a pipeline"),
     save_pdf: Optional[str] = typer.Option(None, "--save-pdf", help="Save graphical PDF report to this path"),
@@ -105,46 +108,54 @@ def prepare(
         typer.echo(f"Error: Target column '{target}' is entirely null.", err=True)
         raise typer.Exit(code=1)
         
-    use_feature_config = (
-        interactions is not False or
-        interaction_top_k != 5 or
-        interaction_types != "ratio,product" or
-        datetime_cyclical is not False or
-        datetime_deltas is not False or
-        datetime_reference_col is not None or
-        clustering is not False or
-        cluster_k != "auto" or
-        cluster_features != "numeric_only"
-    )
+    explicit_feature_args = {
+        "interactions": interactions,
+        "interaction_top_k": interaction_top_k,
+        "interaction_types": interaction_types,
+        "datetime_cyclical": datetime_cyclical,
+        "datetime_deltas": datetime_deltas,
+        "datetime_reference_col": datetime_reference_col,
+        "clustering": clustering,
+        "cluster_k": cluster_k,
+        "cluster_features": cluster_features,
+        "text_features": text_features,
+        "text_tfidf": text_tfidf,
+        "text_tfidf_top_k": text_tfidf_top_k,
+    }
+    provided_feature_args = {k: v for k, v in explicit_feature_args.items() if v is not None}
+    
+    use_feature_config = len(provided_feature_args) > 0
     
     feature_config = None
     if use_feature_config:
-        parsed_cluster_k = cluster_k
-        if cluster_k != "auto":
-            try:
-                parsed_cluster_k = int(cluster_k)
-            except ValueError:
-                typer.echo(f"Error: cluster-k must be 'auto' or an integer, got '{cluster_k}'", err=True)
-                raise typer.Exit(code=1)
-                
-        parsed_cluster_features = cluster_features
-        if cluster_features != "numeric_only":
-            parsed_cluster_features = [x.strip() for x in cluster_features.split(",")]
+        base_fc = None
+        if preset is not None and preset in PRESETS:
+            base_fc = PRESETS[preset].get("feature_config")
             
-        interaction_types_list = [x.strip() for x in interaction_types.split(",")]
+        fc_kwargs = {}
+        if base_fc is not None:
+            from dataclasses import asdict
+            fc_kwargs = asdict(base_fc)
+            
+        if "cluster_k" in provided_feature_args:
+            val = provided_feature_args["cluster_k"]
+            if val != "auto":
+                try:
+                    provided_feature_args["cluster_k"] = int(val)
+                except ValueError:
+                    typer.echo(f"Error: cluster-k must be 'auto' or an integer, got '{val}'", err=True)
+                    raise typer.Exit(code=1)
+        if "cluster_features" in provided_feature_args:
+            val = provided_feature_args["cluster_features"]
+            if val != "numeric_only":
+                provided_feature_args["cluster_features"] = [x.strip() for x in val.split(",")]
+        if "interaction_types" in provided_feature_args:
+            provided_feature_args["interaction_types"] = [x.strip() for x in provided_feature_args["interaction_types"].split(",")]
+            
+        fc_kwargs.update(provided_feature_args)
         
         try:
-            feature_config = FeatureConfig(
-                interactions=interactions,
-                interaction_top_k=interaction_top_k,
-                interaction_types=interaction_types_list,
-                datetime_cyclical=datetime_cyclical,
-                datetime_deltas=datetime_deltas,
-                datetime_reference_col=datetime_reference_col,
-                clustering=clustering,
-                cluster_k=parsed_cluster_k,
-                cluster_features=parsed_cluster_features
-            )
+            feature_config = FeatureConfig(**fc_kwargs)
         except ValueError as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
@@ -205,3 +216,40 @@ def prepare(
     typer.echo(f"Success! Resulting shape: {result.df.shape}")
     for key, path in written_paths.items():
         typer.echo(f"Wrote {key}: {path}")
+
+@app.command("compare")
+def compare_cli(
+    csv_a: str = typer.Argument(..., help="Path to first CSV"),
+    csv_b: str = typer.Argument(..., help="Path to second CSV"),
+    target_a: str = typer.Option(..., "--target-a", help="Target column for first CSV"),
+    target_b: str = typer.Option(..., "--target-b", help="Target column for second CSV"),
+    output_pdf: str = typer.Option(..., "--output-pdf", help="Path to save output PDF report"),
+    task_a: str = typer.Option("classification", "--task-a", help="Task for first CSV"),
+    task_b: str = typer.Option("classification", "--task-b", help="Task for second CSV"),
+    preset: Optional[str] = typer.Option(None, "--preset", help="Preset to use for both runs"),
+):
+    typer.echo("Running prepare on first dataset...")
+    try:
+        df_a = pd.read_csv(csv_a)
+        res_a = preflight.prepare(df_a, target=target_a, task=task_a, preset=preset)
+    except Exception as e:
+        typer.echo(f"Error preparing first dataset: {e}", err=True)
+        raise typer.Exit(code=1)
+        
+    typer.echo("Running prepare on second dataset...")
+    try:
+        df_b = pd.read_csv(csv_b)
+        res_b = preflight.prepare(df_b, target=target_b, task=task_b, preset=preset)
+    except Exception as e:
+        typer.echo(f"Error preparing second dataset: {e}", err=True)
+        raise typer.Exit(code=1)
+        
+    typer.echo("Generating comparison report...")
+    try:
+        from preflight.compare_report import save_compare_pdf
+        save_compare_pdf(res_a, res_b, output_pdf)
+        typer.echo(f"Successfully wrote comparison PDF to: {output_pdf}")
+    except Exception as e:
+        typer.echo(f"Error generating comparison PDF: {e}", err=True)
+        raise typer.Exit(code=1)
+
