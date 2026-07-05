@@ -58,13 +58,15 @@ class ReportEntry:
         valid_severities = {"info", "warning", "critical"}
 
         if self.stage not in valid_stages:
+            valid_st_str = ', '.join(valid_stages)
             raise ValueError(
-                f"Invalid stage '{self.stage}'. Expected one of {valid_stages}."
+                f"The report stage '{self.stage}' is not recognized. Please use one of: {valid_st_str}."
             )
 
         if self.severity not in valid_severities:
+            valid_sev_str = ', '.join(valid_severities)
             raise ValueError(
-                f"Invalid severity '{self.severity}'. Expected one of {valid_severities}."
+                f"The report severity '{self.severity}' is not recognized. Please use one of: {valid_sev_str}."
             )
 
 @dataclass
@@ -85,15 +87,16 @@ class FeatureConfig:
     def __post_init__(self):
         valid_interaction_types = {"ratio", "product", "difference"}
         if not set(self.interaction_types).issubset(valid_interaction_types):
-            raise ValueError(f"interaction_types must be a subset of {valid_interaction_types}")
+            valid_names = ', '.join(valid_interaction_types)
+            raise ValueError(f"The interaction types provided are not recognized. Please use only: {valid_names}.")
         if self.interaction_top_k < 1:
-            raise ValueError("interaction_top_k must be >= 1")
+            raise ValueError("The number of top interactions (interaction_top_k) must be at least 1.")
         if self.cluster_k != "auto" and (not isinstance(self.cluster_k, int) or self.cluster_k <= 0):
-            raise ValueError("cluster_k must be 'auto' or a positive integer")
+            raise ValueError("The number of clusters (cluster_k) must either be the word 'auto' or a number greater than 0.")
         if self.cluster_features != "numeric_only" and not isinstance(self.cluster_features, list):
-            raise ValueError("cluster_features must be 'numeric_only' or a list of column names")
+            raise ValueError("The cluster features must either be 'numeric_only' or a list of specific column names.")
         if self.text_tfidf_top_k < 1:
-            raise ValueError("text_tfidf_top_k must be >= 1")
+            raise ValueError("The number of text features to generate (text_tfidf_top_k) must be at least 1.")
 
 @dataclass
 class PrepResult:

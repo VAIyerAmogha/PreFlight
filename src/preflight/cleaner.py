@@ -21,7 +21,7 @@ def median_impute(series: pd.Series) -> tuple[pd.Series, float]:
     Raises ValueError if series is non-numeric.
     """
     if not pd.api.types.is_numeric_dtype(series):
-        raise ValueError(f"median_impute requires numeric dtype for series '{series.name}', got {series.dtype}")
+        raise ValueError(f"We can only fill missing values with the median for numeric columns, but '{series.name}' has type {series.dtype}.")
     
     # If the column is entirely null, median() returns nan. 
     median_val = float(series.median()) if not series.isnull().all() else 0.0
@@ -131,7 +131,7 @@ def winsorize_outliers(series: pd.Series, method: str = "iqr") -> pd.Series:
     orchestration, which must NOT call this function for columns with missing_rate > 0.30.
     """
     if not pd.api.types.is_numeric_dtype(series):
-        raise ValueError(f"winsorize_outliers requires numeric dtype, got {series.dtype}")
+        raise ValueError(f"We can only clip outliers for numeric columns, but we received type {series.dtype}.")
         
     if method == "iqr":
         q1 = series.quantile(0.25)
@@ -145,7 +145,7 @@ def winsorize_outliers(series: pd.Series, method: str = "iqr") -> pd.Series:
         lower = mean - 3 * std
         upper = mean + 3 * std
     else:
-        raise ValueError(f"Unsupported winsorize method: {method}")
+        raise ValueError(f"The outlier clipping method '{method}' is not supported. Please use 'iqr' or 'zscore'.")
         
     return series.clip(lower=lower, upper=upper)
 

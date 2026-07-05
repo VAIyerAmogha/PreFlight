@@ -165,3 +165,4 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     27. 2026-07-05: Report.save_pdf() — graphic-first PDF export reusing existing chart functions and severity palette, appendix table last.
     28. 2026-07-05: save_compare_pdf() — visual before/after PDF diff report built on compare(), reuses Phase 6 chart/PDF infrastructure.
     29. 2026-07-05: CLI consolidation pass — all v1.0.0 flags verified complete and consistent with the Python API.
+    30. 2026-07-05: Library-wide error message simplification pass — plain language, no internal jargon, no raw tracebacks reach the user.

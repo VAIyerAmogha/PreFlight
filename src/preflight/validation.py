@@ -79,9 +79,9 @@ def _validate_task_target_match(
 
         if is_numeric and exceeds_hard_threshold and exceeds_fraction:
             raise ValueError(
-                f"target '{name}' looks continuous ({n_unique} unique values) but "
-                f"task='classification' was passed. "
-                f"Did you mean task='regression'?"
+                f"The target column '{name}' looks like a continuous number ({n_unique} unique values), "
+                f"but you asked for a classification task. If you are trying to predict a number, "
+                f"please change the task to 'regression'."
             )
 
     elif task == "regression":
@@ -149,36 +149,36 @@ def _validate_inputs(
     """
     # 1. Type and Non-empty
     if not isinstance(df, pd.DataFrame):
-        raise TypeError(f"DataFrame required, got {type(df)}")
+        raise TypeError("You must pass a pandas DataFrame as the first argument.")
     if len(df) == 0:
-        raise ValueError("DataFrame cannot be empty")
+        raise ValueError("The provided DataFrame is empty. Please provide data with at least one row.")
 
     # 2. Target exists
     if target not in df.columns:
         raise ValueError(
-            f"target '{target}' not found in DataFrame columns: {list(df.columns)}"
+            f"The target column '{target}' does not exist in your DataFrame. Please check the spelling."
         )
 
     # 3. At least one feature besides target
     if len(df.columns) < 2:
         raise ValueError(
-            "DataFrame must contain at least one feature column besides the target"
+            "Your DataFrame only has one column. We need at least one feature column along with the target to train a model."
         )
 
     # 4. No duplicate column names
     if df.columns.duplicated().any():
-        raise ValueError("DataFrame contains duplicate column names")
+        raise ValueError("Your DataFrame has duplicate column names. Please rename them so every column has a unique name.")
 
     # 5. Valid task
     if task not in ("classification", "regression"):
         raise ValueError(
-            f"task must be 'classification' or 'regression', got '{task}'"
+            f"The task must be exactly 'classification' or 'regression', but you provided '{task}'."
         )
 
     # 6. Valid model_hint (only when the caller supplies one)
     if model_hint is not None and model_hint not in ("tree", "linear"):
         raise ValueError(
-            f"model_hint must be 'tree' or 'linear', got '{model_hint}'"
+            f"The model_hint must be exactly 'tree' or 'linear', but you provided '{model_hint}'."
         )
 
     # 7. Task / target mismatch — may raise (classification+continuous) or warn
@@ -188,10 +188,11 @@ def _validate_inputs(
     if column_types is not None:
         for col, stype in column_types.items():
             if col == target:
-                raise ValueError(f"column_types override references the target column '{col}', which is not allowed")
+                raise ValueError(f"You cannot manually set the column type for the target column '{col}'.")
             if col not in df.columns:
-                raise ValueError(f"column_types override references column '{col}' which does not exist in DataFrame")
+                raise ValueError(f"You tried to set the type for column '{col}', but it does not exist in your DataFrame.")
             if not isinstance(stype, SemanticType):
-                raise ValueError(f"column_types override for '{col}' is not a valid SemanticType")
+                valid_types = ', '.join([t.name for t in SemanticType])
+                raise ValueError(f"The type provided for '{col}' is invalid. Please use one of: {valid_types}.")
 
     return warning

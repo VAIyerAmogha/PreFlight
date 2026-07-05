@@ -21,11 +21,11 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
     diff = preflight.compare(result_a, result_b)
     
     if result_a.report is None or result_b.report is None:
-        raise ValueError("Cannot generate compare PDF: Both results must have a valid report.")
+        raise ValueError("We cannot generate a comparison PDF because one or both of the results are missing their report.")
 
     # Check for wild uncomparable states
     if result_a.df is None or result_b.df is None:
-         raise ValueError("Cannot compare results without dataframes.")
+         raise ValueError("We cannot compare these results because they are missing their datasets.")
 
     counts_a = diff.get("report_entry_counts_a", {}) or {}
     counts_b = diff.get("report_entry_counts_b", {}) or {}
@@ -114,7 +114,7 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
                 plot_correlation_heatmap(result_a.df, num_a, ax=ax1)
                 ax1.set_title("Result A Correlation")
             else:
-                raise ValueError("Not enough numeric columns")
+                raise ValueError("We need at least two numeric columns to generate a correlation heatmap.")
         except Exception as e:
             ax1.axis('off')
             ax1.text(0.5, 0.5, f"Plot Failed/Skipped: {e}", ha='center', va='center')
@@ -124,7 +124,7 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
                 plot_correlation_heatmap(result_b.df, num_b, ax=ax2)
                 ax2.set_title("Result B Correlation")
             else:
-                raise ValueError("Not enough numeric columns")
+                raise ValueError("We need at least two numeric columns to generate a correlation heatmap.")
         except Exception as e:
             ax2.axis('off')
             ax2.text(0.5, 0.5, f"Plot Failed/Skipped: {e}", ha='center', va='center')
@@ -140,7 +140,7 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
                 plot_mutual_info_bar_chart(result_a.report.profiles, ax=ax1)
                 ax1.set_title("Result A Mutual Info")
             else:
-                raise ValueError("No profiles")
+                raise ValueError("We need column profiles to show the mutual information chart.")
         except Exception as e:
             ax1.axis('off')
             ax1.text(0.5, 0.5, f"Plot Failed/Skipped: {e}", ha='center', va='center')
@@ -150,7 +150,7 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
                 plot_mutual_info_bar_chart(result_b.report.profiles, ax=ax2)
                 ax2.set_title("Result B Mutual Info")
             else:
-                raise ValueError("No profiles")
+                raise ValueError("We need column profiles to show the mutual information chart.")
         except Exception as e:
             ax2.axis('off')
             ax2.text(0.5, 0.5, f"Plot Failed/Skipped: {e}", ha='center', va='center')
@@ -168,7 +168,7 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
                     plot_class_distribution(result_a.df[target_col], ax=ax1)
                     ax1.set_title("Result A Class Dist")
                 else:
-                    raise ValueError("Target missing")
+                    raise ValueError("The target column is missing from the dataset.")
             except Exception as e:
                 ax1.axis('off')
                 ax1.text(0.5, 0.5, f"Plot Failed/Skipped: {e}", ha='center', va='center')
@@ -179,7 +179,7 @@ def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> N
                     plot_class_distribution(result_b.df[target_col], ax=ax2)
                     ax2.set_title("Result B Class Dist")
                 else:
-                    raise ValueError("Target missing")
+                    raise ValueError("The target column is missing from the dataset.")
             except Exception as e:
                 ax2.axis('off')
                 ax2.text(0.5, 0.5, f"Plot Failed/Skipped: {e}", ha='center', va='center')

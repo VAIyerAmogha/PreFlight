@@ -75,19 +75,20 @@ def prepare(
     save_pdf: Optional[str] = typer.Option(None, "--save-pdf", help="Save graphical PDF report to this path"),
 ) -> None:
     if preset is not None and preset not in PRESETS:
-        typer.echo(f"Error: Invalid preset '{preset}'. Valid presets are: {list(PRESETS.keys())}", err=True)
+        valid = ', '.join(PRESETS.keys())
+        typer.echo(f"Error: We don't recognize the preset name '{preset}'. Please choose one of these instead: {valid}.", err=True)
         raise typer.Exit(code=1)
 
     if drop_threshold is not None and not (0 <= drop_threshold <= 1):
-        typer.echo(f"Error: drop-threshold must be between 0 and 1, got {drop_threshold}", err=True)
+        typer.echo(f"Error: The drop threshold must be a number between 0 and 1, but you provided {drop_threshold}.", err=True)
         raise typer.Exit(code=1)
     
     if cardinality_threshold is not None and cardinality_threshold <= 0:
-        typer.echo(f"Error: cardinality-threshold must be > 0, got {cardinality_threshold}", err=True)
+        typer.echo(f"Error: The cardinality threshold must be greater than 0, but you provided {cardinality_threshold}.", err=True)
         raise typer.Exit(code=1)
         
     if not os.path.exists(input_path) or not input_path.lower().endswith(".csv"):
-        typer.echo("Error: input_path must exist and be a .csv file", err=True)
+        typer.echo("Error: We could not find your input file, or it does not end in '.csv'.", err=True)
         raise typer.Exit(code=1)
         
     if output_dir is None:
@@ -98,14 +99,14 @@ def prepare(
     try:
         df = pd.read_csv(input_path)
     except pd.errors.ParserError as e:
-        typer.echo(f"Error: could not parse CSV: {e}", err=True)
+        typer.echo(f"Error: We could not read your CSV file. It might be corrupted or in an unsupported format. Details: {e}", err=True)
         raise typer.Exit(code=1)
     except Exception as e:
-        typer.echo(f"Error reading CSV: {e}", err=True)
+        typer.echo(f"Error: We couldn't open the CSV file. Details: {e}", err=True)
         raise typer.Exit(code=1)
         
     if target in df.columns and df[target].isnull().all():
-        typer.echo(f"Error: Target column '{target}' is entirely null.", err=True)
+        typer.echo(f"Error: The target column '{target}' has no data in it. We cannot train a model on an empty column.", err=True)
         raise typer.Exit(code=1)
         
     explicit_feature_args = {
@@ -143,7 +144,7 @@ def prepare(
                 try:
                     provided_feature_args["cluster_k"] = int(val)
                 except ValueError:
-                    typer.echo(f"Error: cluster-k must be 'auto' or an integer, got '{val}'", err=True)
+                    typer.echo(f"Error: The number of clusters (cluster-k) must be 'auto' or a number, but you provided '{val}'.", err=True)
                     raise typer.Exit(code=1)
         if "cluster_features" in provided_feature_args:
             val = provided_feature_args["cluster_features"]
@@ -166,13 +167,14 @@ def prepare(
         for ct in column_type:
             parts = ct.split(":", 1)
             if len(parts) != 2:
-                typer.echo(f"Error: Invalid format for --column-type '{ct}'. Expected format is colname:TYPE", err=True)
+                typer.echo(f"Error: We could not understand your column type override '{ct}'. Please format it as 'column_name:TYPE'.", err=True)
                 raise typer.Exit(code=1)
             cname, ctype_str = parts
             try:
                 ctype_enum = SemanticType[ctype_str]
             except KeyError:
-                typer.echo(f"Error: '{ctype_str}' is not a valid SemanticType", err=True)
+                valid_types = ', '.join([t.name for t in SemanticType])
+                typer.echo(f"Error: '{ctype_str}' is not a recognized type. Please use one of: {valid_types}.", err=True)
                 raise typer.Exit(code=1)
             parsed_column_types[cname] = ctype_enum
             
@@ -233,7 +235,7 @@ def compare_cli(
         df_a = pd.read_csv(csv_a)
         res_a = preflight.prepare(df_a, target=target_a, task=task_a, preset=preset)
     except Exception as e:
-        typer.echo(f"Error preparing first dataset: {e}", err=True)
+        typer.echo(f"Error: We ran into a problem preparing the first dataset: {e}", err=True)
         raise typer.Exit(code=1)
         
     typer.echo("Running prepare on second dataset...")
@@ -241,7 +243,7 @@ def compare_cli(
         df_b = pd.read_csv(csv_b)
         res_b = preflight.prepare(df_b, target=target_b, task=task_b, preset=preset)
     except Exception as e:
-        typer.echo(f"Error preparing second dataset: {e}", err=True)
+        typer.echo(f"Error: We ran into a problem preparing the second dataset: {e}", err=True)
         raise typer.Exit(code=1)
         
     typer.echo("Generating comparison report...")
@@ -250,6 +252,6 @@ def compare_cli(
         save_compare_pdf(res_a, res_b, output_pdf)
         typer.echo(f"Successfully wrote comparison PDF to: {output_pdf}")
     except Exception as e:
-        typer.echo(f"Error generating comparison PDF: {e}", err=True)
+        typer.echo(f"Error: We couldn't generate the comparison report PDF: {e}", err=True)
         raise typer.Exit(code=1)
 

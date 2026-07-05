@@ -129,3 +129,4 @@ Open questions / blockers:
 27. Report.save_pdf() — graphic-first PDF export reusing existing chart functions and severity palette, appendix table last (2026-07-05)
 28. pf.save_compare_pdf() — visual before/after PDF diff report built on compare(), reuses Phase 6 chart/PDF infrastructure (2026-07-05)
 29. CLI consolidation pass — all v1.0.0 flags verified complete and consistent with the Python API (2026-07-05)
+30. Library-wide error message simplification pass — plain language, no internal jargon, no raw tracebacks reach the user (2026-07-05)

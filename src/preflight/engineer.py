@@ -126,7 +126,7 @@ def target_encode_cross_fit(
     Returns (encoded series, a fitted mapping dict computed on the FULL dataset).
     """
     if not pd.api.types.is_numeric_dtype(target):
-        raise ValueError("Target must be numeric for target encoding.")
+        raise ValueError("The target column must be numeric to perform target encoding on categorical features.")
     
     encoded = pd.Series(index=series.index, dtype=float)
     global_mean = target.mean()
@@ -208,7 +208,7 @@ def expand_datetime(series: pd.Series) -> pd.DataFrame:
     the pipeline and are not silently dropped.
     """
     if not pd.api.types.is_datetime64_any_dtype(series):
-        raise ValueError(f"Input series '{series.name}' must be datetime64 dtype.")
+        raise ValueError(f"The column '{series.name}' must be a datetime format to extract date features.")
         
     df = pd.DataFrame(index=series.index)
     prefix = series.name
@@ -439,7 +439,7 @@ def run_engineer(
     Orchestrates the feature engineering phase based on column profiles and model_hint.
     """
     if model_hint not in ("tree", "linear"):
-        raise ValueError("model_hint must be 'tree' or 'linear'")
+        raise ValueError(f"The model_hint must be exactly 'tree' or 'linear', but you provided '{model_hint}'.")
         
     df_out = df.copy()
     report = []
@@ -577,13 +577,13 @@ def add_features(
     without rerunning Profiler/Cleaner from scratch.
     """
     if result.pipeline is None:
-        raise ValueError("add_features() requires a full prepare() result with a pipeline.")
+        raise ValueError("You can only add features if you have already run prepare() to create a pipeline.")
         
     profiles_to_use = profiles if profiles is not None else getattr(result.report, "profiles", getattr(result.report, "_profiles", None))
     target_to_use = target if target is not None else getattr(result.report, "target", getattr(result.report, "_target", None))
     
     if profiles_to_use is None or target_to_use is None:
-        raise ValueError("add_features() requires profiles and target. Pass them explicitly or use a full prepare() result.")
+        raise ValueError("We need column profiles and a target name to add features. You can provide these directly or pass a full prepare() result.")
         
     all_off = not (
         feature_config.interactions or

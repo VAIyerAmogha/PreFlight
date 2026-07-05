@@ -31,7 +31,7 @@ def prepare(
     dry_run: bool = False,
 ) -> PrepResult:
     if not isinstance(dry_run, bool):
-        raise TypeError(f"dry_run must be a boolean, got {type(dry_run).__name__}")
+        raise TypeError("The 'dry_run' argument must be True or False.")
 
     actual_drop_threshold = 0.6
     actual_outlier_method = "iqr"
@@ -41,7 +41,8 @@ def prepare(
 
     if preset is not None:
         if preset not in PRESETS:
-            raise ValueError(f"Invalid preset '{preset}'. Valid presets are: {list(PRESETS.keys())}")
+            valid = ', '.join(PRESETS.keys())
+            raise ValueError(f"We don't recognize the preset name '{preset}'. Please choose one of these instead: {valid}.")
         p_dict = PRESETS[preset]
         actual_drop_threshold = p_dict.get("drop_threshold", actual_drop_threshold)
         actual_outlier_method = p_dict.get("outlier_method", actual_outlier_method)
@@ -270,7 +271,7 @@ def _compute_decision_diff(actions_a: dict[str, set[str]], actions_b: dict[str, 
 
 def compare(a: PrepResult, b: PrepResult) -> dict:
     if a is None or b is None:
-        raise ValueError("Both PrepResult objects must be provided for comparison.")
+        raise ValueError("You must provide two preparation results to compare them. Check that neither result is empty.")
     cols_a = set(a.df.columns)
     cols_b = set(b.df.columns)
 
