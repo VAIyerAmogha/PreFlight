@@ -16,6 +16,7 @@ class SemanticType(Enum):
     DATETIME_STRING = "DATETIME_STRING"
     BOOLEAN = "BOOLEAN"
     CONSTANT = "CONSTANT"
+    TEXT = "TEXT"
 
 @dataclass
 class ColumnProfile:
@@ -30,6 +31,9 @@ class ColumnProfile:
     correlation_with_target: Optional[float] = None
     mutual_info_with_target: Optional[float] = None
     is_leakage_suspect: bool = False
+    text_avg_length: Optional[float] = None
+    text_avg_word_count: Optional[float] = None
+    text_missing_rate: Optional[float] = None
 
 @dataclass
 class ReportEntry:
@@ -74,6 +78,9 @@ class FeatureConfig:
     clustering: bool = False
     cluster_k: Union[int, str] = "auto"
     cluster_features: Union[str, list[str]] = "numeric_only"
+    text_features: bool = False
+    text_tfidf: bool = False
+    text_tfidf_top_k: int = 20
 
     def __post_init__(self):
         valid_interaction_types = {"ratio", "product", "difference"}
@@ -85,6 +92,8 @@ class FeatureConfig:
             raise ValueError("cluster_k must be 'auto' or a positive integer")
         if self.cluster_features != "numeric_only" and not isinstance(self.cluster_features, list):
             raise ValueError("cluster_features must be 'numeric_only' or a list of column names")
+        if self.text_tfidf_top_k < 1:
+            raise ValueError("text_tfidf_top_k must be >= 1")
 
 @dataclass
 class PrepResult:

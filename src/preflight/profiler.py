@@ -90,7 +90,17 @@ def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> S
             if success_count / len(sample) > 0.9:
                 return SemanticType.DATETIME_STRING
 
-    # 6. CATEGORICAL (LOW and HIGH)
+    # 6. TEXT
+    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+        uniqueness_ratio = n_unique / len(non_null) if len(non_null) > 0 else 0
+        if n_unique >= cardinality_threshold or uniqueness_ratio >= 0.1:
+            sample_size = min(100, len(non_null))
+            sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
+            avg_len = sample.astype(str).str.len().mean()
+            if avg_len > 20:
+                return SemanticType.TEXT
+
+    # 7. CATEGORICAL (LOW and HIGH)
     if n_unique < cardinality_threshold:
         return SemanticType.CATEGORICAL_LOW
     else:
@@ -318,6 +328,28 @@ def run_profiler(
             rare_categories=rare, vif_score=None, correlation_with_target=corr,
             mutual_info_with_target=mi, is_leakage_suspect=is_leak
         )
+        
+        # 3. TEXT-specific stats
+        if sem_type == SemanticType.TEXT:
+            non_null_text = series.dropna().astype(str)
+            text_avg_length = float(non_null_text.str.len().mean()) if len(non_null_text) > 0 else 0.0
+            text_avg_word_count = float(non_null_text.str.split().str.len().mean()) if len(non_null_text) > 0 else 0.0
+            
+            profile.text_avg_length = text_avg_length
+            profile.text_avg_word_count = text_avg_word_count
+            profile.text_missing_rate = missing
+            
+            reports.append(ReportEntry(
+                stage="profiler", column=col, action="flagged_text_column",
+                rationale="Column detected as text (high cardinality, high average length). Only basic stats computed in this phase, no feature generation.",
+                severity="info",
+                before_stats={
+                    "text_avg_length": text_avg_length,
+                    "text_avg_word_count": text_avg_word_count,
+                    "text_missing_rate": missing
+                }
+            ))
+            
         profiles.append(profile)
         
     # 3. Global Signals: VIF

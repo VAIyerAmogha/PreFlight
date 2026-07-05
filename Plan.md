@@ -92,6 +92,11 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     Phase 4  [x] Report readability improvements — report.py charts share color/sizing constants, .show() groups by stage with severity symbols and truncates info-level by default (COMPLETE)
     Phase 5  [x] CLI exposes FeatureConfig — cli.py added flags to `prepare`; feature_config stays None unless explicitly set, preserving v0.1.0 output (COMPLETE)
 
+## v1.0.0 roadmap
+    Phase 1  [x] TEXT SemanticType detection + stats (COMPLETE)
+    Phase 2  [x] Text feature generation (COMPLETE)
+    Phase 3  [ ] Manual SemanticType overrides
+
 ## Environment variables
     None. PreFlight-ML requires no environment variables, API keys, or external services.
 
@@ -147,3 +152,5 @@ PreFlight-ML is a pip-installable Python library for ML engineers and Kaggle-sty
     19. 2026-07-04: add_features() lets FeatureConfig be applied post-hoc to an existing PrepResult without rerunning Profiler/Cleaner; returns a new PrepResult, never mutates the input; requires a full prepare() result with profiles/target available.
     20. 2026-07-04: Report chart functions share one color palette/sizing logic and return Figure objects; .show() groups by stage, uses severity symbols, and truncates info-level entries by default with a verbose=True override.
     21. 2026-07-04: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.
+    22. 2026-07-05: TEXT SemanticType detection + stats: Added TEXT to SemanticType enum and basic stats to ColumnProfile. TEXT columns currently pass through Cleaner and Engineer untouched; feature generation is deferred to Phase 2.
+    23. 2026-07-05: FeatureConfig.text_features / text_tfidf — opt-in text feature generation: added generator for character length, word count, has_text boolean, and bounded TF-IDF term vectors. Collisions gracefully skipped.

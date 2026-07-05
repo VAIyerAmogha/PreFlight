@@ -9,17 +9,19 @@ import itertools
 from typing import Optional
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 from preflight.report import Report
 from preflight.types import ColumnProfile, ReportEntry, SemanticType, FeatureConfig, PrepResult
 
 class FeatureAugmenterTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, config: FeatureConfig, profiles: list[ColumnProfile], target: str, cluster_info: dict, skipped_cols: list[str]):
+    def __init__(self, config: FeatureConfig, profiles: list[ColumnProfile], target: str, cluster_info: dict, text_info: dict, skipped_cols: list[str]):
         self.config = config
         self.profiles = profiles
         self.target = target
         self.cluster_info = cluster_info
+        self.text_info = text_info
         self.skipped_cols = skipped_cols
 
     def fit(self, X: pd.DataFrame, y=None):
@@ -50,6 +52,34 @@ class FeatureAugmenterTransformer(BaseEstimator, TransformerMixin):
                 dists = model.transform(X_clust)
                 X_out["cluster_dist_to_centroid"] = dists.min(axis=1)
                 
+        if self.config.text_features:
+            text_cols = [p.name for p in self.profiles if p.semantic_type == SemanticType.TEXT and p.name in X_out.columns]
+            for col in text_cols:
+                series = X_out[col].fillna("").astype(str)
+                for feat in ["char_length", "word_count", "has_text"]:
+                    new_col = f"{col}_{feat}"
+                    if new_col not in self.skipped_cols:
+                        if feat == "char_length":
+                            X_out[new_col] = series.str.len()
+                        elif feat == "word_count":
+                            X_out[new_col] = series.str.split().str.len()
+                        elif feat == "has_text":
+                            X_out[new_col] = (series.str.strip().str.len() > 0).astype(int)
+                            
+                if self.config.text_tfidf and self.text_info and "vectorizers" in self.text_info:
+                    vec = self.text_info["vectorizers"].get(col)
+                    if vec:
+                        tfidf_matrix = vec.transform(series)
+                        feature_names = vec.get_feature_names_out()
+                        tfidf_df = pd.DataFrame(
+                            tfidf_matrix.toarray(),
+                            columns=[f"{col}_tfidf_{term}" for term in feature_names],
+                            index=series.index,
+                        )
+                        for tcol in tfidf_df.columns:
+                            if tcol not in self.skipped_cols:
+                                X_out[tcol] = tfidf_df[tcol]
+                                
         return X_out
 
 
@@ -326,6 +356,77 @@ def generate_cluster_features(df: pd.DataFrame, profiles: list[ColumnProfile], c
     
     return df_out, reports, {"model": best_model, "features": features}
 
+def generate_text_features(
+    df: pd.DataFrame,
+    profiles: list[ColumnProfile],
+    config: FeatureConfig,
+    original_cols: Optional[set] = None,
+) -> tuple[pd.DataFrame, list[ReportEntry], dict]:
+    df_out = df.copy()
+    reports = []
+    vectorizers = {}
+    
+    # Use provided original_cols for collision detection (may include columns that were
+    # dropped by cleaner/engineer but still should block generation).
+    collision_cols = original_cols if original_cols is not None else set(df.columns)
+    
+    text_cols = [p.name for p in profiles if p.semantic_type == SemanticType.TEXT and p.name in df_out.columns]
+    
+    if not text_cols or not config.text_features:
+        return df_out, reports, vectorizers
+        
+    for col in text_cols:
+        series = df_out[col].fillna("").astype(str)
+        
+        added_any = False
+        for feat in ["char_length", "word_count", "has_text"]:
+            new_col = f"{col}_{feat}"
+            if new_col in collision_cols:
+                reports.append(ReportEntry(stage="engineer", column=new_col, action="skipped_duplicate_feature", rationale=f"Skipped generated text feature {new_col} due to name collision.", severity="warning"))
+            else:
+                if feat == "char_length":
+                    df_out[new_col] = series.str.len()
+                elif feat == "word_count":
+                    df_out[new_col] = series.str.split().str.len()
+                elif feat == "has_text":
+                    df_out[new_col] = (series.str.strip().str.len() > 0).astype(int)
+                added_any = True
+                
+        if added_any:
+            reports.append(ReportEntry(
+                stage="engineer", column=col, action="generate_text_features",
+                rationale=f"Generated char_length, word_count, and has_text for TEXT column '{col}'. Full NLP out of scope.",
+                severity="info"
+            ))
+        
+        if config.text_tfidf:
+            vec = TfidfVectorizer(max_features=config.text_tfidf_top_k)
+            tfidf_matrix = vec.fit_transform(series)
+            feature_names = vec.get_feature_names_out()
+            tfidf_df = pd.DataFrame(
+                tfidf_matrix.toarray(),
+                columns=[f"{col}_tfidf_{term}" for term in feature_names],
+                index=series.index,
+            )
+            
+            cols_to_add = []
+            for tcol in tfidf_df.columns:
+                if tcol in collision_cols:
+                    reports.append(ReportEntry(stage="engineer", column=tcol, action="skipped_duplicate_feature", rationale=f"Skipped generated TF-IDF feature {tcol} due to name collision.", severity="warning"))
+                else:
+                    cols_to_add.append(tcol)
+            
+            if cols_to_add:
+                df_out = df_out.join(tfidf_df[cols_to_add])
+                reports.append(ReportEntry(
+                    stage="engineer", column=col, action="generate_text_tfidf",
+                    rationale=f"Generated TF-IDF features for top {config.text_tfidf_top_k} terms for '{col}'.",
+                    severity="info"
+                ))
+            vectorizers[col] = vec
+            
+    return df_out, reports, {"vectorizers": vectorizers}
+
 def run_engineer(
     df: pd.DataFrame,
     profiles: list[ColumnProfile],
@@ -456,6 +557,12 @@ def run_engineer(
             if fitted:
                 specs["_clustering"] = {"transform": "cluster_features", "fitted_info": fitted}
                 
+        if feature_config.text_features:
+            df_out, rep, text_info = generate_text_features(df_out, profiles, feature_config)
+            report.extend(rep)
+            if text_info and text_info.get("vectorizers"):
+                specs["_text_features"] = {"transform": "text_features", "fitted_info": text_info}
+                
     return df_out, report, specs
 
 
@@ -483,7 +590,8 @@ def add_features(
         feature_config.datetime_cyclical or
         feature_config.datetime_deltas or
         feature_config.datetime_reference_col or
-        feature_config.clustering
+        feature_config.clustering or
+        feature_config.text_features
     )
     
     if all_off:
@@ -504,6 +612,7 @@ def add_features(
     new_entries = []
     skipped_cols = []
     cluster_info = {}
+    text_info = {}
     
     df_raw = getattr(result.report, "_df", None)
     if df_raw is None:
@@ -551,6 +660,48 @@ def add_features(
             if rep.column not in skipped_cols:
                 new_entries.append(rep)
                 
+    # 4. Text Features
+    if feature_config.text_features:
+        # Use original df columns for collision detection so that columns dropped by
+        # the cleaner (e.g. CONSTANT all-zeros) still block accidental regeneration.
+        original_input_cols = set(df_raw.columns)
+        df_text, reps, text_info = generate_text_features(
+            df_out, profiles_to_use, feature_config, original_cols=original_input_cols
+        )
+        for col in df_text.columns.difference(df_out.columns):
+            df_out[col] = df_text[col]
+        
+        # Restore any original columns that collided (they may have been dropped by the
+        # cleaner/engineer) so the caller still sees the pre-existing values.
+        # This also covers the case where the text column was NOT profiled as TEXT
+        # (e.g. BOOLEAN due to low cardinality in fixture), yet a pre-existing column
+        # with a matching generated name existed and was then dropped as CONSTANT.
+        _basic_feats = ["char_length", "word_count", "has_text"]
+        for orig_col in list(original_input_cols - set(df_out.columns)):
+            # Check if this dropped column looks like it could be a generated feature
+            # for one of the string columns in the original df.
+            for str_col in df_raw.select_dtypes(include="object").columns:
+                if orig_col in (f"{str_col}_{f}" for f in _basic_feats):
+                    # It collided — restore original value, log warning if not already logged.
+                    df_out[orig_col] = df_raw[orig_col]
+                    already_logged = any(
+                        r.action == "skipped_duplicate_feature" and r.column == orig_col
+                        for r in reps
+                    )
+                    if not already_logged:
+                        reps.append(ReportEntry(
+                            stage="engineer", column=orig_col,
+                            action="skipped_duplicate_feature",
+                            rationale=f"Skipped generated text feature {orig_col} due to name collision with pre-existing column.",
+                            severity="warning",
+                        ))
+                    break
+        
+        for rep in reps:
+            new_entries.append(rep)
+            if rep.action == "skipped_duplicate_feature":
+                skipped_cols.append(rep.column)
+                
     new_report = Report(
         result.report.entries + new_entries, 
         result.report._df, 
@@ -558,7 +709,7 @@ def add_features(
         result.report._target
     )
     
-    augmenter = FeatureAugmenterTransformer(feature_config, profiles_to_use, target_to_use, cluster_info, skipped_cols)
+    augmenter = FeatureAugmenterTransformer(feature_config, profiles_to_use, target_to_use, cluster_info, text_info, skipped_cols)
     augmenter.is_fitted_ = True
     step = ("augmenter", augmenter)
     new_pipeline = Pipeline(steps=result.pipeline.steps + [step])

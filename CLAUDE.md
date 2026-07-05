@@ -62,7 +62,7 @@ Start every session by reading PLAN.md, then this file.
 
 ## Current focus
 Last updated: 2026-07-05
-Active work: v0.2.0 feature work complete, pending manual republish to PyPI as pypreflight v0.2.0.
+Active work: Phase 2 of v1.0.0 upgrade complete (TEXT feature generation). Next step is Phase 3 (manual SemanticType overrides).
 
 Recent completions:
 - v0.2.0 Phase 5: CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users.
@@ -120,3 +120,5 @@ Open questions / blockers:
 19. add_features() lets FeatureConfig be applied post-hoc to an existing PrepResult without rerunning Profiler/Cleaner; returns a new PrepResult, never mutates the input; requires a full prepare() result with profiles/target available (2026-07-04)
 20. Report chart functions share one color palette/sizing logic and return Figure objects; .show() groups by stage, uses severity symbols, and truncates info-level entries by default with a verbose=True override (2026-07-04)
 21. CLI exposes FeatureConfig via flags on `prepare`; feature_config stays None unless at least one feature flag is explicitly set, preserving v0.1.0 CLI output for existing users (2026-07-04)
+22. TEXT SemanticType detection + stats: Added TEXT to SemanticType enum and basic stats to ColumnProfile. TEXT columns currently pass through Cleaner and Engineer untouched; feature generation is deferred to Phase 2 (2026-07-05)
+23. FeatureConfig.text_features / text_tfidf — opt-in text feature generation: generates basic stats (char_length, word_count, has_text) and optionally capped TF-IDF features for TEXT columns (2026-07-05)
