@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pypreflight"
-version = "1.0.1"
+version = "2.0.0.dev0"
 description = "A pip-installable Python library that takes a raw pandas DataFrame and returns a cleaned DataFrame, a reusable sklearn Pipeline, and a structured Report — automatically."
 readme = "README.md"
 license = {text = "MIT License"}
@@ -45,28 +45,5 @@ dependencies = [
 Homepage = "https://github.com/VAIyerAmogha/PreFlight"
 Repository = "https://github.com/VAIyerAmogha/PreFlight"
 
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "seaborn",
-    "pypdf"
-]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-markers = [
-    "integration: mark test as an integration test"
-]
-
-[project.scripts]
-preflight = "preflight.cli:app"
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/preflight"]
-
-[tool.coverage.run]
-source = ["src/preflight"]
-omit = ["tests/*"]
-
-[tool.coverage.report]
-fail_under = 80
