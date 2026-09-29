@@ -38,7 +38,8 @@ dependencies = [
     "python-dateutil",
     "matplotlib",
     "typer",
-    "joblib"
+    "joblib",
+    "charset-normalizer"
 ]
 
 [project.urls]
