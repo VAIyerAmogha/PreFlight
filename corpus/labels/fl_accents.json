@@ -1,0 +1,17 @@
+{
+  "file_id": "fl_accents",
+  "filename": "table-with-accents.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "iso-8859-1",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "Classement;Quartier;Date;Ann\u00e9e;Occupancy rate;Average Price;RevPAR;Source",
+      "column_index": 0,
+      "semantic_type": "categorical",
+      "anomalies": []
+    }
+  ]
+}

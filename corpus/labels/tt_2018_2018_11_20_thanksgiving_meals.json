@@ -1,0 +1,531 @@
+{
+  "file_id": "tt_2018_2018_11_20_thanksgiving_meals",
+  "filename": "thanksgiving_meals.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "id",
+      "column_index": 0,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "celebrate",
+      "column_index": 1,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "main_dish",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "main_dish_other",
+      "column_index": 3,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "main_prep",
+      "column_index": 4,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "main_prep_other",
+      "column_index": 5,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "stuffing",
+      "column_index": 6,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA",
+        "disguised_missing: None"
+      ]
+    },
+    {
+      "column_name": "stuffing_other",
+      "column_index": 7,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "cranberry",
+      "column_index": 8,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA",
+        "disguised_missing: None"
+      ]
+    },
+    {
+      "column_name": "cranberry_other",
+      "column_index": 9,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "gravy",
+      "column_index": 10,
+      "semantic_type": "boolean",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side1",
+      "column_index": 11,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side2",
+      "column_index": 12,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side3",
+      "column_index": 13,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side4",
+      "column_index": 14,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side5",
+      "column_index": 15,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side6",
+      "column_index": 16,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side7",
+      "column_index": 17,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side8",
+      "column_index": 18,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side9",
+      "column_index": 19,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side10",
+      "column_index": 20,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side11",
+      "column_index": 21,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side12",
+      "column_index": 22,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side13",
+      "column_index": 23,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side14",
+      "column_index": 24,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "side15",
+      "column_index": 25,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie1",
+      "column_index": 26,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie2",
+      "column_index": 27,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie3",
+      "column_index": 28,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie4",
+      "column_index": 29,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie5",
+      "column_index": 30,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie6",
+      "column_index": 31,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie7",
+      "column_index": 32,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie8",
+      "column_index": 33,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie9",
+      "column_index": 34,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie10",
+      "column_index": 35,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie11",
+      "column_index": 36,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA",
+        "disguised_missing: None"
+      ]
+    },
+    {
+      "column_name": "pie12",
+      "column_index": 37,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "pie13",
+      "column_index": 38,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert1",
+      "column_index": 39,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert2",
+      "column_index": 40,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert3",
+      "column_index": 41,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert4",
+      "column_index": 42,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert5",
+      "column_index": 43,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert6",
+      "column_index": 44,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert7",
+      "column_index": 45,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert8",
+      "column_index": 46,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert9",
+      "column_index": 47,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert10",
+      "column_index": 48,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA",
+        "disguised_missing: None"
+      ]
+    },
+    {
+      "column_name": "dessert11",
+      "column_index": 49,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "dessert12",
+      "column_index": 50,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "prayer",
+      "column_index": 51,
+      "semantic_type": "boolean",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "travel",
+      "column_index": 52,
+      "semantic_type": "text",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "watch_program",
+      "column_index": 53,
+      "semantic_type": "constant",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "kids_table_age",
+      "column_index": 54,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "hometown_friends",
+      "column_index": 55,
+      "semantic_type": "boolean",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "friendsgiving",
+      "column_index": 56,
+      "semantic_type": "boolean",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "black_friday",
+      "column_index": 57,
+      "semantic_type": "boolean",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "work_retail",
+      "column_index": 58,
+      "semantic_type": "boolean",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "work_black_friday",
+      "column_index": 59,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "community_type",
+      "column_index": 60,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "age",
+      "column_index": 61,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "gender",
+      "column_index": 62,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "family_income",
+      "column_index": 63,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "us_region",
+      "column_index": 64,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    }
+  ]
+}

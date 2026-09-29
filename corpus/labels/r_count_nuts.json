@@ -1,0 +1,65 @@
+{
+  "file_id": "r_count_nuts",
+  "filename": "COUNT_nuts.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "rownames",
+      "column_index": 0,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "cones",
+      "column_index": 1,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "ntrees",
+      "column_index": 2,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "dbh",
+      "column_index": 3,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "height",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "cover",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "sntrees",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "sheight",
+      "column_index": 7,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "scover",
+      "column_index": 8,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

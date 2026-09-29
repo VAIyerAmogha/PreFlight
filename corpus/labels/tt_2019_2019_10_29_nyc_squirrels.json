@@ -1,0 +1,249 @@
+{
+  "file_id": "tt_2019_2019_10_29_nyc_squirrels",
+  "filename": "nyc_squirrels.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "long",
+      "column_index": 0,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "lat",
+      "column_index": 1,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "unique_squirrel_id",
+      "column_index": 2,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "hectare",
+      "column_index": 3,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "shift",
+      "column_index": 4,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "date",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "hectare_squirrel_number",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "age",
+      "column_index": 7,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: ?",
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "primary_fur_color",
+      "column_index": 8,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "highlight_fur_color",
+      "column_index": 9,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "combination_of_primary_and_highlight_color",
+      "column_index": 10,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "color_notes",
+      "column_index": 11,
+      "semantic_type": "text",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "location",
+      "column_index": 12,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "above_ground_sighter_measurement",
+      "column_index": 13,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "specific_location",
+      "column_index": 14,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "running",
+      "column_index": 15,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "chasing",
+      "column_index": 16,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "climbing",
+      "column_index": 17,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "eating",
+      "column_index": 18,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "foraging",
+      "column_index": 19,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "other_activities",
+      "column_index": 20,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA",
+        "disguised_missing: unknown"
+      ]
+    },
+    {
+      "column_name": "kuks",
+      "column_index": 21,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "quaas",
+      "column_index": 22,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "moans",
+      "column_index": 23,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "tail_flags",
+      "column_index": 24,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "tail_twitches",
+      "column_index": 25,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "approaches",
+      "column_index": 26,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "indifferent",
+      "column_index": 27,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "runs_from",
+      "column_index": 28,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "other_interactions",
+      "column_index": 29,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "lat_long",
+      "column_index": 30,
+      "semantic_type": "text",
+      "anomalies": []
+    },
+    {
+      "column_name": "zip_codes",
+      "column_index": 31,
+      "semantic_type": "ID",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "community_districts",
+      "column_index": 32,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "borough_boundaries",
+      "column_index": 33,
+      "semantic_type": "constant",
+      "anomalies": []
+    },
+    {
+      "column_name": "city_council_districts",
+      "column_index": 34,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "police_precincts",
+      "column_index": 35,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

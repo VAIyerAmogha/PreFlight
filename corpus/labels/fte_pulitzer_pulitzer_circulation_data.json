@@ -1,0 +1,53 @@
+{
+  "file_id": "fte_pulitzer_pulitzer_circulation_data",
+  "filename": "pulitzer-circulation-data.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "Newspaper",
+      "column_index": 0,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Daily Circulation, 2004",
+      "column_index": 1,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Daily Circulation, 2013",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Change in Daily Circulation, 2004-2013",
+      "column_index": 3,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Pulitzer Prize Winners and Finalists, 1990-2003",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Pulitzer Prize Winners and Finalists, 2004-2014",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Pulitzer Prize Winners and Finalists, 1990-2014",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "file_id": "r_cardata_obrienkaiser",
+  "filename": "carData_OBrienKaiser.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "rownames",
+      "column_index": 0,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "treatment",
+      "column_index": 1,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "gender",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "pre.1",
+      "column_index": 3,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "pre.2",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "pre.3",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "pre.4",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "pre.5",
+      "column_index": 7,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "post.1",
+      "column_index": 8,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "post.2",
+      "column_index": 9,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "post.3",
+      "column_index": 10,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "post.4",
+      "column_index": 11,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "post.5",
+      "column_index": 12,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "fup.1",
+      "column_index": 13,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "fup.2",
+      "column_index": 14,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "fup.3",
+      "column_index": 15,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "fup.4",
+      "column_index": 16,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "fup.5",
+      "column_index": 17,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

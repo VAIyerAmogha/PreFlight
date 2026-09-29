@@ -1,0 +1,89 @@
+{
+  "file_id": "r_cardata_highway1",
+  "filename": "carData_Highway1.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "rownames",
+      "column_index": 0,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "rate",
+      "column_index": 1,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "len",
+      "column_index": 2,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "adt",
+      "column_index": 3,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "trks",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "sigs1",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "slim",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "shld",
+      "column_index": 7,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "lane",
+      "column_index": 8,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "acpt",
+      "column_index": 9,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "itg",
+      "column_index": 10,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "lwid",
+      "column_index": 11,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "htype",
+      "column_index": 12,
+      "semantic_type": "categorical",
+      "anomalies": []
+    }
+  ]
+}
