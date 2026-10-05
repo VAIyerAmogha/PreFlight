@@ -16,6 +16,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from preflight.decisions import Decision
+
 SCHEMA_VERSION = "2.0.0"
 
 
@@ -74,24 +76,44 @@ class HeaderSchema:
 
 @dataclass
 class ColumnRawMetadata:
-    """Raw structural column metadata (pre-type-inference)."""
+    """
+    Column metadata supporting structural ingest, type inference, and user overrides.
+    """
     name: str
     position: int
     name_override: Optional[str] = None
-    # User override placeholder for future pipeline phases (Phase 3 / Phase 5)
     type_override: Optional[str] = None
+
+    # Phase 3: Type inference, confidence, missing markers, anomalies, and samples
+    inferred_type: Optional[str] = None
+    confidence: float = 1.0
+    missing_markers: List[Dict[str, Any]] = field(default_factory=list)
+    runner_up: Optional[str] = None
+    abstained: bool = False
+    anomalies: List[str] = field(default_factory=list)
+    failed_samples: List[str] = field(default_factory=list)
+    evidence: Dict[str, Any] = field(default_factory=dict)
 
     def effective_name(self) -> str:
         """Return user name override if specified, otherwise raw column name."""
         return self.name_override if self.name_override is not None else self.name
 
+    def effective_type(self) -> Optional[str]:
+        """Return user type override if specified, otherwise inferred type."""
+        return self.type_override if self.type_override is not None else self.inferred_type
+
+
+# Alias ColumnSchema to ColumnRawMetadata for clarity and backwards compatibility
+ColumnSchema = ColumnRawMetadata
+
 
 @dataclass
 class TableSchema:
     """
-    Versioned table structural schema for PreFlight v2.0.
+    Versioned table structural and semantic schema for PreFlight v2.0.
 
-    Encapsulates ingest structural properties and provides JSON round-tripping.
+    Encapsulates ingest structural properties, type inferences, decisions, and
+    provides lossless JSON round-tripping.
     """
     schema_version: str = SCHEMA_VERSION
     source_path: Optional[str] = None
@@ -107,6 +129,7 @@ class TableSchema:
         default_factory=lambda: HeaderSchema(0, 1.0)
     )
     columns: List[ColumnRawMetadata] = field(default_factory=list)
+    decisions: List[Decision] = field(default_factory=list)
     user_overrides: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -134,6 +157,11 @@ class TableSchema:
             ColumnRawMetadata(**c) if isinstance(c, dict) else c for c in cols_raw
         ]
 
+        decs_raw = data.get("decisions", [])
+        decisions = [
+            Decision.from_dict(d) if isinstance(d, dict) else d for d in decs_raw
+        ]
+
         return cls(
             schema_version=data.get("schema_version", SCHEMA_VERSION),
             source_path=data.get("source_path"),
@@ -143,6 +171,7 @@ class TableSchema:
             dialect=dialect,
             header=header,
             columns=columns,
+            decisions=decisions,
             user_overrides=data.get("user_overrides", {}),
         )
 
@@ -151,3 +180,4 @@ class TableSchema:
         """Deserialize TableSchema from JSON string."""
         data = json.loads(json_str)
         return cls.from_dict(data)
+
