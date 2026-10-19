@@ -39,7 +39,14 @@ dependencies = [
     "matplotlib",
     "typer",
     "joblib",
-    "charset-normalizer"
+    "charset-normalizer",
+    "reportlab>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pypdf>=5.0.0",
 ]
 
 [project.urls]

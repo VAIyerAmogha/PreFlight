@@ -113,6 +113,30 @@ class Decision:
             col_tag = "_".join(self.columns) if self.columns else "table"
             self.id = f"dec_{self.stage}_{col_tag}_{self.fingerprint[:8]}"
 
+    VALID_STATUSES = {"automatic", "confirmed", "changed"}
+
+    def confirm(self) -> "Decision":
+        """
+        Transition status to 'confirmed'.
+
+        Updates timestamp to current UTC time. Fingerprint remains invariant.
+        """
+        self.status = "confirmed"
+        self.timestamp = datetime.now(timezone.utc).isoformat()
+        return self
+
+    def change(self, new_action: str) -> "Decision":
+        """
+        Transition status to 'changed' with a modified action.
+
+        Updates action, sets status to 'changed', and updates timestamp.
+        Fingerprint remains invariant as it records the original proposed decision identity.
+        """
+        self.action = new_action
+        self.status = "changed"
+        self.timestamp = datetime.now(timezone.utc).isoformat()
+        return self
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert Decision to dictionary representation."""
         return asdict(self)
