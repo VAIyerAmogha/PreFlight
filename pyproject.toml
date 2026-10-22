@@ -44,6 +44,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# rich: MIT licence. Formatting only; the terminal channel works without it.
+interactive = ["rich>=13"]
+# ipywidgets: BSD-3-Clause licence. Needed only for the notebook channel.
+notebook = ["ipywidgets>=8"]
 dev = [
     "pytest",
     "pypdf>=5.0.0",

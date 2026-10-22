@@ -12,7 +12,8 @@ Exposes the stage-based planner and apply lifecycle:
 - dry_run: writes plan.json and Plan PDF, with strict failure isolation.
 """
 
-from dataclasses import asdict, dataclass, field
+import csv
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -283,27 +284,73 @@ class ReadingStage(Stage):
         return [enc_dec, dial_dec, hdr_dec]
 
     def apply(self, context: ApplyContext, decisions: List[Decision]) -> pd.DataFrame:
+        """
+        Read the file using the actions in force on the reading Decisions (text format,
+        separator, column-names row), so a confirmed or changed answer is what is used.
+        """
         p = context.source_path
         enc: Optional[str] = None
         delim: Optional[str] = None
-        hdr_idx: Optional[int] = 0
+        hdr_action: Optional[str] = None
+        detected_hdr_action: Optional[str] = None
 
         for d in decisions:
             if d.kind == "encoding":
-                enc = d.evidence.get("encoding")
+                enc = _action_value(d.action, "use_encoding_") or d.evidence.get("encoding")
             elif d.kind == "dialect":
-                delim = d.evidence.get("delimiter")
+                delim = _action_value(d.action, "separate_by_") or d.evidence.get("delimiter")
             elif d.kind == "header":
-                hdr_idx = d.evidence.get("header_row_index")
+                hdr_action = d.action
+                idx = d.evidence.get("header_row_index")
+                detected_hdr_action = "no_header" if idx is None else f"use_header_row_{idx}"
 
         dialect_param = {"delimiter": delim} if delim else None
-        load_res = load_raw(
-            p,
-            encoding=enc,
-            dialect=dialect_param,
-        )
+        header_result = None
+        if hdr_action is not None and hdr_action != detected_hdr_action:
+            header_result = _header_for_action(p, enc, delim, hdr_action)
+        try:
+            load_res = load_raw(p, encoding=enc, dialect=dialect_param, header_result=header_result)
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"Could not read {p.name} with the chosen text format. Choose a different "
+                f"text format for this file (mode='ask'), or review the plan. ({exc.reason})"
+            ) from exc
         context.raw_data = load_res.data
         return load_res.data
+
+
+def _action_value(action: str, prefix: str) -> Optional[str]:
+    """'separate_by_;' with prefix 'separate_by_' -> ';' (None if the prefix is absent)."""
+    return action[len(prefix):] if action.startswith(prefix) else None
+
+
+def _header_for_action(
+    path: Path, encoding: Optional[str], delimiter: Optional[str], action: str
+):
+    """HeaderResult for a column-names row chosen by the user, not the one detected."""
+    detected = detect_header(path, delimiter=delimiter or ",", encoding=encoding or "utf-8")
+    if action == "no_header":
+        n = len(detected.column_names)
+        return replace(
+            detected,
+            header_row_index=None,
+            title_rows=[],
+            column_names=[f"column_{i + 1}" for i in range(n)],
+        )
+    row = _action_value(action, "use_header_row_")
+    if row is None or not row.isdigit():
+        raise ValueError(f"Unknown column-names action: {action!r}")
+    n = int(row)
+    with open(path, newline="", encoding=encoding or "utf-8") as fh:
+        rows = list(csv.reader(fh, delimiter=delimiter or ","))
+    if n >= len(rows):
+        raise ValueError(f"Row {n + 1} does not exist in {path.name} ({len(rows)} rows)")
+    return replace(
+        detected,
+        header_row_index=n,
+        title_rows=list(range(n)),
+        column_names=[c.strip() for c in rows[n]],
+    )
 
 
 class TypingStage(Stage):
@@ -769,11 +816,51 @@ def plan(
     return planner.plan(path, target=target, task=task)
 
 
+def write_plan_artifacts(plan_obj: Plan, out_dir: Union[str, Path]) -> Tuple[Path, Path]:
+    """
+    Write plan.json, THEN render the Plan PDF, into out_dir.
+
+    If the PDF render fails, plan.json is already on disk and the error names it.
+    Returns (plan.json path, plan.pdf path).
+    """
+    out_d = Path(out_dir).resolve()
+    out_d.mkdir(parents=True, exist_ok=True)
+    plan_json_path = out_d / "plan.json"
+    plan_pdf_path = out_d / "plan.pdf"
+
+    plan_obj.save_json(plan_json_path)
+
+    try:
+        renderer = globals().get("render_plan_pdf", render_plan_pdf)
+        renderer(plan_obj, plan_pdf_path)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to render Plan PDF to {plan_pdf_path}, but plan was saved to {plan_json_path}: {exc}"
+        ) from exc
+    return plan_json_path, plan_pdf_path
+
+
 def apply(
     plan_or_context: Union[Plan, ApplyContext],
     decisions: Optional[List[Decision]] = None,
+    mode: Optional[str] = None,
+    channel: Any = None,
+    out_dir: Optional[Union[str, Path]] = None,
 ) -> ApplyResult:
-    """Execute pipeline transformations."""
+    """
+    Execute pipeline transformations.
+
+    mode=None applies the Decisions as they stand (unchanged behaviour). With
+    mode='ask' | 'defaults' | 'strict', every open question is resolved first
+    (see preflight.resolve), the resolved plan.json and Plan PDF are written to out_dir,
+    and the file is then processed with the final answers.
+    """
+    if mode is not None:
+        if not isinstance(plan_or_context, Plan):
+            raise ValueError("mode/channel need a Plan; pass the result of plan() or dry_run()")
+        from preflight.interact.resolve import resolve
+
+        resolve(plan_or_context, mode=mode, channel=channel, out_dir=out_dir)
     planner = Planner()
     return planner.apply(plan_or_context, decisions=decisions)
 
@@ -783,6 +870,8 @@ def dry_run(
     target: Optional[str] = None,
     task: Optional[str] = None,
     out_dir: Optional[Union[str, Path]] = None,
+    mode: Optional[str] = None,
+    channel: Any = None,
 ) -> Tuple[Plan, Path]:
     """
     Run pipeline ingest and infer in plan-only form, write plan.json and Plan PDF,
@@ -791,6 +880,10 @@ def dry_run(
     Purity:
     - Never modifies the source file.
     - Never produces cleaned data.
+
+    mode=None writes the plan with its questions still open (Phase 4 behaviour). With
+    mode='ask' | 'defaults' | 'strict' the questions are resolved first (see
+    preflight.resolve) and plan.json and the Plan PDF show the final answers.
 
     Failure handling:
     - Writes plan.json BEFORE rendering the PDF.
@@ -806,19 +899,10 @@ def dry_run(
 
     plan_obj = plan(p, target=target, task=task)
 
-    plan_json_path = out_d / "plan.json"
-    plan_pdf_path = out_d / "plan.pdf"
+    if mode is not None:
+        from preflight.interact.resolve import resolve
 
-    # Write plan.json BEFORE rendering PDF
-    plan_obj.save_json(plan_json_path)
+        return resolve(plan_obj, mode=mode, channel=channel, out_dir=out_d)
 
-    # Render Plan PDF with isolated failure handling
-    try:
-        renderer = globals().get("render_plan_pdf", render_plan_pdf)
-        renderer(plan_obj, plan_pdf_path)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to render Plan PDF to {plan_pdf_path}, but plan was saved to {plan_json_path}: {exc}"
-        ) from exc
-
+    _, plan_pdf_path = write_plan_artifacts(plan_obj, out_d)
     return plan_obj, plan_pdf_path

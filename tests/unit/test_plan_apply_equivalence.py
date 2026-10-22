@@ -106,3 +106,51 @@ def test_apply_lossless_anomaly_capture(messy_anomalies_csv: Path):
     assert len(df) == 3, "Rows were improperly dropped during typing apply!"
     assert pd.isna(df.loc[1, "score"])
     assert pd.isna(df.loc[2, "amount"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 (M4): equivalence still holds once questions are resolved
+# ---------------------------------------------------------------------------
+
+from dataclasses import fields
+
+
+def _comparable(d):
+    """Everything about a Decision except status, timestamps and the change log."""
+    skip = {"status", "timestamp", "history"}
+    return {f.name: getattr(d, f.name) for f in fields(d) if f.name not in skip}
+
+
+def test_dry_run_equals_actual_run_under_defaults_mode(tmp_path: Path):
+    """
+    Decisions from dry_run(mode='defaults') equal Decisions from an actual run under
+    defaults mode, apart from status and timestamps (and the change-log history).
+    """
+    src = tmp_path / "data"
+    src.mkdir()
+    csv = src / "mixed.csv"
+    rows = ["id,zip,mileage,when,score,target"]
+    for i in range(12):
+        rows.append(f"{i + 1},0{2100 + i},{10 + i} kmpl,0{(i % 9) + 1}/0{(i % 8) + 1}/2020,{i % 3},{i % 2}")
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    dry_plan, _ = dry_run(csv, target="target", out_dir=tmp_path / "dry", mode="defaults")
+    run_result = apply(plan(csv, target="target"), mode="defaults", out_dir=tmp_path / "run")
+
+    assert len(dry_plan.decisions) == len(run_result.decisions)
+    resolved = 0
+    for d_dry, d_run in zip(dry_plan.decisions, run_result.decisions):
+        assert _comparable(d_dry) == _comparable(d_run)
+        resolved += bool(d_dry.history)
+    assert resolved > 1, "the file must actually have had questions resolved"
+
+
+def test_dry_run_without_mode_leaves_questions_open_as_in_phase_4(tmp_path: Path):
+    src = tmp_path / "data"
+    src.mkdir()
+    csv = src / "units.csv"
+    csv.write_text("car,mileage,cost\nA,15 kmpl,$12000\nB,18 kmpl,$15500\n", encoding="utf-8")
+    plan_obj, _ = dry_run(csv, out_dir=tmp_path / "out")
+    assert any(d.needs_attention for d in plan_obj.decisions)
+    assert not any(d.history for d in plan_obj.decisions)
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["plan.json", "plan.pdf"]

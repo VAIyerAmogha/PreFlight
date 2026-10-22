@@ -17,6 +17,7 @@ Design Rules:
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
+from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -231,6 +232,25 @@ def _build_styles() -> Dict[str, ParagraphStyle]:
     return styles
 
 
+def _resolution_label(decision: Any) -> Optional[str]:
+    """How a resolved Decision got its final action, from its history; None if never resolved."""
+    history = getattr(decision, "history", None) or []
+    if not history:
+        return None
+    last = history[-1]
+    source = str(last.get("source") or "")
+    if source.startswith("defaults"):
+        return "safe default applied"
+    if source.startswith("stored answer"):
+        return "your earlier answer reused"
+    status = last.get("status")
+    if status == "changed":
+        return "you changed this"
+    if status == "confirmed":
+        return "you confirmed this"
+    return None
+
+
 def render_plan_pdf(
     plan: Any,
     output_path: Union[str, Path],
@@ -272,9 +292,16 @@ def render_plan_pdf(
     target_text = getattr(plan, "target_column", None) or "None specified"
     task_text = getattr(plan, "task_type", None) or "Not specified"
 
+    answered_decisions = [
+        d for d in decisions
+        if not getattr(d, "needs_attention", False) and _resolution_label(d) is not None
+    ]
     if attention_decisions:
         rev_count_style = styles["SummaryValueHighlight"]
         rev_text = f"{len(attention_decisions)} item(s) require review"
+    elif answered_decisions:
+        rev_count_style = styles["SummaryValue"]
+        rev_text = f"{len(answered_decisions)} question(s) resolved"
     else:
         rev_count_style = styles["SummaryValue"]
         rev_text = "0 items (all safe defaults ready)"
@@ -316,6 +343,16 @@ def render_plan_pdf(
     )
     story.append(summary_table)
     story.append(Spacer(1, 12))
+
+    # 2b. Section: Your answers (only after questions were resolved)
+    if answered_decisions:
+        story.append(Paragraph("Your answers", styles["SectionHeading"]))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CBD5E1"), spaceAfter=6))
+        for dec in answered_decisions:
+            where = f"Column '{dec.columns[0]}'" if dec.columns else "File"
+            line = f"{where}: {render_decision_text(dec).summary} ({_resolution_label(dec)})"
+            story.append(Paragraph("• " + xml_escape(line), styles["BulletItem"]))
+        story.append(Spacer(1, 8))
 
     # 3. Section: Needs your decision
     story.append(Paragraph("Needs your decision", styles["SectionHeading"]))

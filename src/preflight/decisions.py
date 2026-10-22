@@ -82,6 +82,9 @@ class Decision:
         status: Decision lifecycle state ("automatic", "confirmed", "changed").
         timestamp: ISO 8601 UTC creation/modification timestamp.
         fingerprint: Deterministic hash of inputs for cross-run tracking.
+        history: Timestamped log of status changes (automatic, confirmed, changed),
+            each with the action in force, the source of the change, and the
+            plain-language answer when a person chose one.
     """
     id: str
     stage: str
@@ -96,6 +99,7 @@ class Decision:
     status: str = "automatic"
     timestamp: Optional[str] = None
     fingerprint: Optional[str] = None
+    history: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.timestamp is None:
@@ -115,26 +119,63 @@ class Decision:
 
     VALID_STATUSES = {"automatic", "confirmed", "changed"}
 
-    def confirm(self) -> "Decision":
+    def _log(self, source: Optional[str], answer: Optional[str]) -> None:
+        self.history.append(
+            {
+                "status": self.status,
+                "timestamp": self.timestamp,
+                "action": self.action,
+                "source": source,
+                "answer": answer,
+            }
+        )
+
+    def confirm(self, source: Optional[str] = None, answer: Optional[str] = None) -> "Decision":
         """
         Transition status to 'confirmed'.
 
-        Updates timestamp to current UTC time. Fingerprint remains invariant.
+        Updates timestamp to current UTC time and logs the change in history.
+        Fingerprint remains invariant.
         """
         self.status = "confirmed"
         self.timestamp = datetime.now(timezone.utc).isoformat()
+        self._log(source, answer)
         return self
 
-    def change(self, new_action: str) -> "Decision":
+    def change(
+        self,
+        new_action: str,
+        source: Optional[str] = None,
+        answer: Optional[str] = None,
+    ) -> "Decision":
         """
         Transition status to 'changed' with a modified action.
 
-        Updates action, sets status to 'changed', and updates timestamp.
-        Fingerprint remains invariant as it records the original proposed decision identity.
+        Updates action, sets status to 'changed', updates timestamp, and logs the
+        change in history. Fingerprint remains invariant as it records the original
+        proposed decision identity.
         """
         self.action = new_action
         self.status = "changed"
         self.timestamp = datetime.now(timezone.utc).isoformat()
+        self._log(source, answer)
+        return self
+
+    def mark_automatic(
+        self,
+        action: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> "Decision":
+        """
+        Record that the pipeline resolved this decision on its own (safe default).
+
+        Status stays 'automatic'. If `action` is given it becomes the action in force.
+        """
+        if action is not None:
+            self.action = action
+        self.status = "automatic"
+        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self._log(source, None)
         return self
 
     def to_dict(self) -> Dict[str, Any]:

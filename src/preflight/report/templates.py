@@ -434,15 +434,24 @@ def render_decision_text(decision: Decision) -> RenderedDecisionText:
     ev = decision.evidence or {}
 
     if kind in ("encoding", "text_format"):
+        enc_name = (
+            decision.action[len("use_encoding_"):]
+            if decision.action.startswith("use_encoding_")
+            else str(ev.get("encoding", decision.action))
+        )
         return template_encoding(
-            text_format_name=str(ev.get("encoding", decision.action)),
+            text_format_name=enc_name,
             confidence=decision.confidence,
             has_bom=bool(ev.get("has_bom", False)),
             needs_attention=decision.needs_attention,
         )
 
     if kind in ("dialect", "separator"):
-        sep = str(ev.get("delimiter", decision.action.replace("separate_by_", "")))
+        sep = (
+            decision.action[len("separate_by_"):]
+            if decision.action.startswith("separate_by_")
+            else str(ev.get("delimiter", ","))
+        )
         return template_dialect(
             separator_char=sep,
             confidence=decision.confidence,
@@ -451,8 +460,12 @@ def render_decision_text(decision: Decision) -> RenderedDecisionText:
 
     if kind in ("header", "table_boundary"):
         h_idx = ev.get("header_row_index")
-        t_count = len(ev.get("title_rows", []))
+        if decision.action.startswith("use_header_row_"):
+            h_idx = int(decision.action[len("use_header_row_"):])
+        t_count = len(ev.get("title_rows", [])) if decision.action.startswith("use_header_row_") else 0
         ragged = bool(ev.get("is_ragged", False))
+        if decision.action == "no_header":
+            return RenderedDecisionText(summary=template_header(None).summary)
         return template_header(
             header_row_index=h_idx if isinstance(h_idx, int) else 0,
             title_rows_count=t_count,
@@ -461,6 +474,12 @@ def render_decision_text(decision: Decision) -> RenderedDecisionText:
         )
 
     if kind in ("type_abstain", "abstention", "abstain"):
+        if decision.action != "keep_as_string" and not decision.needs_attention:
+            return template_type(
+                column_name=col_name,
+                inferred_type=decision.action.replace("cast_to_", "").replace("keep_as_", ""),
+                example_values=ev.get("sample_values") or [],
+            )
         samples = ev.get("failed_samples") or ev.get("sample_values") or []
         reason = str(ev.get("unresolved_trap") or "uncertain format")
         return template_abstention(
@@ -516,4 +535,107 @@ def render_decision_text(decision: Decision) -> RenderedDecisionText:
         column_name=col_name,
         inferred_type=t_name,
         example_values=samples,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Question Phrasing (interaction layer)
+# ---------------------------------------------------------------------------
+
+def _pct(value: Any) -> str:
+    try:
+        return f"{round(float(value) * 100)}%"
+    except (TypeError, ValueError):
+        return "an unknown share"
+
+
+def describe_type_scores(evidence: Dict[str, Any]) -> str:
+    """Plain-language summary of how well each reading fits a column's values."""
+    scores = evidence.get("candidate_scores") or {}
+    ranked = sorted(
+        ((str(k).lower(), v) for k, v in scores.items() if isinstance(v, (int, float)) and v > 0),
+        key=lambda kv: kv[1],
+        reverse=True,
+    )
+    if not ranked:
+        return "No clear pattern was found in the values."
+    parts = [f"{friendly_type_name(k)} fit {_pct(v)} of the values" for k, v in ranked[:3]]
+    return "Best matches: " + "; ".join(parts) + "."
+
+
+def template_type_question(
+    column_name: str,
+    action: str,
+    evidence: Dict[str, Any],
+) -> RenderedDecisionText:
+    """Plain-language question for an uncertain column type decision."""
+    ev = evidence or {}
+    trap = str(ev.get("unresolved_trap") or "")
+    reasons: List[str] = []
+    if trap == "ambiguous_date_format":
+        reasons.append(
+            "Some dates could be read day-first or month-first, so they cannot be "
+            "interpreted without guessing."
+        )
+    elif trap.startswith("embedded_unit"):
+        unit = ev.get("embedded_unit_detected")
+        unit_txt = f" ({unit})" if unit else ""
+        reasons.append(
+            f"Values include units{unit_txt}; turning them into numbers would lose the units."
+        )
+    if ev.get("leading_zero_detected") and action in ("cast_to_int", "cast_to_float"):
+        reasons.append(
+            "Some values start with zero (like 02138); turning them into numbers would drop the zeros."
+        )
+    if ev.get("decimal_comma_detected"):
+        reasons.append("Numbers appear to use a comma as the decimal mark.")
+    if not reasons:
+        reasons.append(
+            "The values fit more than one reading closely enough that a wrong guess could change them."
+        )
+    return RenderedDecisionText(
+        summary=describe_type_scores(ev),
+        question=f"How should column '{column_name}' be read?",
+        explanation=" ".join(reasons),
+    )
+
+
+def render_question_text(decision: Decision) -> RenderedDecisionText:
+    """
+    Question phrasing for a decision that needs attention: `summary` holds the
+    evidence in plain language, `question` the title, `explanation` the reason.
+    """
+    kind = decision.kind.lower().replace("-", "_")
+    col_name = decision.columns[0] if decision.columns else "table"
+    ev = decision.evidence or {}
+
+    if kind in ("type_inference", "type_abstain", "type"):
+        return template_type_question(col_name, decision.action, ev)
+
+    base = render_decision_text(decision)
+    if kind in ("encoding", "text_format"):
+        enc = decision.action[len("use_encoding_"):] if decision.action.startswith("use_encoding_") else None
+        summary = f"The file looks like {friendly_text_format(enc)}."
+        if ev.get("low_confidence") or (ev.get("confidence") or 1.0) < 0.80:
+            summary += " The check was not certain about this."
+    elif kind in ("dialect", "separator"):
+        sep = decision.action[len("separate_by_"):] if decision.action.startswith("separate_by_") else ","
+        summary = f"Columns appear to be split by {friendly_separator_name(sep)}."
+        if ev.get("flagged") or (ev.get("confidence") or 1.0) < 0.80:
+            summary += " Another separator fit almost as well."
+    elif kind in ("header", "table_boundary"):
+        summary = (
+            "Row lengths vary across the file."
+            if ev.get("is_ragged")
+            else f"The column-names row was found with {_pct(ev.get('confidence'))} certainty."
+        )
+    elif kind in ("ambiguous_task", "task_inference", "task"):
+        n = ev.get("num_unique")
+        summary = f"The target column has {n} distinct values." if n is not None else base.summary
+    else:
+        summary = base.summary
+    return RenderedDecisionText(
+        summary=summary,
+        question=base.question,
+        explanation=base.explanation,
     )

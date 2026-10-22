@@ -1,6 +1,7 @@
 """Preflight package."""
 
 from .decisions import Decision
+from .interact.resolve import resolve
 from .plan import Plan, apply, dry_run, plan
 from .schema import TableSchema
 
@@ -13,5 +14,6 @@ __all__ = [
     "apply",
     "dry_run",
     "plan",
+    "resolve",
     "__version__",
 ]
