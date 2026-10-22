@@ -1,0 +1,101 @@
+{
+  "file_id": "r_cardata_soils",
+  "filename": "carData_Soils.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "rownames",
+      "column_index": 0,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "Group",
+      "column_index": 1,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Contour",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Depth",
+      "column_index": 3,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Gp",
+      "column_index": 4,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Block",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "pH",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "N",
+      "column_index": 7,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Dens",
+      "column_index": 8,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "P",
+      "column_index": 9,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Ca",
+      "column_index": 10,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Mg",
+      "column_index": 11,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "K",
+      "column_index": 12,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Na",
+      "column_index": 13,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "Conduc",
+      "column_index": 14,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

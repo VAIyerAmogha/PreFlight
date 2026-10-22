@@ -1,0 +1,1 @@
+"""Assemble module."""

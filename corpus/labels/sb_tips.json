@@ -1,0 +1,53 @@
+{
+  "file_id": "sb_tips",
+  "filename": "tips.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "total_bill",
+      "column_index": 0,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "tip",
+      "column_index": 1,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "sex",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "smoker",
+      "column_index": 3,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "day",
+      "column_index": 4,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "time",
+      "column_index": 5,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "size",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

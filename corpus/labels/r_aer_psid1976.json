@@ -1,0 +1,143 @@
+{
+  "file_id": "r_aer_psid1976",
+  "filename": "AER_PSID1976.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "rownames",
+      "column_index": 0,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "participation",
+      "column_index": 1,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "hours",
+      "column_index": 2,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "youngkids",
+      "column_index": 3,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "oldkids",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "age",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "education",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "wage",
+      "column_index": 7,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "repwage",
+      "column_index": 8,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "hhours",
+      "column_index": 9,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "hage",
+      "column_index": 10,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "heducation",
+      "column_index": 11,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "hwage",
+      "column_index": 12,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "fincome",
+      "column_index": 13,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "tax",
+      "column_index": 14,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "meducation",
+      "column_index": 15,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "feducation",
+      "column_index": 16,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "unemp",
+      "column_index": 17,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "city",
+      "column_index": 18,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "experience",
+      "column_index": 19,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "college",
+      "column_index": 20,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "hcollege",
+      "column_index": 21,
+      "semantic_type": "boolean",
+      "anomalies": []
+    }
+  ]
+}

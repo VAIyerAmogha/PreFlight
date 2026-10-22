@@ -1,0 +1,65 @@
+{
+  "file_id": "fte_classic_rock_classic_rock_raw_data",
+  "filename": "classic-rock-raw-data.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "SONG RAW",
+      "column_index": 0,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "Song Clean",
+      "column_index": 1,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "ARTIST RAW",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "ARTIST CLEAN",
+      "column_index": 3,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "CALLSIGN",
+      "column_index": 4,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "TIME",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "UNIQUE_ID",
+      "column_index": 6,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "COMBINED",
+      "column_index": 7,
+      "semantic_type": "text",
+      "anomalies": []
+    },
+    {
+      "column_name": "First?",
+      "column_index": 8,
+      "semantic_type": "boolean",
+      "anomalies": []
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "file_id": "fte_librarians_librarians_by_msa",
+  "filename": "librarians-by-msa.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "prim_state",
+      "column_index": 0,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "area_name",
+      "column_index": 1,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "tot_emp",
+      "column_index": 2,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "emp_prse",
+      "column_index": 3,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "jobs_1000",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "loc_quotient",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    }
+  ]
+}

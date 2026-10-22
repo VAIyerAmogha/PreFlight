@@ -1,0 +1,156 @@
+{
+  "file_id": "fte_nba_elo_nbaallelo",
+  "filename": "nbaallelo.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "gameorder",
+      "column_index": 0,
+      "semantic_type": "numeric",
+      "anomalies": [
+        "disguised_missing: 999",
+        "disguised_missing: 9999"
+      ]
+    },
+    {
+      "column_name": "game_id",
+      "column_index": 1,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "lg_id",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "_iscopy",
+      "column_index": 3,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "year_id",
+      "column_index": 4,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "date_game",
+      "column_index": 5,
+      "semantic_type": "datetime",
+      "anomalies": [
+        "ambiguous_date_format"
+      ]
+    },
+    {
+      "column_name": "seasongame",
+      "column_index": 6,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "is_playoffs",
+      "column_index": 7,
+      "semantic_type": "boolean",
+      "anomalies": []
+    },
+    {
+      "column_name": "team_id",
+      "column_index": 8,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "fran_id",
+      "column_index": 9,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "pts",
+      "column_index": 10,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "elo_i",
+      "column_index": 11,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "elo_n",
+      "column_index": 12,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "win_equiv",
+      "column_index": 13,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "opp_id",
+      "column_index": 14,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "opp_fran",
+      "column_index": 15,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "opp_pts",
+      "column_index": 16,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "opp_elo_i",
+      "column_index": 17,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "opp_elo_n",
+      "column_index": 18,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "game_location",
+      "column_index": 19,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "game_result",
+      "column_index": 20,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "forecast",
+      "column_index": 21,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "notes",
+      "column_index": 22,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NULL"
+      ]
+    }
+  ]
+}

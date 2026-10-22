@@ -1,0 +1,89 @@
+{
+  "file_id": "fte_congress_demographics_data_aging_congress",
+  "filename": "data_aging_congress.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "congress",
+      "column_index": 0,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "start_date",
+      "column_index": 1,
+      "semantic_type": "datetime",
+      "anomalies": []
+    },
+    {
+      "column_name": "chamber",
+      "column_index": 2,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "state_abbrev",
+      "column_index": 3,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "party_code",
+      "column_index": 4,
+      "semantic_type": "ID",
+      "anomalies": []
+    },
+    {
+      "column_name": "bioname",
+      "column_index": 5,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "bioguide_id",
+      "column_index": 6,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "birthday",
+      "column_index": 7,
+      "semantic_type": "datetime",
+      "anomalies": []
+    },
+    {
+      "column_name": "cmltv_cong",
+      "column_index": 8,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "cmltv_chamber",
+      "column_index": 9,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "age_days",
+      "column_index": 10,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "age_years",
+      "column_index": 11,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "generation",
+      "column_index": 12,
+      "semantic_type": "categorical",
+      "anomalies": []
+    }
+  ]
+}

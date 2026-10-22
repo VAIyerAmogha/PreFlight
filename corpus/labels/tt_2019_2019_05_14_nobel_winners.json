@@ -1,0 +1,141 @@
+{
+  "file_id": "tt_2019_2019_05_14_nobel_winners",
+  "filename": "nobel_winners.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "prize_year",
+      "column_index": 0,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "category",
+      "column_index": 1,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "prize",
+      "column_index": 2,
+      "semantic_type": "text",
+      "anomalies": []
+    },
+    {
+      "column_name": "motivation",
+      "column_index": 3,
+      "semantic_type": "text",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "prize_share",
+      "column_index": 4,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "laureate_id",
+      "column_index": 5,
+      "semantic_type": "numeric",
+      "anomalies": []
+    },
+    {
+      "column_name": "laureate_type",
+      "column_index": 6,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "full_name",
+      "column_index": 7,
+      "semantic_type": "categorical",
+      "anomalies": []
+    },
+    {
+      "column_name": "birth_date",
+      "column_index": 8,
+      "semantic_type": "datetime",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "birth_city",
+      "column_index": 9,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "birth_country",
+      "column_index": 10,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "gender",
+      "column_index": 11,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "organization_name",
+      "column_index": 12,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "organization_city",
+      "column_index": 13,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "organization_country",
+      "column_index": 14,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "death_date",
+      "column_index": 15,
+      "semantic_type": "datetime",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "death_city",
+      "column_index": 16,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    },
+    {
+      "column_name": "death_country",
+      "column_index": 17,
+      "semantic_type": "categorical",
+      "anomalies": [
+        "disguised_missing: NA"
+      ]
+    }
+  ]
+}

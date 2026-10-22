@@ -1,0 +1,17 @@
+{
+  "file_id": "tt_2019_2019_04_30_bird_call",
+  "filename": "bird_call.csv",
+  "dialect": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "header_row_index": 0
+  },
+  "columns": [
+    {
+      "column_name": "Species Family Collisions Flight Call Habitat Stratum",
+      "column_index": 0,
+      "semantic_type": "text",
+      "anomalies": []
+    }
+  ]
+}

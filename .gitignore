@@ -1,41 +1,15 @@
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+prompt
+*.pyc
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Pytest
+.coverage
+htmlcov/
 .pytest_cache/
-
-# Virtual environments
-.env
-.venv
-env/
+.ruff_cache/
+.mypy_cache/
+.venv/
 venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Manual test artifacts
-tmp*
-*.joblib
-scratch.py
-debug.py
+.ipynb_checkpoints/
+corpus/raw/
