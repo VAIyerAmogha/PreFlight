@@ -31,6 +31,22 @@ STRICT_BANNED_PATTERNS = [
     r"\bwindows-1252\b",
     r"\biso-8859-1\b",
     r"\blatin-?1\b",
+    # cleaning and engineering
+    r"\binteractions?\b",
+    r"\btarget[- ]encod\w*",
+    r"\bcross-?fit\w*",
+    r"\bvif\b",
+    r"\bvariance inflation\b",
+    r"\bone-hot\b",
+    r"\bordinal\b",
+    r"\btf-?idf\b",
+    r"\bk-?means\b",
+    r"\bcentroid\b",
+    r"\boutliers?\b",
+    r"\bmedian\b",
+    r"\blog1p\b",
+    r"\bz-score\b",
+    r"\bleakage\b",
 ]
 
 

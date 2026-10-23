@@ -196,7 +196,25 @@ def _task_actions(d: Decision) -> List[str]:
     return ["classification", "regression", "none"]
 
 
+def _keep_or_remove_actions(d: Decision) -> List[str]:
+    return {
+        "drop_column": ["keep_column"],
+        "remove_duplicates": ["keep_rows"],
+        "clip_outliers": ["keep_outliers"],
+    }.get(d.action, [])
+
+
+def _leakage_actions(d: Decision) -> List[str]:
+    return ["keep_feature", "drop_leaky_feature"]
+
+
 _BUILDERS: Dict[str, OptionBuilder] = {
+    "remove_duplicates": _keep_or_remove_actions,
+    "drop_high_missingness": _keep_or_remove_actions,
+    "drop_id": _keep_or_remove_actions,
+    "drop_constant": _keep_or_remove_actions,
+    "clip_outliers": _keep_or_remove_actions,
+    "suspected_leakage": _leakage_actions,
     "type_inference": _type_actions,
     "type_abstain": _type_actions,
     "encoding": _encoding_actions,

@@ -41,6 +41,7 @@ from preflight.report.templates import (
     friendly_text_format,
     friendly_type_name,
     render_decision_text,
+    section_for_decision,
 )
 
 
@@ -427,9 +428,7 @@ def render_plan_pdf(
 
     # Group 2: Fixing
     story.append(Paragraph("Fixing", styles["SubSectionHeading"]))
-    fixing_decisions = [
-        d for d in decisions if getattr(d, "stage", "") == "clean" and getattr(d, "kind", "") == "fixing"
-    ]
+    fixing_decisions = [d for d in decisions if section_for_decision(d) == "fixing"]
     if fixing_decisions:
         for dec in fixing_decisions:
             text_bundle = render_decision_text(dec)
@@ -439,9 +438,7 @@ def render_plan_pdf(
 
     # Group 3: Filling gaps
     story.append(Paragraph("Filling gaps", styles["SubSectionHeading"]))
-    gaps_decisions = [
-        d for d in decisions if getattr(d, "stage", "") == "clean" and "gap" in getattr(d, "kind", "")
-    ]
+    gaps_decisions = [d for d in decisions if section_for_decision(d) == "filling gaps"]
     if gaps_decisions:
         for dec in gaps_decisions:
             text_bundle = render_decision_text(dec)
@@ -451,9 +448,7 @@ def render_plan_pdf(
 
     # Group 4: Removing
     story.append(Paragraph("Removing", styles["SubSectionHeading"]))
-    removing_decisions = [
-        d for d in decisions if getattr(d, "stage", "") == "clean" and "remove" in getattr(d, "kind", "")
-    ]
+    removing_decisions = [d for d in decisions if section_for_decision(d) == "removing"]
     if removing_decisions:
         for dec in removing_decisions:
             text_bundle = render_decision_text(dec)
@@ -463,9 +458,7 @@ def render_plan_pdf(
 
     # Group 5: Creating
     story.append(Paragraph("Creating", styles["SubSectionHeading"]))
-    creating_decisions = [
-        d for d in decisions if getattr(d, "stage", "") in ("engineer", "create")
-    ]
+    creating_decisions = [d for d in decisions if section_for_decision(d) == "creating"]
     if creating_decisions:
         for dec in creating_decisions:
             text_bundle = render_decision_text(dec)

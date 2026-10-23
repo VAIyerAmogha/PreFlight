@@ -1,110 +1,136 @@
 """
-Unit tests for PreFlight v2.0 Assembler (Phase 6 / M5).
-
-Validates:
-1. Two-phase scikit-learn Pipeline construction from Decisions.
-2. Fit on train only: prevents test data contamination and target leakage.
-3. transform_new_data execution fidelity.
-4. Pipeline reproducibility and pickle serialization.
+Unit tests for the Assembler (Phase 6 / M5): a fitted scikit-learn pipeline built from
+Decisions that reproduces what `apply` produces, learns only from training rows, and
+survives a save and reload.
 """
 
 import pickle
+
+import joblib
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.pipeline import Pipeline
 
-from preflight.assemble import (
-    CleanerTransformer,
-    EngineerTransformer,
-    build_pipeline_two_phase,
-    transform_new_data,
-)
-from preflight.clean.cleaner import plan_clean
-from preflight.engineer.engineer import plan_engineer
+from preflight.assemble import build_pipeline_two_phase, overlay_actions, transform_new_data
+from preflight.clean.cleaner import apply_clean, plan_clean_full
+from preflight.engineer.engineer import apply_engineer, plan_engineer
 
 
-def test_two_phase_pipeline_construction():
-    """Verify build_pipeline_two_phase constructs valid scikit-learn Pipeline."""
-    df_train = pd.DataFrame({
-        "age": [25.0, 30.0, np.nan, 45.0, 50.0],
-        "category": ["A", "B", "A", "C", "B"],
-        "target": [0, 1, 0, 1, 0],
+def make_frame(n=160, seed=0):
+    rng = np.random.default_rng(seed)
+    x = rng.normal(50, 10, n)
+    x[rng.choice(n, 12, replace=False)] = np.nan
+    return pd.DataFrame({
+        "x": x,
+        "z": rng.normal(0, 1, n),
+        "size": rng.choice(["small", "medium", "large"], n),
+        "when": pd.date_range("2021-01-01", periods=n, freq="D").astype(str),
+        "target": rng.integers(0, 2, n),
     })
 
-    clean_decs = plan_clean(df_train, target="target")
-    eng_decs = plan_engineer(df_train, target="target", task="classification")
 
-    X = df_train.drop(columns=["target"])
-    y = df_train["target"]
-
+def fitted(df, model_hint="tree"):
+    cp = plan_clean_full(df, None, "target", task="classification")
+    eng = plan_engineer(cp.cleaned, None, "target", model_hint, task="classification", signals=cp.signals)
+    X, y = df.drop(columns=["target"]), df["target"]
     pipe = build_pipeline_two_phase(
-        profiles=clean_decs,
-        target="target",
-        model_hint="tree",
-        X=X,
-        y=y,
-        decisions=clean_decs + eng_decs,
+        X, y, "target", model_hint, cp.decisions + eng, task="classification",
     )
+    return cp, eng, pipe, X, y
 
+
+@pytest.mark.parametrize("hint", ["tree", "linear"])
+def test_pipeline_built_from_decisions_reproduces_apply(hint):
+    df = make_frame()
+    cp, eng, pipe, X, _ = fitted(df, hint)
     assert isinstance(pipe, Pipeline)
-    assert "cleaner" in pipe.named_steps
-    assert "engineer" in pipe.named_steps
+    assert list(pipe.named_steps) == ["cleaner", "engineer"]
 
-    # Transform on train
-    transformed_train = pipe.transform(X)
-    assert isinstance(transformed_train, pd.DataFrame)
-    assert "age" in transformed_train.columns
+    cleaned = apply_clean(df, cp.decisions)
+    expected, _ = apply_engineer(cleaned, eng, target="target")
+    expected = expected.drop(columns=["target"])
 
-
-def test_transform_new_data_unseen_samples():
-    """Verify transform_new_data transforms unseen test samples without target column."""
-    df_train = pd.DataFrame({
-        "num": [10.0, 50.0, 20.0, 40.0],
-        "cat": ["x", "y", "x", "y"],
-        "target": [1, 2, 1, 2],
-    })
-    df_test = pd.DataFrame({
-        "num": [15.0, 25.0],
-        "cat": ["x", "y"],
-    })
-
-    X = df_train.drop(columns=["target"])
-    y = df_train["target"]
-
-    clean_decs = plan_clean(df_train, target="target")
-    eng_decs = plan_engineer(df_train, target="target")
-
-    pipe = build_pipeline_two_phase(
-        profiles=clean_decs,
-        target="target",
-        model_hint="tree",
-        X=X,
-        y=y,
-        decisions=clean_decs + eng_decs,
+    got = pipe.transform(X)
+    assert list(got.columns) == list(expected.columns)
+    pd.testing.assert_frame_equal(
+        got.reset_index(drop=True), expected.reset_index(drop=True), check_dtype=False, rtol=1e-9, atol=1e-9,
     )
 
-    # Test samples without target
-    transformed_test = transform_new_data(pipe, df_test)
-    assert len(transformed_test) == 2
-    assert "num" in transformed_test.columns
+
+def test_fit_uses_training_rows_only():
+    df = make_frame()
+    train, hold = df.iloc[:120].copy(), df.iloc[120:].drop(columns=["target"]).copy()
+    hold["x"] = np.nan  # every held-out value is blank
+    hold.iloc[0, hold.columns.get_loc("x")] = 10_000.0  # and one extreme value
+
+    cp = plan_clean_full(train, None, "target", task="classification")
+    eng = plan_engineer(cp.cleaned, None, "target", "tree", task="classification", signals=cp.signals)
+    pipe = build_pipeline_two_phase(
+        train.drop(columns=["target"]), train["target"], "target", "tree",
+        cp.decisions + eng, task="classification",
+    )
+    out = pipe.transform(hold)
+
+    train_median = train["x"].median()
+    pooled_median = pd.concat([train["x"], df["x"].iloc[120:]]).median()
+    filled = out["x"].iloc[1:]
+    assert train_median != pooled_median
+    assert np.allclose(filled, train_median)
+    # the extreme held-out value is pulled back to the limit learned from training rows
+    cleaner = pipe.named_steps["cleaner"]
+    limit = max(d.evidence["upper_bound"] for d in cleaner.decisions_ if d.kind == "clip_outliers" and d.columns == ["x"])
+    assert out["x"].iloc[0] == pytest.approx(limit)
 
 
-def test_pipeline_pickle_serialization():
-    """Verify pipeline can be pickled and unpickled with identical transformation output."""
-    df = pd.DataFrame({
-        "feature": [1.0, 2.0, 3.0, 4.0],
-        "target": [10, 20, 30, 40],
-    })
-    X = df.drop(columns=["target"])
-    y = df["target"]
+def test_transform_skips_row_removal_and_keeps_every_row():
+    df = make_frame()
+    dup = pd.concat([df, df.iloc[:30]], ignore_index=True)
+    cp = plan_clean_full(dup, None, "target", task="classification")
+    assert any(d.kind == "remove_duplicates" for d in cp.decisions)
+    X = dup.drop(columns=["target"])
+    pipe = build_pipeline_two_phase(X, dup["target"], "target", "tree", cp.decisions, task="classification")
+    assert len(pipe.transform(X)) == len(X)
 
-    pipe = build_pipeline_two_phase(profiles=[], target="target", model_hint="tree", X=X, y=y)
 
-    pickled = pickle.dumps(pipe)
-    unpickled_pipe = pickle.loads(pickled)
+def test_unseen_values_and_missing_columns_in_new_data():
+    df = make_frame()
+    _, _, pipe, X, _ = fitted(df)
+    new = X.iloc[:5].copy()
+    new["size"] = ["huge", "small", None, "medium", "gigantic"]
+    out = transform_new_data(pipe, new.assign(target=[0, 1, 0, 1, 0]), target="target")
+    assert len(out) == 5 and "target" in out.columns
+    assert not out.drop(columns=["target"]).isnull().all().any()
 
-    out1 = pipe.transform(X)
-    out2 = unpickled_pipe.transform(X)
 
-    pd.testing.assert_frame_equal(out1, out2)
+@pytest.mark.parametrize("dump,load", [
+    (pickle.dumps, pickle.loads),
+    (lambda p: _joblib_bytes(p), lambda b: joblib.load(__import__("io").BytesIO(b))),
+])
+def test_pipeline_serializes_and_reloads(dump, load):
+    df = make_frame()
+    _, _, pipe, X, _ = fitted(df, "linear")
+    reloaded = load(dump(pipe))
+    pd.testing.assert_frame_equal(pipe.transform(X), reloaded.transform(X))
+    assert list(reloaded.named_steps) == ["cleaner", "engineer"]
+
+
+def _joblib_bytes(p):
+    import io
+    buf = io.BytesIO()
+    joblib.dump(p, buf)
+    return buf.getvalue()
+
+
+def test_overlay_copies_the_action_in_force_by_kind_and_column():
+    df = make_frame()
+    cp = plan_clean_full(df, None, "target")
+    in_force = [d for d in cp.decisions if d.columns]
+    changed = in_force[0]
+    forced = type(changed).from_dict(changed.to_dict())
+    forced.action = "some_other_action"
+    fresh = plan_clean_full(df, None, "target").decisions
+    out = overlay_actions(fresh, [forced])
+    hit = [d for d in out if (d.kind, tuple(d.columns)) == (forced.kind, tuple(forced.columns))]
+    assert hit and all(d.action == "some_other_action" for d in hit)
+    assert overlay_actions(fresh, None) is fresh

@@ -8,6 +8,9 @@ import pandas as pd
 
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
+from preflight.clean._common import need_signals, py
+from preflight.clean.markers import apply_missing_markers_to_series  # noqa: F401  (re-export)
+from preflight.signals import CATEGORICAL_HIGH, CATEGORICAL_LOW, NUMERIC_FEATURE, ColumnSignals
 from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
@@ -58,161 +61,124 @@ def constant_fill(series: pd.Series, fill_value: Any = "__missing__") -> pd.Seri
     return series.fillna(fill_value)
 
 
-def apply_missing_markers_to_series(
-    series: pd.Series,
-    missing_markers: Sequence[Union[str, Dict[str, Any]]],
-) -> pd.Series:
-    """
-    Replace detected missing-value markers with pd.NA / np.nan.
-    """
-    markers = set()
-    for m in missing_markers:
-        if isinstance(m, dict):
-            markers.add(str(m.get("marker", "")).strip())
-        else:
-            markers.add(str(m).strip())
-    markers.discard("")
-
-    if not markers:
-        return series
-
-    def _clean(val: Any) -> Any:
-        if pd.isna(val):
-            return np.nan
-        if str(val).strip() in markers:
-            return np.nan
-        return val
-
-    return series.apply(_clean)
-
-
 def plan_impute(
     df: pd.DataFrame,
     schema: Optional[TableSchema] = None,
     target: Optional[str] = None,
-    cardinality_threshold: int = 20,
+    cardinality_threshold: Optional[int] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
+    signals: Optional[Dict[str, ColumnSignals]] = None,
 ) -> List[Decision]:
     """
-    Plan missing indicator columns and gap filling (median, mode, or constant).
-    """
-    type_map = {}
-    markers_map = {}
-    if schema and schema.columns:
-        for c in schema.columns:
-            eff_type = c.effective_type() or "text"
-            type_map[c.name] = eff_type.lower()
-            markers_map[c.name] = c.missing_markers or []
+    Plan blank-flag columns and gap filling, per v1 rules:
 
+    - numeric: flag, then median if missing rate < threshold (otherwise flag only)
+    - low-variety categorical: flag, then most common value if rate < threshold, else constant
+    - high-variety categorical: constant fill, no flag
+    - other kinds (boolean, text, datetime): untouched, as in v1
+
+    `df` is expected to already have schema missing markers converted.
+    """
+    card = cardinality_threshold if cardinality_threshold is not None else config.cardinality_threshold
+    sigs = need_signals(df, signals, schema, target, card)
     decisions: List[Decision] = []
 
     for col in df.columns:
-        if col == target:
+        if col == target or col not in sigs:
             continue
-
+        sig = sigs[col]
+        if sig.kind not in (NUMERIC_FEATURE, CATEGORICAL_LOW, CATEGORICAL_HIGH):
+            continue
         series = df[col]
-        # Clean any detected missing markers first to compute accurate missing rate
-        if col in markers_map and markers_map[col]:
-            series = apply_missing_markers_to_series(series, markers_map[col])
-
-        missing_rate = float(series.isna().mean())
+        missing_rate = float(series.isna().mean()) if len(series) else 0.0
         if missing_rate <= 0:
             continue
 
-        col_type = type_map.get(col, "")
-        is_numeric = col_type in ("int", "float", "numeric") or (
-            pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series)
-        )
-        is_categorical = col_type in ("categorical", "boolean") or isinstance(series.dtype, pd.CategoricalDtype)
-        if not is_categorical and not is_numeric:
-            n_unique = int(series.dropna().nunique())
-            if n_unique < len(series) * 0.5:
-                is_categorical = True
+        pct = f"{missing_rate:.1%}"
 
-        # 1. Add missing indicator for qualifying columns
-        ind_dec = Decision(
-            id="",
-            stage="clean",
-            kind="add_missing_indicator",
-            columns=[col],
-            action="add_missing_indicator",
-            evidence={
-                "missing_rate": round(missing_rate, 4),
-                "indicator_column": f"{col}_missing",
-            },
-            confidence=1.0,
-            default="add_missing_indicator",
-            needs_attention=False,
-            plain_language=f"Add missing value flag '{col}_missing' ({missing_rate:.1%} blank entries).",
-            status="automatic",
-        )
-        decisions.append(ind_dec)
+        if sig.kind in (NUMERIC_FEATURE, CATEGORICAL_LOW):
+            decisions.append(
+                Decision(
+                    id="",
+                    stage="clean",
+                    kind="add_missing_indicator",
+                    columns=[col],
+                    action="add_missing_indicator",
+                    evidence={"missing_rate": missing_rate, "indicator_column": f"{col}_missing"},
+                    confidence=1.0,
+                    default="add_missing_indicator",
+                    needs_attention=False,
+                    plain_language=f"Add a yes/no column '{col}_missing' marking where '{col}' was blank ({pct} blank).",
+                    status="automatic",
+                )
+            )
 
-        # 2. Imputation Strategy
-        if is_numeric:
+        if sig.kind == NUMERIC_FEATURE:
             if missing_rate < config.impute_strategy_threshold:
                 median_val = float(series.median()) if not series.isnull().all() else 0.0
-                fill_dec = Decision(
-                    id="",
-                    stage="clean",
-                    kind="fill_median",
-                    columns=[col],
-                    action="fill_median",
-                    evidence={
-                        "missing_rate": round(missing_rate, 4),
-                        "fill_value": round(median_val, 4),
-                        "threshold": config.impute_strategy_threshold,
-                    },
-                    confidence=0.95,
-                    default="fill_median",
-                    needs_attention=False,
-                    plain_language=f"Fill blank values in numeric column '{col}' with median ({median_val:.2f}).",
-                    status="automatic",
+                decisions.append(
+                    Decision(
+                        id="",
+                        stage="clean",
+                        kind="fill_median",
+                        columns=[col],
+                        action="fill_median",
+                        evidence={
+                            "missing_rate": missing_rate,
+                            "fill_value": median_val,
+                            "threshold": config.impute_strategy_threshold,
+                        },
+                        confidence=0.95,
+                        default="fill_median",
+                        needs_attention=False,
+                        plain_language=f"Fill blanks in '{col}' with the middle value ({median_val:.4g}).",
+                        status="automatic",
+                    )
                 )
-                decisions.append(fill_dec)
-
-        elif is_categorical:
-            n_unique = int(series.dropna().nunique())
-            if n_unique >= cardinality_threshold or missing_rate >= config.impute_strategy_threshold:
-                fill_dec = Decision(
-                    id="",
-                    stage="clean",
-                    kind="constant_fill",
-                    columns=[col],
-                    action="constant_fill",
-                    evidence={
-                        "missing_rate": round(missing_rate, 4),
-                        "fill_value": "__missing__",
-                        "threshold": config.impute_strategy_threshold,
-                    },
-                    confidence=0.95,
-                    default="constant_fill",
-                    needs_attention=False,
-                    plain_language=f"Fill blank values in column '{col}' with a distinct missing marker.",
-                    status="automatic",
-                )
-                decisions.append(fill_dec)
-            else:
-                modes = series.mode(dropna=True)
-                mode_val = modes.iloc[0] if not modes.empty else ""
-                fill_dec = Decision(
+        elif sig.kind == CATEGORICAL_LOW and missing_rate < config.impute_strategy_threshold:
+            modes = series.mode(dropna=True)
+            if modes.empty:
+                continue
+            mode_val = py(modes.iloc[0])
+            decisions.append(
+                Decision(
                     id="",
                     stage="clean",
                     kind="fill_mode",
                     columns=[col],
                     action="fill_mode",
                     evidence={
-                        "missing_rate": round(missing_rate, 4),
-                        "fill_value": str(mode_val),
+                        "missing_rate": missing_rate,
+                        "fill_value": mode_val,
                         "threshold": config.impute_strategy_threshold,
                     },
                     confidence=0.95,
                     default="fill_mode",
                     needs_attention=False,
-                    plain_language=f"Fill blank values in categorical column '{col}' with most frequent value ('{mode_val}').",
+                    plain_language=f"Fill blanks in '{col}' with its most common value ('{mode_val}').",
                     status="automatic",
                 )
-                decisions.append(fill_dec)
+            )
+        else:
+            decisions.append(
+                Decision(
+                    id="",
+                    stage="clean",
+                    kind="constant_fill",
+                    columns=[col],
+                    action="constant_fill",
+                    evidence={
+                        "missing_rate": missing_rate,
+                        "fill_value": "__missing__",
+                        "threshold": config.impute_strategy_threshold,
+                    },
+                    confidence=0.95,
+                    default="constant_fill",
+                    needs_attention=False,
+                    plain_language=f"Fill blanks in '{col}' with the label '__missing__' so they stay visible.",
+                    status="automatic",
+                )
+            )
 
     return decisions
 
@@ -220,20 +186,10 @@ def plan_impute(
 def apply_impute(
     df: pd.DataFrame,
     decisions: List[Decision],
-    schema: Optional[TableSchema] = None,
 ) -> pd.DataFrame:
-    """
-    Apply missing marker cleaning, missing indicators, and gap filling.
-    """
+    """Add blank-flag columns and fill gaps as specified by decisions."""
     df_out = df.copy()
 
-    # 1. Apply missing value markers from schema if available
-    if schema and schema.columns:
-        for c in schema.columns:
-            if c.name in df_out.columns and c.missing_markers:
-                df_out[c.name] = apply_missing_markers_to_series(df_out[c.name], c.missing_markers)
-
-    # 2. Add indicators and fill values based on decisions
     for d in decisions:
         if not d.columns:
             continue
@@ -245,20 +201,13 @@ def apply_impute(
             indicator = add_missing_indicator(df_out[col])
             df_out[indicator.name] = indicator
 
-        elif d.kind in ("fill_median", "impute_median") and d.action in ("fill_median", "impute_median"):
-            val = d.evidence.get("fill_value")
-            if val is None:
-                _, val = median_impute(df_out[col])
-            df_out[col] = df_out[col].fillna(val)
+        elif d.kind == "fill_median" and d.action == "fill_median":
+            df_out[col] = df_out[col].fillna(d.evidence.get("fill_value"))
 
-        elif d.kind in ("fill_mode", "impute_mode") and d.action in ("fill_mode", "impute_mode"):
-            val = d.evidence.get("fill_value")
-            if val is None:
-                _, val = mode_impute(df_out[col])
-            df_out[col] = df_out[col].fillna(val)
+        elif d.kind == "fill_mode" and d.action == "fill_mode":
+            df_out[col] = df_out[col].fillna(d.evidence.get("fill_value"))
 
         elif d.kind == "constant_fill" and d.action == "constant_fill":
-            val = d.evidence.get("fill_value", "__missing__")
-            df_out[col] = constant_fill(df_out[col], fill_value=val)
+            df_out[col] = constant_fill(df_out[col], fill_value=d.evidence.get("fill_value", "__missing__"))
 
     return df_out

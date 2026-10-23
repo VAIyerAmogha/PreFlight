@@ -81,7 +81,7 @@ def test_column_drops_destructive_threshold_and_target_protection():
         "row_id": list(range(100)),
         "mostly_empty": [1.0] * 10 + [np.nan] * 90,  # 90% missing > 60%
         "constant_col": ["fixed"] * 100,
-        "valid_feature": list(range(100)),
+        "valid_feature": [float(i % 7) for i in range(100)],
         "target": ["fixed"] * 100,  # Constant, but designated as target
     })
 
@@ -121,8 +121,9 @@ def test_normalization_and_rare_categories():
 def test_outlier_clipping_iqr_and_zscore():
     """Verify outlier winsorization with impact threshold."""
     # 99 regular numbers and 1 extreme outlier
+    # Shuffled so the column is not an ascending integer sequence (v1 treats those as IDs).
     vals = list(range(10, 110)) + [99999]
-    s = pd.Series(vals)
+    s = pd.Series(vals).sample(frac=1.0, random_state=0).reset_index(drop=True)
     df = pd.DataFrame({"metric": s})
 
     decs = plan_outliers(df, config=CleanerConfig(outlier_impact_threshold=0.005))
@@ -161,10 +162,11 @@ def test_missing_marker_conversion_and_imputation():
         ],
     )
 
-    decs = plan_impute(df, schema=schema)
+    decs = plan_clean(df, schema=schema)
+    assert any(d.kind == "convert_missing_markers" for d in decs)
     assert any(d.kind == "add_missing_indicator" for d in decs)
 
-    df_imputed = apply_impute(df, decs, schema=schema)
+    df_imputed = apply_clean(df, decs, schema=schema)
     # Check that sentinel "?" is gone from numeric series
     assert "?" not in df_imputed["num"].values
     assert "missing" not in df_imputed["cat"].values

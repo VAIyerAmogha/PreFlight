@@ -1,424 +1,189 @@
 """
-Internal, test-only adapter bridging v1.0.1 public-API test calls
-(prepare, profile, clean, engineer, compare, add_features, run_profiler,
-save_compare_pdf) onto v2.0 components.
+Internal, test-only adapter: runs v1.0.1-style test calls through the v2 CSV path.
 
-This module intentionally lives under tests/ rather than src/preflight/ so
-that the v2 public package surface (preflight/__init__.py) stays clean of
-v1 compatibility shims. See docs/port_contract.md and docs/port_regressions.md
-for the rationale behind each bridging decision.
+v1 tests pass DataFrames to `prepare(df, ...)` etc. v2 deliberately has no public
+DataFrame API (see docs/port_contract.md), so every call here:
 
-The profiling logic below (`run_profiler` and its helpers) is a direct port
-of v1 `preflight/profiler.py`: v2 deliberately does not have a monolithic
-profiler (see port_contract.md section 5), so the EDA signals it used to
-compute (missing_rate, cardinality, rare_categories, correlation/mutual-info
-with target, VIF, leakage suspicion, text stats) are reconstructed here
-purely from pandas/numpy/sklearn, unchanged from v1 behavior.
+  1. writes the DataFrame to a CSV in a temporary directory,
+  2. runs it through v2: `Planner.plan` (read, infer types, plan cleaning and
+     engineering), `apply(mode="defaults")` (safe defaults for open questions),
+  3. wraps the outcome in the v1 result shapes the old assertions expect
+     (PrepResult, Report, ColumnProfile, SemanticType).
+
+Nothing here is exported from `preflight`. No v1 profiler logic lives here: column
+kinds and numbers come from `preflight.signals` (schema-driven). The v1 `Report`,
+`PrepResult` and `ColumnProfile` containers come from the compat modules in `src`.
+`compare` and `save_compare_pdf` are v1 test helpers carried over unchanged.
 """
 
 from __future__ import annotations
 
-import logging
-import os
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-import pandas as pd
-from dateutil.parser import ParserError, parse
-from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
-from sklearn.preprocessing import OrdinalEncoder
+import matplotlib
+matplotlib.use("Agg")
 
+import pandas as pd
+
+from preflight.clean.config import CleanerConfig
+from preflight.clean.cleaner import apply_clean
+from preflight.engineer.engineer import apply_engineer, plan_engineer
 from preflight.assemble import build_pipeline_two_phase
-from preflight.clean.cleaner import coerce_numeric_string_column, run_cleaner
-from preflight.engineer.engineer import add_features, run_engineer
-from preflight.report.report import (
-    SEVERITY_COLORS,
-    Report,
-    _truncate_label,
-    plot_class_distribution,
-    plot_correlation_heatmap,
-    plot_missingness_heatmap,
-    plot_mutual_info_bar_chart,
+from preflight.decisions import Decision
+from preflight.plan import (
+    ApplyContext,
+    Planner,
+    ReadingStage,
+    TypingStage,
+    _schema_with_actions,
+    _working_frame,
+    apply as v2_apply,
+    replan_prep,
 )
+from preflight.interact.resolve import resolve
+from preflight.report.report import Report
+from preflight.signals import compute_signals
 from preflight.types import PRESETS, ColumnProfile, FeatureConfig, PrepResult, ReportEntry, SemanticType, _UNSET
 from preflight.validation import _validate_inputs
-
-logger = logging.getLogger(__name__)
 
 __all__ = [
     "prepare", "profile", "clean", "engineer", "compare",
     "add_features", "run_profiler", "save_compare_pdf",
 ]
 
-
-# ===========================================================================
-# Profiler port (v1 preflight/profiler.py -> v2 bridge; no v2 equivalent)
-# ===========================================================================
-
-def detect_mixed_types(series: pd.Series) -> bool:
-    non_null = series.dropna()
-    if len(non_null) == 0:
-        return False
-    return non_null.apply(type).nunique() > 1
-
-
-def infer_semantic_type(series: pd.Series, cardinality_threshold: int = 20) -> SemanticType:
-    non_null = series.dropna()
-    n_unique = non_null.nunique()
-    total_len = len(series)
-
-    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
-        sample_size = min(100, len(non_null))
-        sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
-        sample_str = sample.astype(str)
-        avg_len = sample_str.str.len().mean()
-        avg_words = sample_str.str.split().str.len().mean()
-        if avg_len > 50 or (avg_len > 30 and avg_words >= 5):
-            return SemanticType.TEXT
-
-    if n_unique <= 1:
-        return SemanticType.CONSTANT
-
-    if pd.api.types.is_bool_dtype(series) or n_unique == 2:
-        return SemanticType.BOOLEAN
-
-    if pd.api.types.is_datetime64_any_dtype(series):
-        return SemanticType.DATETIME_NATIVE
-
-    if pd.api.types.is_numeric_dtype(series):
-        name_lower = str(series.name).lower() if series.name else ""
-        cat_patterns = ["zip", "postal", "postcode"]
-        if any(pat in name_lower for pat in cat_patterns):
-            return SemanticType.CATEGORICAL_LOW if n_unique < cardinality_threshold else SemanticType.CATEGORICAL_HIGH
-
-        is_high_cardinality = (n_unique / total_len >= 0.95) if total_len > 0 else False
-        id_patterns = ["id", "_id", "pk", "index"]
-        matches_id_pattern = any(pat in name_lower for pat in id_patterns)
-        is_integer = pd.api.types.is_integer_dtype(series)
-        is_monotonic = series.is_monotonic_increasing or series.is_monotonic_decreasing
-
-        if is_high_cardinality and (matches_id_pattern or (is_monotonic and is_integer)):
-            return SemanticType.NUMERIC_ID
-        return SemanticType.NUMERIC_FEATURE
-
-    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series) or isinstance(series.dtype, pd.CategoricalDtype):
-        sample_size = min(100, len(non_null))
-        sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
-        if len(sample) > 0:
-            success_count = 0
-            for val in sample:
-                try:
-                    if isinstance(val, str):
-                        parse(val, fuzzy=False)
-                        success_count += 1
-                except (ValueError, TypeError, OverflowError, ParserError):
-                    pass
-            if success_count / len(sample) > 0.9:
-                return SemanticType.DATETIME_STRING
-
-    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
-        uniqueness_ratio = n_unique / len(non_null) if len(non_null) > 0 else 0
-        if n_unique >= cardinality_threshold or uniqueness_ratio >= 0.1:
-            sample_size = min(100, len(non_null))
-            sample = non_null.sample(n=sample_size, random_state=42) if len(non_null) > 100 else non_null
-            sample_str = sample.astype(str)
-            avg_len = sample_str.str.len().mean()
-            avg_words = sample_str.str.split().str.len().mean()
-            if avg_len > 50 or (avg_len > 30 and avg_words >= 5):
-                return SemanticType.TEXT
-
-    return SemanticType.CATEGORICAL_LOW if n_unique < cardinality_threshold else SemanticType.CATEGORICAL_HIGH
+_TYPE_FOR_KIND = {
+    SemanticType.NUMERIC_FEATURE: "float",
+    SemanticType.NUMERIC_ID: "ID",
+    SemanticType.CATEGORICAL_LOW: "categorical",
+    SemanticType.CATEGORICAL_HIGH: "categorical",
+    SemanticType.BOOLEAN: "boolean",
+    SemanticType.CONSTANT: "constant",
+    SemanticType.TEXT: "text",
+    SemanticType.DATETIME_NATIVE: "datetime",
+    SemanticType.DATETIME_STRING: "datetime",
+}
 
 
-def compute_missing_rate(series: pd.Series) -> float:
-    return 0.0 if len(series) == 0 else float(series.isna().mean())
+class _Run:
+    """One DataFrame pushed through the v2 CSV path."""
+
+    def __init__(self, df, target, task, model_hint, cleaner_config, feature_config, column_types):
+        self.df, self.target, self.task, self.model_hint = df, target, task, model_hint
+        self.cleaner_config, self.feature_config = cleaner_config, feature_config
+        self.tmp = Path(tempfile.mkdtemp(prefix="pf_adapter_"))
+        try:
+            self.csv = self.tmp / "data.csv"
+            df.to_csv(self.csv, index=False)
+            self.plan = Planner().plan(
+                self.csv, target=target, task=task, model_hint=model_hint,
+                feature_config=feature_config, cleaner_config=cleaner_config,
+            )
+            if column_types:
+                for c in self.plan.schema.columns:
+                    if c.name in column_types:
+                        c.type_override = _TYPE_FOR_KIND[column_types[c.name]]
+                replan_prep(self.plan, cleaner_config)
+            # defaults mode: every open question takes its safe default (v1 had no questions)
+            resolve(self.plan, mode="defaults", out_dir=self.tmp / "out")
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def typed(self) -> pd.DataFrame:
+        """Table as v2 reads and types it (working dtypes), nothing cleaned yet."""
+        raw = ReadingStage().apply(ApplyContext(source_path=self.csv), self.plan.decisions)
+        ctx = ApplyContext(
+            source_path=self.csv, target_column=self.target, task_type=self.task,
+            raw_data=raw, schema=self.plan.schema, decisions=self.plan.decisions,
+        )
+        return _working_frame(TypingStage().apply(ctx, self.plan.decisions))
+
+    def profiles(self, typed: pd.DataFrame) -> List[ColumnProfile]:
+        schema = _schema_with_actions(self.plan.schema, [d for d in self.plan.decisions if d.stage == "infer"])
+        sigs = compute_signals(
+            typed, schema, self.target, task=self.task,
+            cardinality_threshold=self.cleaner_config.cardinality_threshold,
+        )
+        out = []
+        for name, s in sigs.items():
+            out.append(ColumnProfile(
+                name=name, semantic_type=SemanticType[s.kind], missing_rate=s.missing_rate,
+                dtype=typed[name].dtype, outlier_rate=s.outlier_rate, cardinality=s.cardinality,
+                rare_categories=s.rare_categories, vif_score=s.vif_score,
+                correlation_with_target=s.correlation_with_target,
+                mutual_info_with_target=s.mutual_info_with_target,
+                is_leakage_suspect=s.is_leakage_suspect,
+                text_avg_length=s.text_avg_length, text_avg_word_count=s.text_avg_word_count,
+            ))
+        return out
 
 
-def compute_outlier_rate(series: pd.Series) -> Optional[float]:
-    if not pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
-        return None
-    non_null = series.dropna()
-    if len(non_null) == 0:
-        return 0.0
-    q1, q3 = non_null.quantile(0.25), non_null.quantile(0.75)
-    iqr = q3 - q1
-    if iqr == 0:
-        return None
-    lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-    outliers = non_null[(non_null < lower) | (non_null > upper)]
-    return float(len(outliers) / len(non_null))
+def _entries(decisions: List[Decision], stages: Tuple[str, ...]) -> List[ReportEntry]:
+    out = []
+    for d in decisions:
+        stage = "profiler" if d.stage in ("ingest", "infer") else d.stage
+        if stage not in stages:
+            continue
+        out.append(ReportEntry(
+            stage=stage, column=(d.columns[0] if d.columns else "__all__"), action=d.action,
+            rationale=d.plain_language or d.action,
+            severity="warning" if d.needs_attention else "info",
+        ))
+    return out
 
 
-def compute_cardinality(series: pd.Series) -> int:
-    return int(series.nunique())
+class _CsvPipeline:
+    """Fitted pipeline whose `transform` reads new rows through the same CSV path."""
+
+    def __init__(self, pipeline, run: _Run):
+        self._pipeline, self._run = pipeline, run
+        self.named_steps = pipeline.named_steps
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        tmp = Path(tempfile.mkdtemp(prefix="pf_adapter_new_"))
+        try:
+            csv = tmp / "new.csv"
+            X.to_csv(csv, index=False)
+            raw = ReadingStage().apply(ApplyContext(source_path=csv), self._run.plan.decisions)
+            schema = self._run.plan.schema
+            keep = [c for c in schema.columns if c.name in raw.columns]
+            sub = type(schema).from_dict(schema.to_dict())
+            sub.columns = [c for c in sub.columns if c.name in raw.columns]
+            ctx = ApplyContext(source_path=csv, raw_data=raw, schema=sub, decisions=self._run.plan.decisions)
+            typed = _working_frame(TypingStage().apply(ctx, self._run.plan.decisions))
+            return self._pipeline.transform(typed)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def __getattr__(self, name):
+        return getattr(self._pipeline, name)
 
 
-def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> List[str]:
-    non_null = series.dropna()
-    if len(non_null) == 0:
-        return []
-    freqs = non_null.value_counts(normalize=True)
-    return [str(x) for x in freqs[freqs < threshold].index]
-
-
-def compute_correlation_with_target(series: pd.Series, target: pd.Series) -> Optional[float]:
-    if not pd.api.types.is_numeric_dtype(series) or not pd.api.types.is_numeric_dtype(target):
-        return None
-    val = series.corr(target)
-    return None if pd.isna(val) else float(val)
-
-
-def compute_mutual_info_with_target(series: pd.Series, target: pd.Series, task: str) -> Optional[float]:
-    valid_idx = series.notna() & target.notna()
-    s, t = series[valid_idx], target[valid_idx]
-    if len(s) == 0:
-        return None
-    s_encoded = s if pd.api.types.is_numeric_dtype(s) else OrdinalEncoder().fit_transform(s.to_frame()).flatten()
-    X = np.array(s_encoded).reshape(-1, 1)
-    y = np.array(t)
-    if task == "regression":
-        if not pd.api.types.is_numeric_dtype(target):
-            return None
-        mi = mutual_info_regression(X, y)
-    elif task == "classification":
-        mi = mutual_info_classif(X, y)
-    else:
-        return None
-    return float(mi[0])
-
-
-def flag_leakage_suspect(correlation: Optional[float], threshold: float = 0.95) -> bool:
-    return False if correlation is None else abs(correlation) > threshold
-
-
-def compute_class_imbalance_ratio(target: pd.Series) -> Optional[float]:
-    if pd.api.types.is_float_dtype(target):
-        return None
-    counts = target.dropna().value_counts()
-    if len(counts) < 2:
-        return None
-    return float(counts.max() / counts.min())
-
-
-def compute_vif_scores(df: pd.DataFrame, numeric_columns: List[str]) -> Tuple[Dict[str, Optional[float]], bool]:
-    result: Dict[str, Optional[float]] = {col: None for col in numeric_columns}
-    if not numeric_columns:
-        return result, False
-    capped = False
-    cols_to_compute = numeric_columns
-    if len(numeric_columns) > 50:
-        capped = True
-        variances = df[numeric_columns].var()
-        cols_to_compute = variances.nlargest(50).index.tolist()
-    df_clean = df[cols_to_compute].dropna()
-    if len(df_clean) < 2 or len(cols_to_compute) < 2:
-        return result, capped
-    corr = df_clean.corr().values
-    try:
-        inv_corr = np.linalg.inv(corr)
-        for i, col in enumerate(cols_to_compute):
-            vif = inv_corr[i, i]
-            result[col] = float(vif) if vif > 0 else 0.0
-    except np.linalg.LinAlgError:
-        pass
-    return result, capped
+def _cleaner_config(drop_threshold, outlier_method, cardinality_threshold) -> CleanerConfig:
+    return CleanerConfig(
+        drop_missing_threshold=drop_threshold, outlier_method=outlier_method,
+        cardinality_threshold=cardinality_threshold,
+    )
 
 
 def run_profiler(
     df: pd.DataFrame,
     target: str,
-    task: str,
+    task: str = "classification",
     cardinality_threshold: int = 20,
     column_types: Optional[Dict[str, SemanticType]] = None,
 ) -> Tuple[List[ColumnProfile], List[ReportEntry]]:
-    profiles: List[ColumnProfile] = []
-    reports: List[ReportEntry] = []
-
-    df = df.copy()
-    target_series = df[target] if target in df.columns else None
-    numeric_feature_cols: List[str] = []
-
-    for col in df.columns:
-        if col == target:
-            continue
-
-        series = df[col]
-        name_lower = str(col).lower()
-        matches_cat_pattern = any(pat in name_lower for pat in ("zip", "postal", "postcode"))
-
-        coerced_series, unit = (None, None)
-        if not matches_cat_pattern:
-            coerced_series, unit = coerce_numeric_string_column(series)
-
-        if coerced_series is not None:
-            total_len = len(series)
-            n_unique = series.nunique()
-            is_high_cardinality = (n_unique / total_len >= 0.95) if total_len > 0 else False
-
-            if is_high_cardinality:
-                id_patterns = ["id", "_id", "pk", "index"]
-                matches_id_pattern = any(pat in name_lower for pat in id_patterns)
-                try:
-                    coerced_non_null = coerced_series.dropna()
-                    is_integer = (coerced_non_null % 1 == 0).all() if len(coerced_non_null) > 0 else False
-                except Exception:
-                    is_integer = False
-                is_monotonic = coerced_series.is_monotonic_increasing or coerced_series.is_monotonic_decreasing
-
-                if matches_id_pattern or (is_monotonic and is_integer):
-                    series = coerced_series
-                    df[col] = coerced_series
-                    reports.append(ReportEntry(
-                        stage="profiler", column=col, action="coerce_numeric",
-                        rationale=f"Inferred string column as numeric ID. Cleaned unit/whitespace suffix: '{unit}'." if unit else "Inferred string column as numeric ID by stripping whitespace.",
-                        severity="info",
-                    ))
-                elif is_integer and not unit:
-                    reports.append(ReportEntry(
-                        stage="profiler", column=col, action="skip_coerce",
-                        rationale="Classified as high-cardinality categorical / ID-like despite looking numeric.",
-                        severity="info",
-                    ))
-                else:
-                    series = coerced_series
-                    df[col] = coerced_series
-                    reports.append(ReportEntry(
-                        stage="profiler", column=col, action="coerce_numeric",
-                        rationale=f"Inferred string column as numeric. Cleaned unit/whitespace suffix: '{unit}'." if unit else "Inferred string column as numeric by stripping whitespace.",
-                        severity="info",
-                    ))
-            else:
-                series = coerced_series
-                df[col] = coerced_series
-                reports.append(ReportEntry(
-                    stage="profiler", column=col, action="coerce_numeric",
-                    rationale=f"Inferred string column as numeric. Cleaned unit/whitespace suffix: '{unit}'." if unit else "Inferred string column as numeric by stripping whitespace.",
-                    severity="info",
-                ))
-
-        sem_type = infer_semantic_type(series, cardinality_threshold=cardinality_threshold)
-
-        if sem_type == SemanticType.NUMERIC_FEATURE:
-            numeric_feature_cols.append(col)
-
-        has_mixed = detect_mixed_types(series)
-        if has_mixed:
-            reports.append(ReportEntry(
-                stage="profiler", column=col, action="flagged_mixed_types",
-                rationale="Column contains multiple Python types among non-null values.",
-                severity="warning",
-            ))
-
-        missing = compute_missing_rate(series)
-        if missing > 0.3:
-            reports.append(ReportEntry(
-                stage="profiler", column=col, action="flagged_high_missingness",
-                rationale=f"Missingness rate is {missing:.1%}, > 30%",
-                severity="warning", before_stats={"missing_rate": missing},
-            ))
-
-        outlier = compute_outlier_rate(series)
-        cardinality = compute_cardinality(series)
-
-        rare = None
-        if sem_type in (SemanticType.CATEGORICAL_LOW, SemanticType.CATEGORICAL_HIGH):
-            rare = identify_rare_categories(series, threshold=0.01)
-
-        if sem_type == SemanticType.CATEGORICAL_HIGH:
-            reports.append(ReportEntry(
-                stage="profiler", column=col, action="flagged_high_cardinality",
-                rationale=f"Cardinality is {cardinality}, >= {cardinality_threshold}",
-                severity="warning", before_stats={"cardinality": cardinality},
-            ))
-
-        corr = None
-        if sem_type in (SemanticType.NUMERIC_FEATURE, SemanticType.NUMERIC_ID) and target_series is not None:
-            corr = compute_correlation_with_target(series, target_series)
-
-        is_leak = flag_leakage_suspect(corr)
-        if is_leak:
-            reports.append(ReportEntry(
-                stage="profiler", column=col, action="flagged_leakage_suspect",
-                rationale=f"Absolute correlation with target is {abs(corr):.3f} > 0.95",
-                severity="critical", before_stats={"correlation": corr},
-            ))
-
-        mi = None
-        if target_series is not None and sem_type not in (SemanticType.CONSTANT, SemanticType.NUMERIC_ID):
-            mi = compute_mutual_info_with_target(series, target_series, task=task)
-
-        prof = ColumnProfile(
-            name=col, semantic_type=sem_type, missing_rate=missing,
-            dtype=str(series.dtype), outlier_rate=outlier, cardinality=cardinality,
-            rare_categories=rare, vif_score=None, correlation_with_target=corr,
-            mutual_info_with_target=mi, is_leakage_suspect=is_leak,
-        )
-
-        if sem_type == SemanticType.TEXT:
-            non_null_text = series.dropna().astype(str)
-            text_avg_length = float(non_null_text.str.len().mean()) if len(non_null_text) > 0 else 0.0
-            text_avg_word_count = float(non_null_text.str.split().str.len().mean()) if len(non_null_text) > 0 else 0.0
-            prof.text_avg_length = text_avg_length
-            prof.text_avg_word_count = text_avg_word_count
-            prof.text_missing_rate = missing
-            reports.append(ReportEntry(
-                stage="profiler", column=col, action="flagged_text_column",
-                rationale="Column detected as text (high cardinality, high average length). Only basic stats computed in this phase, no feature generation.",
-                severity="info",
-                before_stats={
-                    "text_avg_length": text_avg_length,
-                    "text_avg_word_count": text_avg_word_count,
-                    "text_missing_rate": missing,
-                },
-            ))
-
-        profiles.append(prof)
-
-    if column_types:
-        for p in profiles:
-            if p.name in column_types:
-                orig_type = p.semantic_type
-                p.semantic_type = column_types[p.name]
-                reports.append(ReportEntry(
-                    stage="profiler", column=p.name, action="manual_semantic_type_override",
-                    rationale=f"column '{p.name}' forced to {p.semantic_type.name} (auto-inferred was {orig_type.name})",
-                    severity="info",
-                ))
-                if p.semantic_type == SemanticType.NUMERIC_FEATURE and p.name not in numeric_feature_cols:
-                    numeric_feature_cols.append(p.name)
-                elif p.semantic_type != SemanticType.NUMERIC_FEATURE and p.name in numeric_feature_cols:
-                    numeric_feature_cols.remove(p.name)
-
-    if numeric_feature_cols:
-        vif_scores, capped = compute_vif_scores(df, numeric_feature_cols)
-        if capped:
-            reports.append(ReportEntry(
-                stage="profiler", column="dataset", action="capped_vif_computation",
-                rationale="VIF computation capped at top 50 numeric features by variance.",
-                severity="warning",
-            ))
-        for prof in profiles:
-            if prof.name in numeric_feature_cols:
-                prof.vif_score = vif_scores.get(prof.name, None)
-
-    if task == "classification" and target_series is not None:
-        imbalance = compute_class_imbalance_ratio(target_series)
-        if imbalance is not None and imbalance > 10.0:
-            reports.append(ReportEntry(
-                stage="profiler", column=target, action="flagged_class_imbalance",
-                rationale=f"Class imbalance ratio is {imbalance:.1f}:1",
-                severity="warning", before_stats={"imbalance_ratio": imbalance},
-            ))
-
-    return profiles, reports
-
-
-# ===========================================================================
-# v1 public API bridge: prepare / profile / clean / engineer / compare
-# ===========================================================================
-
-def _col_name(p: Any) -> str:
-    return p.name if hasattr(p, "name") else (p.columns[0] if getattr(p, "columns", None) else str(p))
+    run = _Run(df, target, task, "tree", _cleaner_config(0.6, "iqr", cardinality_threshold), None, column_types)
+    try:
+        return run.profiles(run.typed()), _entries(run.plan.decisions, ("profiler",))
+    finally:
+        run.close()
 
 
 def prepare(
@@ -437,104 +202,64 @@ def prepare(
     if not isinstance(dry_run, bool):
         raise TypeError("The 'dry_run' argument must be True or False.")
 
-    actual_drop_threshold = 0.6
-    actual_outlier_method = "iqr"
-    actual_cardinality_threshold = 20
-    actual_feature_config = None
-    actual_column_types = None
-
+    drop_t, outlier_m, card_t, fcfg, ctypes = 0.6, "iqr", 20, None, None
     if preset is not None:
         if preset not in PRESETS:
             valid = ", ".join(PRESETS.keys())
             raise ValueError(f"We don't recognize the preset name '{preset}'. Please choose one of these instead: {valid}.")
-        p_dict = PRESETS[preset]
-        actual_drop_threshold = p_dict.get("drop_threshold", actual_drop_threshold)
-        actual_outlier_method = p_dict.get("outlier_method", actual_outlier_method)
-        actual_cardinality_threshold = p_dict.get("cardinality_threshold", actual_cardinality_threshold)
-        actual_feature_config = p_dict.get("feature_config", actual_feature_config)
-
+        p = PRESETS[preset]
+        drop_t, outlier_m = p.get("drop_threshold", drop_t), p.get("outlier_method", outlier_m)
+        card_t, fcfg = p.get("cardinality_threshold", card_t), p.get("feature_config", fcfg)
     if drop_threshold is not _UNSET:
-        actual_drop_threshold = drop_threshold
+        drop_t = drop_threshold
     if outlier_method is not _UNSET:
-        actual_outlier_method = outlier_method
+        outlier_m = outlier_method
     if cardinality_threshold is not _UNSET:
-        actual_cardinality_threshold = cardinality_threshold
+        card_t = cardinality_threshold
     if feature_config is not _UNSET:
-        actual_feature_config = feature_config
+        fcfg = feature_config
     if column_types is not _UNSET:
-        actual_column_types = column_types
+        ctypes = column_types
 
-    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=actual_column_types)
+    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=ctypes)
+    run = _Run(df, target, task, model_hint, _cleaner_config(drop_t, outlier_m, card_t), fcfg, ctypes)
+    try:
+        typed = run.typed()
+        profiles = run.profiles(typed)
+        prefix: List[ReportEntry] = []
+        if warning is not None:
+            prefix.append(ReportEntry(stage="profiler", column=target, action="task_target_mismatch_warning",
+                                      rationale=warning, severity="warning"))
+        if preset is not None:
+            prefix.append(ReportEntry(
+                stage="profiler", column="__all__", action="apply_preset",
+                rationale=f"Applied preset '{preset}'. Expanded parameters: "
+                          f"{ {'drop_threshold': drop_t, 'outlier_method': outlier_m, 'cardinality_threshold': card_t} }",
+                severity="info"))
+        entries = prefix + _entries(run.plan.decisions, ("profiler", "clean", "engineer"))
 
-    if dry_run:
-        profiles, profiler_entries = run_profiler(
-            df=df, target=target, task=task, cardinality_threshold=actual_cardinality_threshold, column_types=actual_column_types,
+        if dry_run:
+            entries.insert(0, ReportEntry(
+                stage="profiler", column="dataset", action="dry_run",
+                rationale="dry run mode enabled: no data was transformed and no pipeline was fitted.",
+                severity="info"))
+            return PrepResult(df=df, pipeline=None, report=Report(entries, df=df, profiles=profiles, target=target))
+
+        res = v2_apply(run.plan, mode="defaults", out_dir=run.tmp / "out2")
+        final = res.prepared.copy()
+        X = typed.drop(columns=[target]) if target in typed.columns else typed
+        y = typed[target] if target in typed.columns else None
+        pipe = build_pipeline_two_phase(
+            X, y, target, model_hint, res.decisions, run.plan.schema, fcfg,
+            run.cleaner_config, card_t, task,
         )
-        _df_clean, surviving_profiles, cleaner_entries, _specs = run_cleaner(
-            df=df, profiles=profiles, target=target, drop_threshold=actual_drop_threshold, outlier_method=actual_outlier_method,
+        return PrepResult(
+            df=final, pipeline=_CsvPipeline(pipe, run),
+            report=Report(entries, df=df, profiles=profiles, target=target),
         )
-        _, engineer_entries, _ = run_engineer(
-            df=_df_clean, profiles=surviving_profiles, target=target, model_hint=model_hint,
-            cardinality_threshold=actual_cardinality_threshold, feature_config=actual_feature_config,
-        )
-
-        all_entries = profiler_entries + cleaner_entries + engineer_entries
-        all_entries.insert(0, ReportEntry(
-            stage="profiler", column="dataset", action="dry_run",
-            rationale="dry run mode enabled: no data was transformed and no pipeline was fitted.",
-            severity="info",
-        ))
-
-        report = Report(all_entries, df=df, profiles=surviving_profiles, target=target)
-        result = PrepResult(df=df, pipeline=None, report=report)
-    else:
-        profiles, profiler_entries = run_profiler(
-            df=df, target=target, task=task, cardinality_threshold=actual_cardinality_threshold, column_types=actual_column_types,
-        )
-        X = df.drop(columns=[target]) if target in df.columns else df.copy()
-        y = df[target] if target in df.columns else None
-
-        pipeline = build_pipeline_two_phase(
-            profiles=profiles, target=target, model_hint=model_hint, X=X, y=y,
-            drop_threshold=actual_drop_threshold, outlier_method=actual_outlier_method,
-            cardinality_threshold=actual_cardinality_threshold, feature_config=actual_feature_config,
-        )
-
-        X_final = pipeline.transform(X)
-        final_df = X_final.copy()
-        if y is not None:
-            final_df[target] = y
-
-        cleaner_step = pipeline.named_steps["cleaner"]
-        engineer_step = pipeline.named_steps["engineer"]
-        all_entries = profiler_entries + cleaner_step.report_entries_ + engineer_step.report_entries_
-        report = Report(entries=all_entries, df=df, profiles=cleaner_step.fitted_profiles_, target=target)
-
-        result = PrepResult(df=final_df, pipeline=pipeline, report=report)
-
-    if preset is not None and result.report is not None:
-        preset_expanded = {
-            "drop_threshold": actual_drop_threshold,
-            "outlier_method": actual_outlier_method,
-            "cardinality_threshold": actual_cardinality_threshold,
-            "feature_config": str(actual_feature_config) if actual_feature_config else None,
-        }
-        result.report._entries.insert(0, ReportEntry(
-            stage="profiler", column="__all__", action="apply_preset",
-            rationale=f"Applied preset '{preset}'. Expanded parameters: {preset_expanded}",
-            severity="info",
-        ))
-
-    if warning is not None and result.report is not None:
-        result.report._entries.insert(0, ReportEntry(
-            stage="profiler", column=target, action="task_target_mismatch_warning",
-            rationale=warning, severity="warning",
-        ))
-
-    if not dry_run and actual_feature_config is not None:
-        result = add_features(result, actual_feature_config, target=target)
-
-    return result
+    finally:
+        # the pipeline keeps the plan (decisions, schema) it needs; only files are removed
+        run.close()
 
 
 def profile(
@@ -546,77 +271,65 @@ def profile(
     column_types: Optional[Dict[str, SemanticType]] = None,
 ) -> PrepResult:
     warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
-    profiles, profiler_entries = run_profiler(
-        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types,
-    )
+    profiles, entries = run_profiler(df, target, task, cardinality_threshold, column_types)
     if warning is not None:
-        profiler_entries = [ReportEntry(
-            stage="profiler", column=target, action="task_target_mismatch_warning",
-            rationale=warning, severity="warning",
-        )] + profiler_entries
-
-    return PrepResult(df=df, pipeline=None, report=Report(profiler_entries, df=df, profiles=profiles, target=target))
+        entries = [ReportEntry(stage="profiler", column=target, action="task_target_mismatch_warning",
+                               rationale=warning, severity="warning")] + entries
+    return PrepResult(df=df, pipeline=None, report=Report(entries, df=df, profiles=profiles, target=target))
 
 
-def clean(
-    df: pd.DataFrame,
-    target: str,
-    task: str = "classification",
-    model_hint: str = "tree",
-    drop_threshold: float = 0.6,
-    outlier_method: str = "iqr",
-    cardinality_threshold: int = 20,
-    column_types: Optional[Dict[str, SemanticType]] = None,
-) -> PrepResult:
+def _run_steps(df, target, task, model_hint, drop_threshold, outlier_method, cardinality_threshold,
+               column_types, with_engineer):
     warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
-    profiles, profiler_entries = run_profiler(
-        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types,
-    )
-    df_clean, surviving_profiles, cleaner_entries, _specs = run_cleaner(
-        df=df, profiles=profiles, target=target, drop_threshold=drop_threshold, outlier_method=outlier_method,
-    )
+    run = _Run(df, target, task, model_hint, _cleaner_config(drop_threshold, outlier_method, cardinality_threshold),
+               None, column_types)
+    try:
+        typed = run.typed()
+        profiles = run.profiles(typed)
+        decs = run.plan.decisions
+        cleaned = apply_clean(typed, [d for d in decs if d.stage == "clean"], run.plan.schema)
+        stages = ("profiler", "clean")
+        if with_engineer:
+            cleaned, _ = apply_engineer(cleaned, [d for d in decs if d.stage == "engineer"], target=target)
+            stages = stages + ("engineer",)
+        entries = _entries(decs, stages)
+        if warning is not None:
+            entries = [ReportEntry(stage="profiler", column=target, action="task_target_mismatch_warning",
+                                   rationale=warning, severity="warning")] + entries
+        return PrepResult(df=cleaned, pipeline=None, report=Report(entries, df=cleaned, profiles=profiles, target=target))
+    finally:
+        run.close()
 
-    all_entries = profiler_entries + cleaner_entries
-    if warning is not None:
-        all_entries = [ReportEntry(
-            stage="profiler", column=target, action="task_target_mismatch_warning",
-            rationale=warning, severity="warning",
-        )] + all_entries
 
-    return PrepResult(df=df_clean, pipeline=None, report=Report(all_entries, df=df_clean, profiles=surviving_profiles, target=target))
+def clean(df, target, task="classification", model_hint="tree", drop_threshold=0.6,
+          outlier_method="iqr", cardinality_threshold=20, column_types=None) -> PrepResult:
+    return _run_steps(df, target, task, model_hint, drop_threshold, outlier_method,
+                      cardinality_threshold, column_types, with_engineer=False)
 
 
-def engineer(
-    df: pd.DataFrame,
-    target: str,
-    task: str = "classification",
-    model_hint: str = "tree",
-    drop_threshold: float = 0.6,
-    outlier_method: str = "iqr",
-    cardinality_threshold: int = 20,
-    column_types: Optional[Dict[str, SemanticType]] = None,
-) -> PrepResult:
-    warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
-    profiles, profiler_entries = run_profiler(
-        df=df, target=target, task=task, cardinality_threshold=cardinality_threshold, column_types=column_types,
-    )
-    df_clean, surviving_profiles, cleaner_entries, _specs_c = run_cleaner(
-        df=df, profiles=profiles, target=target, drop_threshold=drop_threshold, outlier_method=outlier_method,
-    )
-    df_eng, engineer_entries, _specs_e = run_engineer(
-        df=df_clean, profiles=surviving_profiles, target=target, model_hint=model_hint,
-        cardinality_threshold=cardinality_threshold,
-    )
+def engineer(df, target, task="classification", model_hint="tree", drop_threshold=0.6,
+             outlier_method="iqr", cardinality_threshold=20, column_types=None) -> PrepResult:
+    return _run_steps(df, target, task, model_hint, drop_threshold, outlier_method,
+                      cardinality_threshold, column_types, with_engineer=True)
 
-    all_entries = profiler_entries + cleaner_entries + engineer_entries
-    if warning is not None:
-        all_entries = [ReportEntry(
-            stage="profiler", column=target, action="task_target_mismatch_warning",
-            rationale=warning, severity="warning",
-        )] + all_entries
 
-    return PrepResult(df=df_eng, pipeline=None, report=Report(all_entries, df=df_eng, profiles=surviving_profiles, target=target))
+def add_features(result: PrepResult, config: FeatureConfig, target: Optional[str] = None) -> PrepResult:
+    """Add generated columns (interactions, clusters, ...) to an already prepared table."""
+    if result is None or result.df is None:
+        raise ValueError("You must provide a preparation result that has a dataset.")
+    task = "classification"
+    decs = plan_engineer(result.df, None, target, "tree", 20, config, task)
+    created = [d for d in decs if d.kind.startswith("create_")]
+    df2, _ = apply_engineer(result.df, created, target=target)
+    entries = list(result.report.entries) if result.report is not None else []
+    entries += _entries(created, ("engineer",))
+    return PrepResult(df=df2, pipeline=result.pipeline,
+                      report=Report(entries, df=df2, profiles=getattr(result.report, "profiles", None), target=target))
 
+
+# ---------------------------------------------------------------------------
+# v1 test helpers carried over unchanged
+# ---------------------------------------------------------------------------
 
 def _extract_actions_per_column(report: Optional[Report]) -> Dict[str, set]:
     if report is None:

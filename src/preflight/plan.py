@@ -8,7 +8,7 @@ Exposes the stage-based planner and apply lifecycle:
   Any value that fails conversion is recorded in an anomalies record with its row and column.
 - Task inference: infers classification vs. regression when a target column is specified,
   emitting a needs_attention Decision when inference is ambiguous.
-- Registry architecture: clean and engineer stages register cleanly as future extensions.
+- Registry architecture: stages are registered in execution order; cleaning and engineering steps (PrepStage) plan from one shared in-memory simulation.
 - dry_run: writes plan.json and Plan PDF, with strict failure isolation.
 """
 
@@ -22,7 +22,17 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tupl
 import pandas as pd
 from dateutil import parser as date_parser
 
+from preflight.clean.cleaner import apply_coerce, plan_clean_full
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
+from preflight.clean.dedupe import apply_dedupe
+from preflight.clean.drops import apply_drops
+from preflight.clean.impute import apply_impute
+from preflight.clean.markers import apply_markers
+from preflight.clean.normalize import apply_normalization
+from preflight.clean.outliers import apply_outliers
 from preflight.decisions import Decision, compute_decision_fingerprint
+from preflight.engineer.config import FeatureConfig
+from preflight.engineer.engineer import apply_engineer, plan_engineer
 from preflight.infer import infer_table_types
 from preflight.ingest import detect_dialect, detect_encoding, detect_header, load_raw
 from preflight.report.plan_pdf import render_plan_pdf
@@ -51,6 +61,11 @@ class PlanContext:
     raw_data: Optional[pd.DataFrame] = None
     schema: Optional[TableSchema] = None
     decisions: List[Decision] = field(default_factory=list)
+    model_hint: str = "tree"
+    feature_config: Optional[FeatureConfig] = None
+    cleaner_config: CleanerConfig = field(default_factory=lambda: DEFAULT_CLEANER_CONFIG)
+    # Cleaning and engineering Decisions, computed once on first use (see _ensure_prep_plan)
+    prep_decisions: Optional[List[Decision]] = None
 
 
 @dataclass
@@ -64,14 +79,23 @@ class ApplyContext:
     schema: Optional[TableSchema] = None
     decisions: List[Decision] = field(default_factory=list)
     anomalies: List[Dict[str, Any]] = field(default_factory=list)
+    prepared_data: Optional[pd.DataFrame] = None
+    engineer_specs: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class ApplyResult:
-    """Result returned by full pipeline apply execution."""
+    """
+    Result returned by full pipeline apply execution.
+
+    data: the typed table (Phase 4 contract). prepared: the table after cleaning and
+    feature creation. specs: fitted state of the creating step (mappings, scales...).
+    """
     data: pd.DataFrame
     decisions: List[Decision]
     anomalies: List[Dict[str, Any]]
+    prepared: Optional[pd.DataFrame] = None
+    specs: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -86,6 +110,8 @@ class Plan:
     column_count: int = 0
     schema: Optional[TableSchema] = None
     decisions: List[Decision] = field(default_factory=list)
+    model_hint: str = "tree"
+    feature_config: Optional[FeatureConfig] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert Plan to dictionary."""
@@ -97,6 +123,8 @@ class Plan:
             "column_count": self.column_count,
             "schema": self.schema.to_dict() if self.schema is not None else None,
             "decisions": [d.to_dict() for d in self.decisions],
+            "model_hint": self.model_hint,
+            "feature_config": asdict(self.feature_config) if self.feature_config is not None else None,
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -127,6 +155,8 @@ class Plan:
             column_count=data.get("column_count", len(decisions)),
             schema=schema,
             decisions=decisions,
+            model_hint=data.get("model_hint", "tree"),
+            feature_config=FeatureConfig(**data["feature_config"]) if data.get("feature_config") else None,
         )
 
     @classmethod
@@ -635,52 +665,206 @@ class TypingStage(Stage):
 # Plug-in Registry & Stubs for Future Stages
 # ===========================================================================
 
-class FixingStage(Stage):
-    """Stage 3: Fixing (stub for v1 cleaning port)."""
+def _working_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Typed table -> the plain numpy-backed dtypes the cleaning and engineering code
+    works on (as in v1): nullable integers/floats become int/float (float when blanks
+    exist), nullable booleans become bool (object when blanks exist), categories
+    become plain text.
+    """
+    out = df.copy()
+    for col in out.columns:
+        s = out[col]
+        if isinstance(s.dtype, pd.CategoricalDtype):
+            out[col] = s.astype(object)
+        elif pd.api.types.is_bool_dtype(s) and pd.api.types.is_extension_array_dtype(s.dtype):
+            out[col] = s.astype(object) if s.isna().any() else s.astype(bool)
+        elif pd.api.types.is_integer_dtype(s) and pd.api.types.is_extension_array_dtype(s.dtype):
+            out[col] = s.astype("float64") if s.isna().any() else s.astype("int64")
+        elif pd.api.types.is_float_dtype(s) and pd.api.types.is_extension_array_dtype(s.dtype):
+            out[col] = s.astype("float64")
+    return out
+
+
+def _resolved_task(context: PlanContext) -> str:
+    """classification | regression for the target, from the user or the task Decision."""
+    if context.task_type and context.task_type.lower() in ("classification", "regression"):
+        return context.task_type.lower()
+    for d in context.decisions:
+        if d.kind in ("task_inference", "ambiguous_task") and d.action in ("classification", "regression"):
+            return d.action
+    return "classification"
+
+
+_ACTION_TYPE = {
+    "keep_as_constant": "constant",
+    "cast_to_boolean": "boolean",
+    "keep_as_id": "ID",
+    "cast_to_int": "int",
+    "cast_to_float": "float",
+    "cast_to_datetime": "datetime",
+    "keep_as_categorical": "categorical",
+    "cast_to_categorical": "categorical",
+    "keep_as_string": "text",
+    "keep_as_text": "text",
+}
+
+
+def _schema_with_actions(schema: TableSchema, decisions: Sequence[Decision]) -> TableSchema:
+    """Copy of the schema whose column types follow the typing actions currently in force."""
+    out = TableSchema.from_dict(schema.to_dict())
+    by_col = {c.name: c for c in out.columns}
+    for d in decisions:
+        if d.stage == "infer" and d.kind in ("type_inference", "type_abstain") and d.columns:
+            col = by_col.get(d.columns[0])
+            if col is not None and d.action in _ACTION_TYPE:
+                col.type_override = _ACTION_TYPE[d.action]
+    return out
+
+
+def _ensure_prep_plan(context: PlanContext) -> List[Decision]:
+    """
+    Plan cleaning and engineering once per planning run. The typed table is built in
+    memory from the typing Decisions (nothing is written), then the steps are
+    simulated in v1 order by the cleaner and engineer planners.
+    """
+    if context.prep_decisions is not None:
+        return context.prep_decisions
+    if context.raw_data is None or context.schema is None:
+        context.prep_decisions = []
+        return context.prep_decisions
+
+    actx = ApplyContext(
+        source_path=context.source_path,
+        target_column=context.target_column,
+        task_type=context.task_type,
+        raw_data=context.raw_data,
+        schema=context.schema,
+        decisions=context.decisions,
+    )
+    typed = TypingStage().apply(actx, context.decisions)
+    work = _working_frame(typed)
+    schema = _schema_with_actions(context.schema, context.decisions)
+
+    target = context.target_column if context.target_column in work.columns else None
+    cp = plan_clean_full(work, schema, target, context.cleaner_config)
+    eng = plan_engineer(
+        cp.cleaned,
+        schema=schema,
+        target=target,
+        model_hint=context.model_hint,
+        cardinality_threshold=context.cleaner_config.cardinality_threshold,
+        feature_config=context.feature_config,
+        task=_resolved_task(context),
+        signals=cp.signals,
+    )
+    context.prep_decisions = list(cp.decisions) + list(eng)
+    return context.prep_decisions
+
+
+class PrepStage(Stage):
+    """
+    One step of cleaning/engineering. Steps are registered in execution order (the
+    order v1 ran them in); `section` is the heading they appear under in the Plan PDF,
+    so one section can be served by several steps.
+    """
+    kinds: Tuple[str, ...] = ()
+
+    def runner(
+        self, df: pd.DataFrame, decisions: List[Decision], context: ApplyContext
+    ) -> pd.DataFrame:
+        raise NotImplementedError
+
+    def plan(self, context: PlanContext) -> List[Decision]:
+        return [d for d in _ensure_prep_plan(context) if d.kind in self.kinds]
+
+    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
+        if context.typed_data is None:
+            return None
+        if context.prepared_data is None:
+            context.prepared_data = _working_frame(context.typed_data)
+        mine = [d for d in decisions if d.stage in ("clean", "engineer") and d.kind in self.kinds]
+        context.prepared_data = self.runner(context.prepared_data, mine, context)
+        return context.prepared_data
+
+
+class FixingStage(PrepStage):
+    """Fixing: blank-marker conversion and number reading (first cleaning steps)."""
     name: str = "fixing"
     section: str = "fixing"
+    kinds = ("convert_missing_markers", "coerce_numeric")
 
-    def plan(self, context: PlanContext) -> List[Decision]:
-        return []
-
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
-        return context.typed_data
+    def runner(self, df, decisions, context):
+        return apply_coerce(apply_markers(df, decisions), decisions)
 
 
-class FillingGapsStage(Stage):
-    """Stage 4: Filling gaps (stub for v1 imputation port)."""
-    name: str = "filling_gaps"
-    section: str = "filling gaps"
-
-    def plan(self, context: PlanContext) -> List[Decision]:
-        return []
-
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
-        return context.typed_data
-
-
-class RemovingStage(Stage):
-    """Stage 5: Removing (stub for v1 pruning port)."""
+class RemovingStage(PrepStage):
+    """Removing: repeated rows and unusable columns."""
     name: str = "removing"
     section: str = "removing"
+    kinds = ("remove_duplicates", "drop_high_missingness", "drop_id", "drop_constant")
 
-    def plan(self, context: PlanContext) -> List[Decision]:
-        return []
+    def runner(self, df, decisions, context):
+        df, _ = apply_dedupe(df, decisions)
+        df, _ = apply_drops(df, decisions)
+        return df
 
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
-        return context.typed_data
+
+class TidyingStage(PrepStage):
+    """Fixing: tidy category text and combine very uncommon values."""
+    name: str = "tidying"
+    section: str = "fixing"
+    kinds = ("normalize_categories", "group_rare_categories")
+
+    def runner(self, df, decisions, context):
+        return apply_normalization(df, decisions)
 
 
-class CreatingStage(Stage):
-    """Stage 6: Creating (stub for v1 feature engineering port)."""
+class FillingGapsStage(PrepStage):
+    """Filling gaps: blank-value flags and fills."""
+    name: str = "filling_gaps"
+    section: str = "filling gaps"
+    kinds = ("add_missing_indicator", "fill_median", "fill_mode", "constant_fill")
+
+    def runner(self, df, decisions, context):
+        return apply_impute(df, decisions)
+
+
+class OutlierStage(PrepStage):
+    """Fixing: pull extreme numbers back into range (runs after gaps are filled, as in v1)."""
+    name: str = "outliers"
+    section: str = "fixing"
+    kinds = ("clip_outliers",)
+
+    def runner(self, df, decisions, context):
+        return apply_outliers(df, decisions)
+
+
+class LeakageStage(PrepStage):
+    """Removing: columns that may give away the target (kept unless the person chooses otherwise)."""
+    name: str = "leakage"
+    section: str = "removing"
+    kinds = ("suspected_leakage", "feature_overlap")
+
+    def runner(self, df, decisions, context):
+        out, _ = apply_engineer(df, decisions, target=context.target_column)
+        return out
+
+
+class CreatingStage(PrepStage):
+    """Creating: encodings, rescaling and generated columns."""
     name: str = "creating"
     section: str = "creating"
+    kinds = (
+        "expand_datetime", "ordinal_encode", "one_hot_encode", "target_encode",
+        "log_transform", "scale_numeric", "create_interactions",
+        "create_datetime_features", "create_cluster_features", "create_text_features",
+    )
 
-    def plan(self, context: PlanContext) -> List[Decision]:
-        return []
-
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
-        return context.typed_data
+    def runner(self, df, decisions, context):
+        out, specs = apply_engineer(df, decisions, target=context.target_column)
+        context.engineer_specs = specs
+        return out
 
 
 class StageRegistry:
@@ -699,13 +883,16 @@ class StageRegistry:
 
 
 def build_default_registry() -> StageRegistry:
-    """Construct standard registry containing implemented and stub stages."""
+    """Construct the standard registry; stages are listed in execution order."""
     reg = StageRegistry()
     reg.register(ReadingStage())
     reg.register(TypingStage())
     reg.register(FixingStage())
-    reg.register(FillingGapsStage())
     reg.register(RemovingStage())
+    reg.register(TidyingStage())
+    reg.register(FillingGapsStage())
+    reg.register(OutlierStage())
+    reg.register(LeakageStage())
     reg.register(CreatingStage())
     return reg
 
@@ -725,6 +912,9 @@ class Planner:
         path: Union[str, Path],
         target: Optional[str] = None,
         task: Optional[str] = None,
+        model_hint: str = "tree",
+        feature_config: Optional[FeatureConfig] = None,
+        cleaner_config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
     ) -> Plan:
         """
         Generate a complete Plan for a tabular dataset without mutating anything.
@@ -733,12 +923,20 @@ class Planner:
         if not p.exists():
             raise FileNotFoundError(f"Input file not found: {p}")
 
-        context = PlanContext(source_path=p, target_column=target, task_type=task)
+        context = PlanContext(
+            source_path=p,
+            target_column=target,
+            task_type=task,
+            model_hint=model_hint,
+            feature_config=feature_config,
+            cleaner_config=cleaner_config,
+        )
         all_decisions: List[Decision] = []
 
         for stage in self.registry.get_stages():
             stage_decisions = stage.plan(context)
             all_decisions.extend(stage_decisions)
+            context.decisions = list(all_decisions)
 
         row_count = (
             context.schema.row_count
@@ -762,6 +960,8 @@ class Planner:
             column_count=col_count,
             schema=context.schema,
             decisions=all_decisions,
+            model_hint=model_hint,
+            feature_config=feature_config,
         )
 
     def apply(
@@ -799,7 +999,29 @@ class Planner:
             data=res_df,
             decisions=decs,
             anomalies=context.anomalies,
+            prepared=context.prepared_data,
+            specs=context.engineer_specs,
         )
+
+
+def replan_prep(plan_obj: Plan, cleaner_config: CleanerConfig = DEFAULT_CLEANER_CONFIG) -> None:
+    """
+    Recompute the cleaning and engineering Decisions of `plan_obj` in place, from the
+    reading and typing Decisions as they now stand (answers may have changed them).
+    """
+    base = [d for d in plan_obj.decisions if d.stage not in ("clean", "engineer")]
+    ctx = PlanContext(
+        source_path=Path(plan_obj.source_path),
+        target_column=plan_obj.target_column,
+        task_type=plan_obj.task_type,
+        schema=plan_obj.schema,
+        decisions=base,
+        model_hint=plan_obj.model_hint,
+        feature_config=plan_obj.feature_config,
+        cleaner_config=cleaner_config,
+    )
+    ctx.raw_data = ReadingStage().apply(ApplyContext(source_path=ctx.source_path), base)
+    plan_obj.decisions = base + list(_ensure_prep_plan(ctx))
 
 
 # ===========================================================================
@@ -810,10 +1032,12 @@ def plan(
     path: Union[str, Path],
     target: Optional[str] = None,
     task: Optional[str] = None,
+    model_hint: str = "tree",
+    feature_config: Optional[FeatureConfig] = None,
 ) -> Plan:
-    """Generate pure pipeline plan."""
+    """Generate pure pipeline plan. model_hint ('tree' or 'linear') and feature_config shape the creating step."""
     planner = Planner()
-    return planner.plan(path, target=target, task=task)
+    return planner.plan(path, target=target, task=task, model_hint=model_hint, feature_config=feature_config)
 
 
 def write_plan_artifacts(plan_obj: Plan, out_dir: Union[str, Path]) -> Tuple[Path, Path]:
@@ -872,9 +1096,11 @@ def dry_run(
     out_dir: Optional[Union[str, Path]] = None,
     mode: Optional[str] = None,
     channel: Any = None,
+    model_hint: str = "tree",
+    feature_config: Optional[FeatureConfig] = None,
 ) -> Tuple[Plan, Path]:
     """
-    Run pipeline ingest and infer in plan-only form, write plan.json and Plan PDF,
+    Run pipeline ingest, infer, cleaning and engineering in plan-only form, write plan.json and Plan PDF,
     and return the Plan object plus the PDF path.
 
     Purity:
@@ -897,7 +1123,7 @@ def dry_run(
     out_d = Path(out_dir).resolve() if out_dir is not None else p.parent / "preflight_plan"
     out_d.mkdir(parents=True, exist_ok=True)
 
-    plan_obj = plan(p, target=target, task=task)
+    plan_obj = plan(p, target=target, task=task, model_hint=model_hint, feature_config=feature_config)
 
     if mode is not None:
         from preflight.interact.resolve import resolve

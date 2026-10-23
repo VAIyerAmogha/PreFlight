@@ -5,8 +5,8 @@ A trigger names the reason a Decision needs a human. The eight categories are:
 
 1. low_confidence_structure  - text format, separator, or column-names row detected with low confidence
 2. ambiguous_type            - close call between column types, or the type check abstained
-3. destructive_action        - EMPTY PLUG-IN POINT (no Decision of this kind exists yet)
-4. suspected_leakage         - EMPTY PLUG-IN POINT (no Decision of this kind exists yet)
+3. destructive_action        - removing columns or rows, or pulling values back, above an impact threshold
+4. suspected_leakage         - a feature that tracks the target almost exactly
 5. disguised_missing         - values that may be placeholders for missing data
 6. high_anomaly_rate         - the proposed conversion fails for a large share of values
 7. lossy_coercion            - conversion would lose information (units, ambiguous dates, leading zeros)
@@ -15,8 +15,9 @@ A trigger names the reason a Decision needs a human. The eight categories are:
 The category only labels *why* a question is asked. It never decides *whether* one is
 asked: that is Decision.needs_attention, set upstream.
 
-Rules are evaluated in registration order; the first match wins. Later phases fill the
-empty plug-in points with `TriggerRegistry.register(...)` (see `register_trigger`).
+Rules are evaluated in registration order; the first match wins. A rule that is not
+implemented is an empty plug-in point that `TriggerRegistry.register(...)` can fill
+(see `register_trigger`). All eight categories are implemented.
 """
 
 from dataclasses import dataclass
@@ -167,6 +168,25 @@ def _match_ambiguous_type(d: Decision, _c: TriggerContext) -> bool:
     return _is_type(d)
 
 
+# Cleaning Decisions that remove rows or columns, or change values; needs_attention is
+# set upstream once their impact passes the threshold in CleanerConfig.
+DESTRUCTIVE_KINDS = (
+    "remove_duplicates",
+    "drop_high_missingness",
+    "drop_id",
+    "drop_constant",
+    "clip_outliers",
+)
+
+
+def _match_destructive(d: Decision, _c: TriggerContext) -> bool:
+    return d.stage == "clean" and d.kind in DESTRUCTIVE_KINDS and d.needs_attention
+
+
+def _match_leakage(d: Decision, _c: TriggerContext) -> bool:
+    return d.stage == "engineer" and d.kind == "suspected_leakage"
+
+
 class TriggerRegistry:
     """Ordered registry of trigger rules."""
 
@@ -221,17 +241,13 @@ class TriggerRegistry:
             ),
             TriggerRule(
                 C.DESTRUCTIVE_ACTION,
-                "Dropping columns or rows above an impact threshold (empty plug-in point: "
-                "no such Decision exists until the cleaning port)",
-                _never,
-                implemented=False,
+                "Removing columns or rows, or pulling values back, above an impact threshold",
+                _match_destructive,
             ),
             TriggerRule(
                 C.SUSPECTED_LEAKAGE,
-                "Feature that may give away the target (empty plug-in point: "
-                "no such Decision exists until the engineering port)",
-                _never,
-                implemented=False,
+                "Feature that may give away the target",
+                _match_leakage,
             ),
             TriggerRule(
                 C.LOSSY_COERCION,

@@ -40,9 +40,9 @@ def compute_mutual_info_with_target(
         if task == "regression":
             if not pd.api.types.is_numeric_dtype(target):
                 return None
-            mi = mutual_info_regression(X, y)
+            mi = mutual_info_regression(X, y, random_state=0)
         elif task == "classification":
-            mi = mutual_info_classif(X, y)
+            mi = mutual_info_classif(X, y, random_state=0)
         else:
             return None
         return float(mi[0])
@@ -50,64 +50,64 @@ def compute_mutual_info_with_target(
         return None
 
 
-def generate_interaction_features(
-    df: pd.DataFrame,
-    numeric_columns: Sequence[str],
-    target: Optional[str],
+def rank_interaction_columns(
+    signals: Dict[str, Any],
+    df_columns: Sequence[str],
     config: FeatureConfig,
-    task: str = "regression",
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+) -> List[str]:
     """
-    Generate ratio, product, and difference interactions across top-k scored numeric features.
+    Top-k numeric feature columns by max(|correlation|, |mutual information|)
+    with the target, read from the column signals (as v1 read its profiles).
     """
-    df_out = df.copy()
-    reports = []
-
-    target_series = df_out[target] if target and target in df_out.columns else None
-
-    # Score numeric features by correlation or mutual info with target
     scored = []
-    for col in numeric_columns:
-        if col == target or col not in df_out.columns:
+    for name, sig in signals.items():
+        if sig.kind != "NUMERIC_FEATURE":
             continue
         score = 0.0
-        if target_series is not None:
-            corr = compute_correlation_with_target(df_out[col], target_series)
-            if corr is not None:
-                score = max(score, abs(corr))
-            mi = compute_mutual_info_with_target(df_out[col], target_series, task=task)
-            if mi is not None:
-                score = max(score, abs(mi))
-        scored.append((col, score))
-
+        if sig.correlation_with_target is not None and not pd.isna(sig.correlation_with_target):
+            score = max(score, abs(sig.correlation_with_target))
+        if sig.mutual_info_with_target is not None and not pd.isna(sig.mutual_info_with_target):
+            score = max(score, abs(sig.mutual_info_with_target))
+        scored.append((name, score))
     scored.sort(key=lambda x: x[1], reverse=True)
-    top_cols = [x[0] for x in scored[:config.interaction_top_k] if x[0] in df_out.columns]
+    return [x[0] for x in scored[:config.interaction_top_k] if x[0] in df_columns]
+
+
+def generate_interaction_features(
+    df: pd.DataFrame,
+    top_columns: Sequence[str],
+    config: FeatureConfig,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """
+    Generate ratio, product, and difference interactions across the given
+    (already ranked) numeric columns. Never overwrites an existing column.
+    """
+    df_out = df.copy()
+    reports: List[Dict[str, Any]] = []
+    top_cols = [c for c in top_columns if c in df_out.columns]
+
+    def _add(col_name: str, values: pd.Series, what: str, a: str, b: str) -> None:
+        if col_name in df.columns:
+            reports.append({
+                "column": col_name,
+                "action": "skipped_duplicate_feature",
+                "summary": f"Skipped generated interaction feature '{col_name}' due to name collision.",
+            })
+            return
+        df_out[col_name] = values
+        reports.append({
+            "column": col_name,
+            "action": "created_interaction",
+            "summary": f"Generated {what} of '{a}' and '{b}'.",
+        })
 
     for a, b in itertools.combinations(top_cols, 2):
         if "ratio" in config.interaction_types:
-            col_name = f"{a}_div_{b}"
-            df_out[col_name] = df_out[a] / df_out[b].replace(0, np.nan)
-            reports.append({
-                "column": col_name,
-                "action": "created_interaction",
-                "summary": f"Generated ratio of '{a}' and '{b}'.",
-            })
+            _add(f"{a}_div_{b}", df_out[a] / df_out[b].replace(0, np.nan), "ratio", a, b)
         if "product" in config.interaction_types:
-            col_name = f"{a}_times_{b}"
-            df_out[col_name] = df_out[a] * df_out[b]
-            reports.append({
-                "column": col_name,
-                "action": "created_interaction",
-                "summary": f"Generated product of '{a}' and '{b}'.",
-            })
+            _add(f"{a}_times_{b}", df_out[a] * df_out[b], "product", a, b)
         if "difference" in config.interaction_types:
-            col_name = f"{a}_minus_{b}"
-            df_out[col_name] = df_out[a] - df_out[b]
-            reports.append({
-                "column": col_name,
-                "action": "created_interaction",
-                "summary": f"Generated difference of '{a}' and '{b}'.",
-            })
+            _add(f"{a}_minus_{b}", df_out[a] - df_out[b], "difference", a, b)
 
     return df_out, reports
 

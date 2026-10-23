@@ -7,6 +7,8 @@ import pandas as pd
 
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
+from preflight.clean._common import need_signals
+from preflight.signals import CONSTANT, NUMERIC_ID, ColumnSignals
 from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
@@ -67,129 +69,80 @@ def plan_drops(
     target: Optional[str] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
     target_column: Optional[str] = None,
+    signals: Optional[Dict[str, ColumnSignals]] = None,
 ) -> List[Decision]:
     """
-    Plan column drops for high-missingness, ID, and constant columns.
-    Never drops the designated target column.
-    Destructive threshold check: if fraction of columns dropped exceeds
-    config.column_drop_impact_threshold, needs_attention is set to True.
+    Plan column drops (v1 order: high missingness, then ID, then constant).
+    Never drops the target. If the fraction of columns dropped exceeds
+    config.column_drop_impact_threshold, every drop is needs_attention and its
+    safe default is to keep the column.
     """
     target = target_column or target
     total_cols = len(df.columns)
     if total_cols == 0:
         return []
 
-    # Map column types from schema if available
-    type_map = {}
-    if schema and schema.columns:
-        for c in schema.columns:
-            eff_type = c.effective_type() or "text"
-            type_map[c.name] = eff_type.lower()
+    sigs = need_signals(df, signals, schema, target, config.cardinality_threshold)
 
     cols_to_drop: List[Tuple[str, str, Dict[str, Any]]] = []
-
     for col in df.columns:
-        if col == target:
+        if col == target or col not in sigs:
             continue
-
-        series = df[col]
-        missing_rate = float(series.isna().mean())
-        col_type = type_map.get(col, "")
-        n_unique = int(series.nunique(dropna=False))
-        n_unique_non_null = int(series.dropna().nunique())
-
-        # 1. High Missingness
-        if should_drop_column(missing_rate, config.drop_missing_threshold):
+        sig = sigs[col]
+        if should_drop_column(sig.missing_rate, config.drop_missing_threshold):
             cols_to_drop.append(
-                (
-                    col,
-                    "high_missingness",
-                    {
-                        "missing_rate": round(missing_rate, 4),
-                        "threshold": config.drop_missing_threshold,
-                    },
-                )
+                (col, "high_missingness", {"missing_rate": sig.missing_rate, "threshold": config.drop_missing_threshold})
             )
-            continue
-
-        # 2. ID Column
-        is_id = col_type == "id" or (
-            (col_type in ("int", "numeric") or pd.api.types.is_numeric_dtype(series))
-            and len(series) > 0
-            and any(
-                part in ("id", "pk", "index")
-                for part in col.lower().replace("-", "_").split("_")
-            )
-        )
-        if is_id:
-            cols_to_drop.append(
-                (
-                    col,
-                    "numeric_id",
-                    {
-                        "cardinality": n_unique_non_null,
-                        "uniqueness_ratio": round(n_unique_non_null / max(1, len(series)), 4),
-                    },
-                )
-            )
-            continue
-
-        # 3. Constant Column
-        is_constant = col_type == "constant" or n_unique_non_null <= 1
-        if is_constant:
-            cols_to_drop.append(
-                (
-                    col,
-                    "constant",
-                    {
-                        "unique_count": n_unique_non_null,
-                    },
-                )
-            )
+        elif sig.kind == NUMERIC_ID:
+            cols_to_drop.append((col, "numeric_id", {"cardinality": sig.cardinality}))
+        elif sig.kind == CONSTANT:
+            cols_to_drop.append((col, "constant", {"unique_count": sig.cardinality}))
 
     if not cols_to_drop:
         return []
 
     col_impact = len(cols_to_drop) / total_cols
-    needs_att = col_impact >= config.column_drop_impact_threshold
+    needs_att = col_impact > config.column_drop_impact_threshold
 
     decisions: List[Decision] = []
     for col, reason, ev_detail in cols_to_drop:
         if reason == "high_missingness":
-            m_rate = ev_detail["missing_rate"]
-            summary = f"Remove column '{col}' due to high missing data rate ({m_rate:.1%})."
+            summary = f"Remove column '{col}' because {ev_detail['missing_rate']:.1%} of its entries are blank."
             kind = "drop_high_missingness"
         elif reason == "numeric_id":
-            summary = f"Remove identifier column '{col}' to prevent spurious correlations."
+            summary = f"Remove identifier column '{col}' (a unique label for each row, not useful for learning)."
             kind = "drop_id"
         else:
-            summary = f"Remove constant column '{col}' containing single repeated value."
+            summary = f"Remove column '{col}' because every row has the same value."
             kind = "drop_constant"
+        if needs_att:
+            summary = (
+                f"{summary} This is one of {len(cols_to_drop)} columns "
+                f"({col_impact:.0%} of the table) planned for removal; please confirm."
+            )
 
-        ev = {
-            "reason": reason,
-            "total_columns": total_cols,
-            "columns_dropped_count": len(cols_to_drop),
-            "column_impact_fraction": round(col_impact, 4),
-            "impact_threshold": config.column_drop_impact_threshold,
-            **ev_detail,
-        }
-
-        dec = Decision(
-            id="",
-            stage="clean",
-            kind=kind,
-            columns=[col],
-            action="drop_column",
-            evidence=ev,
-            confidence=0.95,
-            default="keep_column",
-            needs_attention=needs_att,
-            plain_language=summary,
-            status="automatic",
+        decisions.append(
+            Decision(
+                id="",
+                stage="clean",
+                kind=kind,
+                columns=[col],
+                action="drop_column",
+                evidence={
+                    "reason": reason,
+                    "total_columns": total_cols,
+                    "columns_dropped_count": len(cols_to_drop),
+                    "column_impact_fraction": col_impact,
+                    "impact_threshold": config.column_drop_impact_threshold,
+                    **ev_detail,
+                },
+                confidence=0.95,
+                default="keep_column" if needs_att else "drop_column",
+                needs_attention=needs_att,
+                plain_language=summary,
+                status="automatic",
+            )
         )
-        decisions.append(dec)
-
     return decisions
 
 
@@ -197,9 +150,7 @@ def apply_drops(
     df: pd.DataFrame,
     decisions: List[Decision],
 ) -> Tuple[pd.DataFrame, List[str]]:
-    """
-    Apply column drops specified by confirmed/automatic Decisions.
-    """
+    """Apply column drops whose action in force is drop_column."""
     dropped_cols = []
     for d in decisions:
         if d.kind in ("drop_column", "drop_high_missingness", "drop_id", "drop_constant"):

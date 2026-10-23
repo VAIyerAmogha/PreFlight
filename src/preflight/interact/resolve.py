@@ -32,7 +32,7 @@ from preflight.interact.modes import (
 )
 from preflight.interact.question import ReviewSession, create_review_session
 from preflight.interact.store import AnswerStore
-from preflight.plan import ApplyContext, Plan, ReadingStage, plan as make_plan, write_plan_artifacts
+from preflight.plan import ApplyContext, Plan, ReadingStage, plan as make_plan, replan_prep, write_plan_artifacts
 
 ChannelArg = Union[str, BaseChannel, Callable[..., Any], None]
 
@@ -137,43 +137,74 @@ def resolve(
     if len(ids) != len(set(ids)):
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         raise ValueError(f"Plan has duplicate decision ids, cannot resolve unambiguously: {dupes}")
-    index = {d.id: d for d in plan_obj.decisions}
 
     active_mode = resolve_mode(mode)
     meta = {"out_dir": str(out_d), "target": plan_obj.target_column, "task": plan_obj.task_type}
-
-    session = create_review_session(
-        plan_obj.decisions,
-        plan_obj.source_path,
-        raw_df=_load_raw(plan_obj) if any(d.needs_attention for d in plan_obj.decisions) else None,
-        schema=plan_obj.schema,
-    )
-
-    # Stored answers first, in every mode.
     store = AnswerStore(out_d)
-    remaining = []
-    for q in session.questions:
-        rec = store.lookup(q)
-        if rec is None:
-            remaining.append(q)
-        else:
-            apply_answer(index[q.decision_id], q, rec.answer, source="stored answer (same fingerprint)", reuse=True)
-    session = ReviewSession(source_path=session.source_path, questions=remaining)
+
+    def _is_prep(d: Any) -> bool:
+        return d.stage in ("clean", "engineer")
+
+    def _pass(subset: list) -> None:
+        """Resolve the open questions among `subset` (stored answers first, in every mode)."""
+        index = {d.id: d for d in plan_obj.decisions}
+        session = create_review_session(
+            subset,
+            plan_obj.source_path,
+            raw_df=_load_raw(plan_obj) if any(d.needs_attention for d in subset) else None,
+            schema=plan_obj.schema,
+        )
+        remaining = []
+        for q in session.questions:
+            rec = store.lookup(q)
+            if rec is None:
+                remaining.append(q)
+            else:
+                apply_answer(index[q.decision_id], q, rec.answer, source="stored answer (same fingerprint)", reuse=True)
+        session = ReviewSession(source_path=session.source_path, questions=remaining)
+
+        if active_mode == "strict":
+            apply_strict_mode(session)
+        elif active_mode == "defaults":
+            apply_defaults_mode(session, plan_obj.decisions)
+        else:  # ask
+            if session.questions:
+                chan = _pick_channel(channel, out_d, meta)
+                if review_path is not None and isinstance(chan, ReviewFileChannel):
+                    chan.path = review_path
+                answers = chan.review(session)  # validated: every question has one of its options
+                statuses = apply_ask_mode(session, plan_obj.decisions, answers, source=f"ask: {chan.name} channel")
+                for q in session.questions:
+                    store.record(q, answers[q.question_id], statuses[q.question_id])
+                store.save()
 
     if active_mode == "strict":
-        apply_strict_mode(session)
-    elif active_mode == "defaults":
-        apply_defaults_mode(session, plan_obj.decisions)
-    else:  # ask
-        if session.questions:
-            chan = _pick_channel(channel, out_d, meta)
-            if review_path is not None and isinstance(chan, ReviewFileChannel):
-                chan.path = review_path
-            answers = chan.review(session)  # validated: every question has one of its options
-            statuses = apply_ask_mode(session, plan_obj.decisions, answers, source=f"ask: {chan.name} channel")
-            for q in session.questions:
-                store.record(q, answers[q.question_id], statuses[q.question_id])
-            store.save()
+        # Nothing is resolved in strict mode, so there is nothing to plan again: list every open item.
+        index = {d.id: d for d in plan_obj.decisions}
+        session = create_review_session(
+            plan_obj.decisions,
+            plan_obj.source_path,
+            raw_df=_load_raw(plan_obj) if any(d.needs_attention for d in plan_obj.decisions) else None,
+            schema=plan_obj.schema,
+        )
+        remaining = []
+        for q in session.questions:
+            rec = store.lookup(q)
+            if rec is None:
+                remaining.append(q)
+            else:
+                apply_answer(index[q.decision_id], q, rec.answer, source="stored answer (same fingerprint)", reuse=True)
+        apply_strict_mode(ReviewSession(source_path=session.source_path, questions=remaining))
+        plan_json, plan_pdf = write_plan_artifacts(plan_obj, out_d)
+        return plan_obj, plan_pdf
+
+    # Pass 1: reading and typing. Their answers decide what cleaning and engineering
+    # propose, so those Decisions are planned again before they are asked about (pass 2).
+    before = {d.id: d.action for d in plan_obj.decisions if not _is_prep(d)}
+    _pass([d for d in plan_obj.decisions if not _is_prep(d)])
+    if any(d.action != before[d.id] for d in plan_obj.decisions if not _is_prep(d)):
+        replan_prep(plan_obj)
+    _pass([d for d in plan_obj.decisions if _is_prep(d)])
 
     plan_json, plan_pdf = write_plan_artifacts(plan_obj, out_d)
     return plan_obj, plan_pdf

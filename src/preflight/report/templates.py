@@ -49,6 +49,28 @@ BANNED_JARGON = [
     "latin-1",
     "windows-1252",
     "iso-8859-1",
+    # Cleaning and engineering: plain equivalents are required
+    "interaction",
+    "interactions",
+    "target encoding",
+    "target-encode",
+    "cross-fit",
+    "one-hot",
+    "ordinal",
+    "tf-idf",
+    "tfidf",
+    "vif",
+    "variance inflation",
+    "multicollinearity",
+    "kmeans",
+    "k-means",
+    "centroid",
+    "outlier",
+    "outliers",
+    "median",
+    "log1p",
+    "z-score",
+    "leakage",
 ]
 
 
@@ -123,11 +145,43 @@ def friendly_type_name(inferred_type: Optional[str]) -> str:
     return "plain text"
 
 
+_PREP_ACTION_NAMES = {
+    "drop_column": "Remove this column",
+    "keep_column": "Keep this column",
+    "remove_duplicates": "Remove the repeated rows",
+    "keep_rows": "Keep all rows, including repeats",
+    "clip_outliers": "Pull extreme values back into range",
+    "keep_outliers": "Keep extreme values as they are",
+    "keep_feature": "Keep this column as an input",
+    "drop_leaky_feature": "Leave this column out",
+    "convert_missing_markers": "Treat placeholder entries as blank",
+    "coerce_numeric": "Read as numbers",
+    "normalize_categories": "Tidy the text",
+    "group_rare_categories": "Combine very uncommon values",
+    "add_missing_indicator": "Add a blank-marker column",
+    "fill_median": "Fill blanks with the middle value",
+    "fill_mode": "Fill blanks with the most common value",
+    "constant_fill": "Fill blanks with a label",
+    "expand_datetime": "Split dates into parts",
+    "ordinal_encode": "Turn categories into numbers",
+    "one_hot_encode": "One yes/no column per category",
+    "target_encode_cross_fit": "Use the typical outcome per category",
+    "log1p_transform": "Compress the long tail",
+    "standard_scale": "Rescale to a common scale",
+    "create_interactions": "Create combined columns",
+    "create_datetime_features": "Create extra date columns",
+    "create_cluster_features": "Create group columns",
+    "create_text_features": "Create text size columns",
+}
+
+
 def friendly_action_name(action: str) -> str:
     """Map raw code actions to human-friendly descriptions."""
     if not action:
         return "Preserve plain text"
     act = action.lower()
+    if act in _PREP_ACTION_NAMES:
+        return _PREP_ACTION_NAMES[act]
     if act == "keep_as_string":
         return "Keep original plain text"
     if act == "keep_as_constant":
@@ -419,6 +473,91 @@ def template_ambiguous_task(
 
 
 # ---------------------------------------------------------------------------
+# Cleaning and engineering Decisions
+# ---------------------------------------------------------------------------
+
+_SECTION_BY_KIND = {
+    "convert_missing_markers": "fixing",
+    "coerce_numeric": "fixing",
+    "normalize_categories": "fixing",
+    "group_rare_categories": "fixing",
+    "clip_outliers": "fixing",
+    "add_missing_indicator": "filling gaps",
+    "fill_median": "filling gaps",
+    "fill_mode": "filling gaps",
+    "constant_fill": "filling gaps",
+    "remove_duplicates": "removing",
+    "drop_high_missingness": "removing",
+    "drop_id": "removing",
+    "drop_constant": "removing",
+    "suspected_leakage": "removing",
+    "feature_overlap": "removing",
+}
+
+
+def section_for_decision(decision: Decision) -> str:
+    """Plan PDF heading a Decision is listed under."""
+    if decision.stage in ("reading", "ingest", "infer"):
+        return "reading"
+    if decision.stage == "clean":
+        return _SECTION_BY_KIND.get(decision.kind, "fixing")
+    if decision.stage == "engineer":
+        return _SECTION_BY_KIND.get(decision.kind, "creating")
+    return "reading"
+
+
+_PREP_QUESTIONS = {
+    "remove_duplicates": (
+        "Remove the repeated rows?",
+        "Many rows appear more than once. Removing them keeps one copy of each.",
+    ),
+    "drop_high_missingness": (
+        "Remove this column?",
+        "Most of its entries are blank, so it may not help.",
+    ),
+    "drop_id": (
+        "Remove this identifier column?",
+        "Each row has its own unique value here, so it labels rows rather than describing them.",
+    ),
+    "drop_constant": (
+        "Remove this column?",
+        "Every row has the same value, so it cannot help tell rows apart.",
+    ),
+    "clip_outliers": (
+        "Pull extreme values back into range?",
+        "A noticeable share of entries lie far from the rest. Pulling them back changes their values.",
+    ),
+    "suspected_leakage": (
+        "Keep this column as an input, or leave it out?",
+        "A column that matches the value to be predicted almost exactly can make results look better than they will be in real use.",
+    ),
+}
+
+
+def template_prep_step(decision: Decision) -> RenderedDecisionText:
+    """Plain-language text for cleaning and engineering Decisions."""
+    summary = decision.plain_language or friendly_action_name(decision.action)
+    if not decision.needs_attention:
+        return RenderedDecisionText(summary=summary)
+    title, why = _PREP_QUESTIONS.get(
+        decision.kind, ("How should this be handled?", "This step changes your data noticeably.")
+    )
+    col = decision.columns[0] if decision.columns else None
+    if col and decision.kind != "remove_duplicates":
+        title = f"{title[:-1]} (column '{col}')?"
+    options = [friendly_action_name(decision.action)]
+    if decision.default != decision.action:
+        options.append(friendly_action_name(decision.default))
+    return RenderedDecisionText(
+        summary=summary,
+        question=title,
+        options=options,
+        recommended_default=friendly_action_name(decision.default),
+        explanation=why,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher for Arbitrary Decision Records
 # ---------------------------------------------------------------------------
 
@@ -432,6 +571,9 @@ def render_decision_text(decision: Decision) -> RenderedDecisionText:
     kind = decision.kind.lower().replace("-", "_")
     col_name = decision.columns[0] if decision.columns else "table"
     ev = decision.evidence or {}
+
+    if decision.stage in ("clean", "engineer"):
+        return template_prep_step(decision)
 
     if kind in ("encoding", "text_format"):
         enc_name = (

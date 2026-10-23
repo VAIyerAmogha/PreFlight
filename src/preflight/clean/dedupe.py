@@ -39,13 +39,13 @@ def plan_dedupe(
         return []
 
     impact = dup_count / total_rows
-    needs_att = impact >= config.dedupe_impact_threshold
+    needs_att = impact > config.dedupe_impact_threshold
 
     row_word = "row" if dup_count == 1 else "rows"
     plain_lang = (
-        f"Remove {dup_count} duplicate {row_word} ({impact:.1%} of table)."
+        f"Remove {dup_count} repeated {row_word} ({impact:.1%} of the table)."
         if not needs_att
-        else f"Review removal of {dup_count} duplicate {row_word} ({impact:.1%} of table)."
+        else f"Remove {dup_count} repeated {row_word} ({impact:.1%} of the table)? This is a large share, so please confirm."
     )
 
     decision = Decision(
@@ -61,7 +61,7 @@ def plan_dedupe(
             "threshold": config.dedupe_impact_threshold,
         },
         confidence=1.0,
-        default="remove_duplicates",
+        default="keep_rows" if needs_att else "remove_duplicates",
         needs_attention=needs_att,
         plain_language=plain_lang,
         status="automatic",

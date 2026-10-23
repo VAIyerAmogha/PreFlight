@@ -39,6 +39,27 @@ class FeatureConfig:
             raise ValueError("The number of text features to generate (text_tfidf_top_k) must be at least 1.")
 
 
+@dataclass
+class EngineerConfig:
+    """
+    Thresholds for the engineering stage.
+
+    Attributes:
+        leakage_threshold: Absolute correlation with the target above which a
+            numeric feature is flagged as a suspected leak (v1 constant 0.95).
+        vif_note_threshold: Overlap score (VIF) above which a note is added to
+            the plan. NEW in v2: v1 only recorded the score. Never tuned.
+        skew_threshold: Skewness above which a log transform is used for
+            linear models (v1 default 1.0).
+    """
+    leakage_threshold: float = 0.95
+    vif_note_threshold: float = 10.0
+    skew_threshold: float = 1.0
+
+
+DEFAULT_ENGINEER_CONFIG = EngineerConfig()
+
+
 PRESETS: Dict[str, Dict[str, Any]] = {
     "fast": {
         "drop_threshold": 0.8,

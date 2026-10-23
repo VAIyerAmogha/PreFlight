@@ -1,16 +1,30 @@
+# PORTED from PreFlight v1.0.1 tests/mvp_test.py (the "test_mvp_acceptance" suite, 47 tests).
+# Test bodies and assertions are unchanged from v1. Only the changes below were made:
+#   - `import preflight as pf` -> the test-only adapter (DataFrame -> CSV -> v2 path)
+#   - the two CLI tests carry a skip marker (v2 has no CLI yet); `runner` / `app` are
+#     therefore not imported.
 """
-PreFlight v2.0 — MVP ACCEPTANCE SUITE (ported from v1.0.1 tests/mvp_test.py)
+PreFlight-ML (pypreflight) v1.0.0 — MVP ACCEPTANCE SUITE
 
-Port notes (see docs/port_regressions.md for the full rationale):
-  - All v1 `preflight.<fn>` calls are routed through `tests.regression.adapter`
-    (aliased as `pf` below), which bridges the v1 public API (prepare, profile,
-    clean, engineer, compare, add_features, run_profiler, save_compare_pdf)
-    onto v2 components. v2's own public package intentionally does not expose
-    this surface (see docs/port_contract.md).
-  - Section 4 (CLI round trip) is skipped: v2's CLI (`src/preflight/cli.py`)
-    is a stub in this milestone. CLI wiring is explicitly out of scope for
-    Phase 6 (M5) and is deferred to a later milestone.
-  - All other sections are ported with assertions unchanged from v1.
+This is the final reliability gate before calling this library "resume-ready" /
+MVP-complete. It is intentionally broader and stricter than the phase-specific
+test files and test_full_v1_regression.py — it specifically encodes regression
+tests for every bug found during the stress-test/fix/verify cycle, so none of
+them can silently come back.
+
+Run with:
+    pytest tests/test_mvp_acceptance.py -v --tb=short
+
+If this file passes 100%, combined with:
+    - all phase-specific test files passing
+    - test_full_v1_regression.py passing
+    - coverage >= 80%
+    - a clean-venv install + CLI smoke test
+you have met the bar this project has held itself to since v0.1.0.
+
+This file does NOT replace the clean-venv install rehearsal — that must still
+be done manually in a fresh virtual environment, since it tests packaging,
+not library logic.
 """
 
 import os
@@ -22,8 +36,10 @@ import pandas as pd
 import pytest
 from pypdf import PdfReader
 
-import adapter as pf
+import adapter as pf  # test-only bridge: DataFrame -> CSV -> v2 (see adapter.py)
 from preflight.types import FeatureConfig, SemanticType, PRESETS
+
+
 
 
 def _tmp_path(suffix=".pdf"):
@@ -77,7 +93,12 @@ class TestRegression_StringAndMultiClassTargets:
         assert pd.api.types.is_numeric_dtype(result.df["city"])  # encoded to numeric
 
     def test_report_describes_original_class_labels_not_internal_encoding(self):
-        """The fix must not leak internal numeric re-encoding into user-facing text."""
+        """The fix must not leak internal numeric re-encoding into user-facing text.
+
+        Uses a high-cardinality categorical alongside the string target specifically so
+        that cross-fit target encoding actually runs and logs a ReportEntry — a single
+        clean numeric column plus a binary target legitimately produces zero notable
+        decisions, which isn't a bug, so that trivial case is not used here."""
         n = 300
         df = pd.DataFrame({
             "city": np.random.choice([f"city_{i}" for i in range(40)], size=n),
@@ -88,14 +109,16 @@ class TestRegression_StringAndMultiClassTargets:
         entries_text = " ".join(result.report.to_dataframe()["rationale"].astype(str).tolist())
 
         assert len(entries_text) > 0
+        # The rationale text must not contain raw internal integer-encoding artifacts
+        # (e.g. mentioning "0"/"1" as if they were the class labels instead of "approved"/"denied")
         assert "class 0" not in entries_text.lower()
         assert "class 1" not in entries_text.lower()
 
 
 class TestRegression_IdLikeColumnsNotCoercedToNumeric:
-    """A fix for messy numeric strings (Bug 2.3) must not overcorrect and start
-    coercing ID-like high-cardinality numeric-looking strings (e.g. zip codes)
-    into NUMERIC_FEATURE."""
+    """New bug found during quick-check verification: a fix for messy numeric strings
+    (Bug 2.3) overcorrected and started coercing ID-like high-cardinality numeric-looking
+    strings (e.g. zip codes) into NUMERIC_FEATURE. This must not happen."""
 
     def test_zip_code_like_column_not_classified_as_numeric_feature(self):
         n = 500
@@ -123,10 +146,12 @@ class TestRegression_IdLikeColumnsNotCoercedToNumeric:
         assert by_name["phone"].semantic_type != SemanticType.NUMERIC_FEATURE
 
     def test_genuinely_messy_numeric_string_still_coerces_correctly(self):
-        """Regression guard: the ORIGINAL Bug 2.3 fix must still work."""
+        """Regression guard: the ORIGINAL Bug 2.3 fix must still work. A column like
+        TotalCharges (mostly numeric values stored as strings, some blanks, low-to-moderate
+        uniqueness relative to a continuous quantity) must still become NUMERIC_FEATURE."""
         n = 500
         values = [str(round(np.random.uniform(20, 120), 2)) for _ in range(n - 5)]
-        values += ["", " ", "N/A", "20.5 ", " 45.3"]
+        values += ["", " ", "N/A", "20.5 ", " 45.3"]  # a few messy/blank entries
         df = pd.DataFrame({
             "total_charges": values,
             "tenure": np.random.randint(1, 72, size=n),
@@ -162,12 +187,13 @@ class TestRegression_WinsorizationEdgeCases:
             "target": np.random.randint(0, 2, size=n),
         })
         result = pf.clean(df, target="target", task="classification")
+        # The column must still have some non-zero variance/values, not be flattened to all-zero
         assert result.df["rare_event_count"].nunique() > 1
 
     def test_dominant_mode_column_not_flattened_to_constant(self):
         n = 300
         df = pd.DataFrame({
-            "seats": np.concatenate([np.full(n - 5, 5), [2, 4, 7, 8, 9]]),
+            "seats": np.concatenate([np.full(n - 5, 5), [2, 4, 7, 8, 9]]),  # IQR likely 0
             "price": np.random.uniform(5000, 50000, size=n),
             "target": np.random.randint(0, 2, size=n),
         })
@@ -183,7 +209,7 @@ class TestRegression_WinsorizationEdgeCases:
         })
         result = pf.clean(df, target="target", task="classification")
         entries_text = " ".join(result.report.to_dataframe()["action"].astype(str).tolist())
-        assert "skip" in entries_text.lower() or True
+        assert "skip" in entries_text.lower() or True  # tolerant: just confirm no crash + logged something
 
 
 class TestRegression_TextVsCategoricalCalibration:
@@ -232,7 +258,9 @@ class TestRegression_UnitSuffixNumericParsing:
         assert by_name["engine_cc"].semantic_type == SemanticType.NUMERIC_FEATURE
 
     def test_complex_nested_unit_expression_documented_limitation(self):
-        """Known, documented limitation — this is a canary, not a strict gate."""
+        """Known, documented limitation — this should NOT be expected to parse cleanly.
+        This test documents current behavior rather than asserting a specific outcome,
+        so it's a canary if behavior silently changes rather than a strict pass/fail gate."""
         n = 100
         df = pd.DataFrame({
             "torque": [f"{np.random.randint(100, 300)}Nm@ {np.random.randint(1500,3000)}rpm" for _ in range(n)],
@@ -240,6 +268,8 @@ class TestRegression_UnitSuffixNumericParsing:
         })
         profiles, _entries = pf.run_profiler(df, target="target", task="classification")
         by_name = {p.name: p for p in profiles}
+        # Documented limitation: falls back to CATEGORICAL_HIGH. If this ever becomes
+        # NUMERIC_FEATURE, that's an improvement, not a failure — but we track it.
         assert by_name["torque"].semantic_type in (
             SemanticType.CATEGORICAL_HIGH, SemanticType.NUMERIC_FEATURE
         )
@@ -266,6 +296,7 @@ class TestRegression_ApiConsistency:
         try:
             with pytest.raises((ValueError, TypeError)) as exc_info:
                 pf.save_compare_pdf(result, "not_a_prepresult", path)
+            # Must be a clean, intentional error, not a raw AttributeError leaking through
             assert not isinstance(exc_info.value, AttributeError)
         finally:
             if os.path.exists(path):
@@ -280,6 +311,7 @@ class TestRegression_ApiConsistency:
         })
         dry = pf.prepare(df, target="target", task="classification", dry_run=True)
         real = pf.prepare(df, target="target", task="classification")
+        # Both must succeed; dry run must not hide a failure that the real run also has
         assert dry.report is not None
         assert real.pipeline is not None
 
@@ -292,6 +324,9 @@ class TestRealDatasetEndToEnd:
 
     @pytest.fixture(scope="class")
     def telco_like_df(self):
+        """Synthetic stand-in shaped like Telco Churn, in case network access to the
+        real CSV isn't available in the test environment — mirrors its known problem
+        columns (string target, TotalCharges-as-string with blanks, SeniorCitizen 0/1)."""
         n = 500
         return pd.DataFrame({
             "customerID": [f"CUST-{i:05d}" for i in range(n)],
@@ -360,7 +395,7 @@ class TestRealDatasetMissingnessVisualization:
         try:
             result.report.save_pdf(path)
             assert os.path.exists(path)
-            assert os.path.getsize(path) > 1000
+            assert os.path.getsize(path) > 1000  # a real chart-bearing PDF, not a near-empty stub
         finally:
             if os.path.exists(path):
                 os.remove(path)
@@ -418,6 +453,7 @@ class TestFullFeatureMatrix:
         for col in new_cols:
             series = result.df[col]
             if series.nunique(dropna=False) <= 1:
+                # If a generated column IS degenerate, it must be explained in the report
                 entries = result.report.to_dataframe()
                 related = entries[entries["column"].astype(str).str.contains(re.escape(col), na=False)]
                 assert len(related) > 0, f"Degenerate column '{col}' has no explanatory ReportEntry"
@@ -461,20 +497,45 @@ class TestFullFeatureMatrix:
 # ===========================================================================
 # SECTION 4 — CLI, full round trip
 # ===========================================================================
-#
-# v2's CLI (src/preflight/cli.py) is a stub in this milestone (Phase 6 / M5
-# scope covers cleaning/engineering/assembly only). These two v1 tests are
-# skipped rather than ported — see docs/port_regressions.md "CLI scope
-# deferral" for the deliberate divergence this documents.
 
-@pytest.mark.skip(reason="CLI deferred out of Phase 6 (M5) scope; see docs/port_regressions.md")
 class TestCliRoundTrip:
 
+    @pytest.mark.skip(reason="v2 has no CLI in this phase (no CLI commands are in scope for M5); see docs/port_regressions.md")
     def test_cli_full_flag_combination_on_string_target_dataset(self, tmp_path):
-        pass
+        n = 300
+        df = pd.DataFrame({
+            "city": np.random.choice([f"c{i}" for i in range(40)], size=n),
+            "num_a": np.random.uniform(0, 1, size=n),
+            "notes": ["Solid overall experience with the product and support team here"] * n,
+            "target": np.random.choice(["yes", "no"], size=n),
+        })
+        csv_path = tmp_path / "data.csv"
+        pdf_path = tmp_path / "out.pdf"
+        df.to_csv(csv_path, index=False)
 
+        result = runner.invoke(app, [
+            "prepare", str(csv_path), "--target", "target", "--task", "classification",
+            "--preset", "thorough",
+            "--text-features", "--text-tfidf",
+            "--save-pdf", str(pdf_path),
+        ])
+        assert result.exit_code == 0
+        assert pdf_path.exists()
+        assert pdf_path.stat().st_size > 0
+
+    @pytest.mark.skip(reason="v2 has no CLI in this phase (no CLI commands are in scope for M5); see docs/port_regressions.md")
     def test_cli_errors_are_clean_not_tracebacks(self, tmp_path):
-        pass
+        n = 50
+        df = pd.DataFrame({"a": np.random.uniform(0, 1, n), "target": np.random.randint(0, 2, n)})
+        csv_path = tmp_path / "data.csv"
+        df.to_csv(csv_path, index=False)
+
+        result = runner.invoke(app, [
+            "prepare", str(csv_path), "--target", "target", "--task", "classification",
+            "--preset", "not_a_real_preset",
+        ])
+        assert result.exit_code != 0
+        assert "Traceback (most recent call last)" not in result.output
 
 
 # ===========================================================================
@@ -543,7 +604,7 @@ class TestPublicApiCompleteness:
             "add_features", "run_profiler", "save_compare_pdf",
         ]
         for name in expected:
-            assert hasattr(pf, name), f"Missing bridged function: pf.{name}"
+            assert hasattr(pf, name), f"Missing public function: pf.{name}"
 
     def test_semantic_type_includes_text(self):
         assert hasattr(SemanticType, "TEXT")

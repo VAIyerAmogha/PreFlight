@@ -3,6 +3,7 @@ Cleaner orchestration and backwards-compatible API for PreFlight v2.0.
 """
 
 import re
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import dateutil.parser
 import numpy as np
@@ -20,6 +21,8 @@ from preflight.clean.drops import (
     plan_drops,
     should_drop_column,
 )
+from preflight.clean.markers import apply_markers, plan_markers
+from preflight.signals import ColumnSignals, compute_signals
 from preflight.clean.impute import (
     add_missing_indicator,
     apply_impute,
@@ -126,36 +129,136 @@ def coerce_numeric_string_column(series: pd.Series) -> Tuple[Optional[pd.Series]
     return None, None
 
 
+def plan_coerce(
+    df: pd.DataFrame,
+    schema: Optional[TableSchema] = None,
+    target: Optional[str] = None,
+) -> List[Decision]:
+    """
+    Plan conversion of text columns that the schema types as numbers but that
+    still hold text with units or stray spaces (v1: Profiler/Cleaner
+    `coerce_numeric_string_column`). Typed columns from the reading/typing
+    stages never need this.
+    """
+    decisions: List[Decision] = []
+    if not schema or not schema.columns:
+        return decisions
+    for c in schema.columns:
+        col = c.name
+        if col == target or col not in df.columns:
+            continue
+        if (c.effective_type() or "").lower() not in ("int", "float", "numeric"):
+            continue
+        series = df[col]
+        if pd.api.types.is_numeric_dtype(series):
+            continue
+        coerced, unit = coerce_numeric_string_column(series)
+        if coerced is None:
+            continue
+        decisions.append(
+            Decision(
+                id="",
+                stage="clean",
+                kind="coerce_numeric",
+                columns=[col],
+                action="coerce_numeric",
+                evidence={"unit": unit},
+                confidence=float(min(1.0, max(0.0, c.confidence))),
+                default="coerce_numeric",
+                needs_attention=False,
+                plain_language=(
+                    f"Read column '{col}' as numbers"
+                    + (f" (removing the unit '{unit}')." if unit else " (removing stray spaces).")
+                ),
+                status="automatic",
+            )
+        )
+    return decisions
+
+
+def apply_coerce(df: pd.DataFrame, decisions: List[Decision]) -> pd.DataFrame:
+    df_out = df.copy()
+    for d in decisions:
+        if d.kind == "coerce_numeric" and d.action == "coerce_numeric" and d.columns:
+            col = d.columns[0]
+            if col in df_out.columns:
+                coerced, _ = coerce_numeric_string_column(df_out[col])
+                if coerced is not None:
+                    df_out[col] = coerced
+    return df_out
+
+
+@dataclass
+class CleanPlan:
+    """Cleaning Decisions plus the state the engineer stage reads."""
+    decisions: List[Decision]
+    cleaned: pd.DataFrame
+    signals: Dict[str, ColumnSignals]
+
+
 def plan_clean(
     df: pd.DataFrame,
     schema: Optional[TableSchema] = None,
     target: Optional[str] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
     target_column: Optional[str] = None,
+    task: Optional[str] = None,
 ) -> List[Decision]:
+    """Cleaning Decisions only; see `plan_clean_full`."""
+    return plan_clean_full(df, schema, target, config, target_column, task).decisions
+
+
+def plan_clean_full(
+    df: pd.DataFrame,
+    schema: Optional[TableSchema] = None,
+    target: Optional[str] = None,
+    config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
+    target_column: Optional[str] = None,
+    task: Optional[str] = None,
+) -> CleanPlan:
     """
-    Generate all cleaning Decisions across dedupe, drops, normalization,
-    gap filling, and outlier handling without mutating data.
+    Generate every cleaning Decision without touching `df`.
+
+    The steps are simulated in order on a private copy, so each step sees the
+    table as the previous steps leave it (this is what v1 did): markers,
+    numeric coercion, column signals, duplicates, drops, text tidying and
+    rare values, gap filling, then outlier clipping. Applying the returned
+    Decisions with `apply_clean` reproduces that same table.
     """
     target = target_column or target
     decisions: List[Decision] = []
+    work = df.copy()
 
-    # 1. Dedupe
-    decisions.extend(plan_dedupe(df, config=config))
+    d_mark = plan_markers(work, schema)
+    work = apply_markers(work, d_mark)
+    d_coerce = plan_coerce(work, schema, target)
+    work = apply_coerce(work, d_coerce)
+    decisions.extend(d_mark)
+    decisions.extend(d_coerce)
 
-    # 2. Drops (High missingness, ID, Constant)
-    decisions.extend(plan_drops(df, schema=schema, target=target, config=config))
+    sigs = compute_signals(
+        work,
+        schema=schema,
+        target=target,
+        task=task,
+        cardinality_threshold=config.cardinality_threshold,
+        rare_threshold=config.rare_category_threshold,
+    )
 
-    # 3. Category Normalization & Rare Categories
-    decisions.extend(plan_normalization(df, schema=schema, target=target, config=config))
+    d_dedupe = plan_dedupe(work, config=config)
+    work, _ = apply_dedupe(work, d_dedupe)
+    d_drops = plan_drops(work, schema=schema, target=target, config=config, signals=sigs)
+    work, _ = apply_drops(work, d_drops)
+    d_norm = plan_normalization(work, schema=schema, target=target, config=config, signals=sigs)
+    work = apply_normalization(work, d_norm)
+    d_impute = plan_impute(work, schema=schema, target=target, config=config, signals=sigs)
+    work = apply_impute(work, d_impute)
+    d_out = plan_outliers(work, schema=schema, target=target, config=config, signals=sigs)
 
-    # 4. Outliers (Winsorization)
-    decisions.extend(plan_outliers(df, schema=schema, target=target, config=config))
-
-    # 5. Missing Indicators & Gap Filling
-    decisions.extend(plan_impute(df, schema=schema, target=target, config=config))
-
-    return decisions
+    for group in (d_dedupe, d_drops, d_norm, d_impute, d_out):
+        decisions.extend(group)
+    work = apply_outliers(work, d_out)
+    return CleanPlan(decisions=decisions, cleaned=work, signals=sigs)
 
 
 def apply_clean(
@@ -163,98 +266,12 @@ def apply_clean(
     decisions: List[Decision],
     schema: Optional[TableSchema] = None,
 ) -> pd.DataFrame:
-    """
-    Apply all cleaning decisions in standard pipeline execution order.
-    """
-    df_clean = df.copy()
-
-    # 1. Dedupe
-    df_clean, _ = apply_dedupe(df_clean, decisions)
-
-    # 2. Drops
-    df_clean, _ = apply_drops(df_clean, decisions)
-
-    # 3. Normalization & Rare categories
-    df_clean = apply_normalization(df_clean, decisions)
-
-    # 4. Outliers
-    df_clean = apply_outliers(df_clean, decisions)
-
-    # 5. Missing markers, indicators & Gap filling
-    df_clean = apply_impute(df_clean, decisions, schema=schema)
-
-    return df_clean
-
-
-def run_cleaner(
-    df: pd.DataFrame,
-    profiles: Any,
-    target: str = "",
-    drop_threshold: float = 0.6,
-    outlier_method: str = "iqr",
-) -> Tuple[pd.DataFrame, Any, List[Any], Dict[str, Any]]:
-    """
-    Backwards-compatible run_cleaner API supporting v1 test suites and transformers.
-    """
-    config = CleanerConfig(
-        drop_missing_threshold=drop_threshold,
-        outlier_method=outlier_method,
-    )
-
-    # Convert profiles to mock TableSchema or extract column info if ColumnProfile list
-    schema = None
-    if isinstance(profiles, list) and profiles:
-        cols = []
-        for idx, p in enumerate(profiles):
-            st = getattr(p, "semantic_type", None)
-            st_val = getattr(st, "value", str(st)) if st else "text"
-            col_name = getattr(p, "name", None) or (p.columns[0] if getattr(p, "columns", None) else f"col_{idx}")
-            cols.append(ColumnRawMetadata(name=col_name, position=idx, inferred_type=st_val))
-        schema = TableSchema(columns=cols)
-    elif isinstance(profiles, TableSchema):
-        schema = profiles
-
-    decisions = plan_clean(df, schema=schema, target=target, config=config)
-    df_cleaned = apply_clean(df, decisions, schema=schema)
-
-    # Generate v1-compatible specs and surviving profiles
-    surviving_cols = set(df_cleaned.columns)
-    def _col_of(p: Any) -> str:
-        return p.name if hasattr(p, "name") else (p.columns[0] if getattr(p, "columns", None) else str(p))
-    surviving_profiles = [p for p in profiles if _col_of(p) in surviving_cols] if isinstance(profiles, list) else profiles
-
-    specs: Dict[str, Any] = {}
-    for d in decisions:
-        if d.columns:
-            col = d.columns[0]
-            if col not in specs:
-                specs[col] = {}
-            if d.kind == "add_missing_indicator":
-                specs[col]["add_missing_indicator"] = True
-            elif d.kind in ("fill_median", "impute_median"):
-                specs[col]["impute_strategy"] = "median"
-                specs[col]["impute_value"] = d.evidence.get("fill_value")
-            elif d.kind in ("fill_mode", "impute_mode"):
-                specs[col]["impute_strategy"] = "mode"
-                specs[col]["impute_value"] = d.evidence.get("fill_value")
-            elif d.kind == "constant_fill":
-                specs[col]["impute_strategy"] = "constant"
-                specs[col]["impute_value"] = d.evidence.get("fill_value", "__missing__")
-            elif d.kind == "clip_outliers":
-                specs[col]["outlier_method"] = d.evidence.get("method", outlier_method)
-            elif d.kind == "group_rare_categories":
-                specs[col]["rare_categories"] = d.evidence.get("rare_categories", [])
-
-    from preflight.types import ReportEntry
-    report_entries = [
-        ReportEntry(
-            stage="cleaner",
-            column=d.columns[0] if d.columns else "__all__",
-            action=d.action,
-            rationale=d.plain_language,
-            severity="info",
-        )
-        for d in decisions
-    ]
-
-    return df_cleaned, surviving_profiles, report_entries, specs
+    """Apply cleaning Decisions in the order `plan_clean` simulated them."""
+    out = apply_markers(df.copy(), decisions)
+    out = apply_coerce(out, decisions)
+    out, _ = apply_dedupe(out, decisions)
+    out, _ = apply_drops(out, decisions)
+    out = apply_normalization(out, decisions)
+    out = apply_impute(out, decisions)
+    out = apply_outliers(out, decisions)
+    return out
