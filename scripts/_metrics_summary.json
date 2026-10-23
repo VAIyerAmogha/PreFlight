@@ -1,0 +1,270 @@
+{
+  "tuning": {
+    "n_files": 153,
+    "n_loaded": 153,
+    "load_pct": 100.0,
+    "n_dial_eval": 153,
+    "n_dial_correct": 140,
+    "dial_pct": 91.50326797385621,
+    "total_cols": 1765,
+    "correct_cols": 1619,
+    "col_acc_pct": 91.72804532577904,
+    "wrong_no_flag": 8,
+    "wrong_no_flag_pct": 0.45325779036827196,
+    "dec_total": 4737,
+    "dec_missing": 0,
+    "dec_complete_pct": 100.0,
+    "na_median": 3,
+    "na_max": 109,
+    "na_outliers": [
+      [
+        "fte_bob_ross_elements_by_episode",
+        67
+      ],
+      [
+        "fte_college_majors_grad_students",
+        13
+      ],
+      [
+        "fte_college_majors_recent_grads",
+        14
+      ],
+      [
+        "fte_drug_use_by_age_drug_use_by_age",
+        19
+      ],
+      [
+        "fte_food_world_cup_food_world_cup_data",
+        66
+      ],
+      [
+        "fte_police_killings_police_killings",
+        25
+      ],
+      [
+        "r_count_affairs",
+        18
+      ],
+      [
+        "r_count_rwm1984",
+        12
+      ],
+      [
+        "r_daag_ant111b",
+        11
+      ],
+      [
+        "tt_2018_2018_05_14_week7_starwars",
+        17
+      ],
+      [
+        "tt_2018_2018_11_20_thanksgiving_meals",
+        109
+      ],
+      [
+        "tt_2019_2019_05_14_nobel_winners",
+        12
+      ],
+      [
+        "tt_2019_2019_10_08_ipf_lifts",
+        11
+      ],
+      [
+        "tt_2019_2019_10_15_big_epa_cars",
+        25
+      ],
+      [
+        "tt_2019_2019_10_29_nyc_squirrels",
+        12
+      ],
+      [
+        "tt_2020_2020_01_14_passwords",
+        13
+      ],
+      [
+        "tt_2020_2020_03_03_season_goals",
+        11
+      ],
+      [
+        "tt_2020_2020_05_12_volcano",
+        15
+      ]
+    ]
+  },
+  "held_out": {
+    "n_files": 101,
+    "n_loaded": 101,
+    "load_pct": 100.0,
+    "n_dial_eval": 101,
+    "n_dial_correct": 93,
+    "dial_pct": 92.07920792079207,
+    "total_cols": 1085,
+    "correct_cols": 978,
+    "col_acc_pct": 90.13824884792626,
+    "wrong_no_flag": 16,
+    "wrong_no_flag_pct": 1.4746543778801844,
+    "dec_total": 3052,
+    "dec_missing": 0,
+    "dec_complete_pct": 100.0,
+    "na_median": 2,
+    "na_max": 39,
+    "na_outliers": [
+      [
+        "fl_doublequote",
+        17
+      ],
+      [
+        "fte_avengers_avengers",
+        19
+      ],
+      [
+        "fte_bachelorette_bachelorette",
+        39
+      ],
+      [
+        "fte_masculinity_survey_raw_responses",
+        39
+      ],
+      [
+        "fte_star_wars_survey_starwars",
+        17
+      ],
+      [
+        "r_cardata_florida",
+        12
+      ],
+      [
+        "tt_2018_2018_05_29_week9_comic_characters",
+        15
+      ],
+      [
+        "tt_2019_2019_02_26_full_trains",
+        19
+      ]
+    ]
+  },
+  "combined": {
+    "n_files": 254,
+    "n_loaded": 254,
+    "load_pct": 100.0,
+    "n_dial_eval": 254,
+    "n_dial_correct": 233,
+    "dial_pct": 91.73228346456693,
+    "total_cols": 2850,
+    "correct_cols": 2597,
+    "col_acc_pct": 91.12280701754386,
+    "wrong_no_flag": 24,
+    "wrong_no_flag_pct": 0.8421052631578947,
+    "dec_total": 7789,
+    "dec_missing": 0,
+    "dec_complete_pct": 100.0,
+    "na_median": 3.0,
+    "na_max": 109,
+    "na_outliers": [
+      [
+        "fl_doublequote",
+        17
+      ],
+      [
+        "fte_avengers_avengers",
+        19
+      ],
+      [
+        "fte_bachelorette_bachelorette",
+        39
+      ],
+      [
+        "fte_bob_ross_elements_by_episode",
+        67
+      ],
+      [
+        "fte_college_majors_grad_students",
+        13
+      ],
+      [
+        "fte_college_majors_recent_grads",
+        14
+      ],
+      [
+        "fte_drug_use_by_age_drug_use_by_age",
+        19
+      ],
+      [
+        "fte_food_world_cup_food_world_cup_data",
+        66
+      ],
+      [
+        "fte_masculinity_survey_raw_responses",
+        39
+      ],
+      [
+        "fte_police_killings_police_killings",
+        25
+      ],
+      [
+        "fte_star_wars_survey_starwars",
+        17
+      ],
+      [
+        "r_cardata_florida",
+        12
+      ],
+      [
+        "r_count_affairs",
+        18
+      ],
+      [
+        "r_count_rwm1984",
+        12
+      ],
+      [
+        "r_daag_ant111b",
+        11
+      ],
+      [
+        "tt_2018_2018_05_14_week7_starwars",
+        17
+      ],
+      [
+        "tt_2018_2018_05_29_week9_comic_characters",
+        15
+      ],
+      [
+        "tt_2018_2018_11_20_thanksgiving_meals",
+        109
+      ],
+      [
+        "tt_2019_2019_02_26_full_trains",
+        19
+      ],
+      [
+        "tt_2019_2019_05_14_nobel_winners",
+        12
+      ],
+      [
+        "tt_2019_2019_10_08_ipf_lifts",
+        11
+      ],
+      [
+        "tt_2019_2019_10_15_big_epa_cars",
+        25
+      ],
+      [
+        "tt_2019_2019_10_29_nyc_squirrels",
+        12
+      ],
+      [
+        "tt_2020_2020_01_14_passwords",
+        13
+      ],
+      [
+        "tt_2020_2020_03_03_season_goals",
+        11
+      ],
+      [
+        "tt_2020_2020_05_12_volcano",
+        15
+      ]
+    ]
+  }
+}

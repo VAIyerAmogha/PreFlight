@@ -31,8 +31,12 @@ VALID_SEMANTIC_TYPES = {
 
 
 def get_label_files():
-    """Retrieve all label json files."""
-    return sorted(list(LABELS_DIR.glob("*.json")))
+    """Retrieve all label json files.
+
+    Excludes split.json: the frozen tuning/held-out split manifest, not a
+    per-file label record (it maps file_id -> split name, not a schema).
+    """
+    return sorted(f for f in LABELS_DIR.glob("*.json") if f.name != "split.json")
 
 
 def test_no_duplicate_file_ids():

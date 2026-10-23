@@ -20,8 +20,12 @@ LABELS_DIR = CORPUS_ROOT / "labels"
 
 
 def get_all_label_files() -> List[Path]:
-    """Retrieve all ground-truth label JSON files."""
-    return sorted(list(LABELS_DIR.glob("*.json")))
+    """Retrieve all ground-truth label JSON files.
+
+    Excludes split.json: the frozen tuning/held-out split manifest, not a
+    per-file label record.
+    """
+    return sorted(f for f in LABELS_DIR.glob("*.json") if f.name != "split.json")
 
 
 def normalize_encoding_name(enc: str) -> str:

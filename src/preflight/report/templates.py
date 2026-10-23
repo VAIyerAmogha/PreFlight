@@ -74,6 +74,33 @@ BANNED_JARGON = [
 ]
 
 
+def find_jargon_violations(text: str) -> List[str]:
+    """
+    Return every banned jargon term that appears in `text` (case-insensitive,
+    whole-word match). Empty list means the text is plain language.
+
+    Shared by the Plan PDF and the Report PDF so both documents are checked
+    against the same banned-term list.
+    """
+    if not text:
+        return []
+    lower = text.lower()
+    found: List[str] = []
+    for term in BANNED_JARGON:
+        pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
+        if re.search(pattern, lower):
+            found.append(term)
+    return found
+
+
+def assert_plain_language(text: str, context: str = "") -> None:
+    """Raise ValueError naming the offending term(s) if `text` contains banned jargon."""
+    violations = find_jargon_violations(text)
+    if violations:
+        where = f" in {context}" if context else ""
+        raise ValueError(f"Banned jargon term(s) {violations} found{where}: {text!r}")
+
+
 @dataclass(frozen=True)
 class RenderedDecisionText:
     """Structured plain-language rendered text for a pipeline Decision."""

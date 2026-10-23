@@ -51,6 +51,18 @@ notebook = ["ipywidgets>=8"]
 dev = [
     "pytest",
     "pypdf>=5.0.0",
+    # hypothesis: MPL-2.0 licence. Property-based/fuzz testing for the hardening suite.
+    "hypothesis",
+    # pytest-cov: MIT licence. Coverage reporting integration for pytest.
+    "pytest-cov",
+    # ruff: MIT licence. Linter/formatter.
+    "ruff",
+    # mypy: MIT licence. Static type checker.
+    "mypy",
+    # nox: Apache-2.0 licence. Test/lint session automation across interpreters.
+    "nox",
+    # pre-commit: MIT licence. Git hook manager for running lint/type checks pre-commit.
+    "pre-commit",
 ]
 
 [project.urls]
@@ -59,3 +71,28 @@ Repository = "https://github.com/VAIyerAmogha/PreFlight"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/preflight"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["preflight"]
+
+[tool.mypy]
+# Note: mypy itself requires python_version >= 3.10 to check against, even though
+# this project targets >=3.9 (requires-python). Pinned to the lowest mypy-supported
+# floor; language-version-specific issues below 3.10 are not caught by this config.
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "preflight.*"
+strict = true
