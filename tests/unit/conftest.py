@@ -1,7 +1,7 @@
 """Shared fixtures for interaction-layer unit tests."""
 
 from pathlib import Path
-from typing import Callable, Dict, List
+from typing import Callable
 
 import pytest
 
@@ -52,10 +52,10 @@ def messy_session(messy_plan: Plan) -> ReviewSession:
     return s
 
 
-def pick(index: int) -> Callable[[List[Question]], Dict[str, str]]:
+def pick(index: int) -> Callable[[list[Question]], dict[str, str]]:
     """Callback that answers every question with its index-th option (clamped)."""
     return lambda qs: {q.question_id: q.options[min(index, len(q.options) - 1)] for q in qs}
 
 
-def recommended(qs: List[Question]) -> Dict[str, str]:
+def recommended(qs: list[Question]) -> dict[str, str]:
     return {q.question_id: q.recommended_default for q in qs}

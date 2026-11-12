@@ -2,14 +2,16 @@
 Column drop planning and execution for PreFlight v2.0 (high missingness, ID, constant).
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
+from typing import Any, Optional
+
 import pandas as pd
 
+from preflight.clean._common import need_signals
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.clean._common import need_signals
 from preflight.signals import CONSTANT, NUMERIC_ID, ColumnSignals
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
 def should_drop_column(missing_rate: float, drop_threshold: float = 0.6) -> bool:
@@ -22,9 +24,9 @@ def should_drop_column(missing_rate: float, drop_threshold: float = 0.6) -> bool
 
 def drop_high_missingness_columns(
     df: pd.DataFrame,
-    columns_with_missing_rate: Sequence[Tuple[str, float]],
+    columns_with_missing_rate: Sequence[tuple[str, float]],
     drop_threshold: float = 0.6,
-) -> Tuple[pd.DataFrame, List[str]]:
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Drop columns exceeding drop_threshold missingness.
     """
@@ -40,7 +42,7 @@ def drop_high_missingness_columns(
 def drop_numeric_id_columns(
     df: pd.DataFrame,
     id_columns: Sequence[str],
-) -> Tuple[pd.DataFrame, List[str]]:
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Drop identified ID columns.
     """
@@ -53,7 +55,7 @@ def drop_numeric_id_columns(
 def drop_constant_columns(
     df: pd.DataFrame,
     constant_columns: Sequence[str],
-) -> Tuple[pd.DataFrame, List[str]]:
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Drop identified constant columns.
     """
@@ -69,8 +71,8 @@ def plan_drops(
     target: Optional[str] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
     target_column: Optional[str] = None,
-    signals: Optional[Dict[str, ColumnSignals]] = None,
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+) -> list[Decision]:
     """
     Plan column drops (v1 order: high missingness, then ID, then constant).
     Never drops the target. If the fraction of columns dropped exceeds
@@ -84,7 +86,7 @@ def plan_drops(
 
     sigs = need_signals(df, signals, schema, target, config.cardinality_threshold)
 
-    cols_to_drop: List[Tuple[str, str, Dict[str, Any]]] = []
+    cols_to_drop: list[tuple[str, str, dict[str, Any]]] = []
     for col in df.columns:
         if col == target or col not in sigs:
             continue
@@ -104,7 +106,7 @@ def plan_drops(
     col_impact = len(cols_to_drop) / total_cols
     needs_att = col_impact > config.column_drop_impact_threshold
 
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
     for col, reason, ev_detail in cols_to_drop:
         if reason == "high_missingness":
             summary = f"Remove column '{col}' because {ev_detail['missing_rate']:.1%} of its entries are blank."
@@ -148,8 +150,8 @@ def plan_drops(
 
 def apply_drops(
     df: pd.DataFrame,
-    decisions: List[Decision],
-) -> Tuple[pd.DataFrame, List[str]]:
+    decisions: list[Decision],
+) -> tuple[pd.DataFrame, list[str]]:
     """Apply column drops whose action in force is drop_column."""
     dropped_cols = []
     for d in decisions:

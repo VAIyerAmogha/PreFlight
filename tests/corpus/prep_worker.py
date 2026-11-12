@@ -1,6 +1,7 @@
 """
 Worker for test_pipeline_corpus.py: runs ONE corpus file through the whole pipeline
-(plan -> dry_run under defaults -> apply under defaults) and prints one JSON object.
+(plan -> dry_run under defaults -> apply under defaults -> fit the returned unfitted
+pipeline on the prepared rows) and prints one JSON object.
 Run as a subprocess so the parent can enforce a hard timeout.
 
     python prep_worker.py <csv path>
@@ -22,6 +23,7 @@ from pathlib import Path
 
 def choose_target(path: Path):
     import pandas as pd
+
     from preflight.plan import ApplyContext, PlanContext, ReadingStage
 
     stage = ReadingStage()
@@ -77,6 +79,14 @@ def main(path: str) -> dict:
             run = apply(base, mode="defaults", out_dir=Path(td) / "run")
             res["prepared_shape"] = list(run.prepared.shape) if run.prepared is not None else None
             res["typed_rows"] = int(len(run.data))
+            stage = "pipeline_fit"
+            # The unfitted pipeline must fit on the prepared rows (as a caller would per fold)
+            if run.pipeline is not None and run.prepared is not None and target in run.prepared.columns:
+                from sklearn.base import clone
+
+                X, y = run.prepared.drop(columns=[target]), run.prepared[target]
+                fitted_out = clone(run.pipeline).fit_transform(X, y)
+                res["pipeline_out_shape"] = list(fitted_out.shape)
             a, b = [comparable(d) for d in dry.decisions], [comparable(d) for d in run.decisions]
             res["plan_run_agree"] = a == b
             if a != b:

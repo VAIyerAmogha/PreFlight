@@ -8,23 +8,34 @@ Explicitly handles known traps:
 - Leading-zero IDs / postal codes (rejects int coercion, preserving leading zeroes)
 - European decimal comma vs. decimal point and thousands separators
 - Ambiguous date formats (dd/mm vs mm/dd ambiguity flagged and abstained)
-- Embedded units (e.g. '15 kmpl', '$12.50' detected as text/numeric mix, flagged lossy-if-coerced, abstained)
+- Embedded units (a number with a short letter suffix, a currency symbol or a percent sign),
+  found generically and flagged as a lossy conversion with the unit kept in the Decision
 
 Emits a Decision record per column with confidence scoring, safe defaults,
 and abstain behavior when candidate score margins are low or traps are unresolvable.
 """
 
-from collections import Counter
-from dataclasses import asdict, dataclass, field
-import datetime as dt
 import re
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, Optional, Union
 
+import numpy as np
 import pandas as pd
 
-from preflight.decisions import Decision, compute_decision_fingerprint
+from preflight.decisions import Decision
 from preflight.schema import ColumnRawMetadata, TableSchema
 
+from .config import (
+    PLUS_CODE_MIN_DIGITS,
+    TEXT_NAME_HINT_MIN_WORDS,
+    TYPE_SAMPLE_SEED,
+    TYPE_SAMPLE_SIZE,
+    UNIT_COLUMN_SHARE,
+    UNIT_FLAG_SHARE,
+    UNIT_MAX_LETTERS,
+    UNIT_MIN_REPEATS,
+)
 from .missing import MissingMarker, detect_missing_markers
 
 
@@ -52,10 +63,10 @@ class TypeInferenceResult:
     runner_up: Optional[str]
     abstained: bool
     needs_attention: bool
-    anomalies: List[str]
-    missing_markers: List[MissingMarker]
-    failed_samples: List[str]
-    evidence: Dict[str, Any]
+    anomalies: list[str]
+    missing_markers: list[MissingMarker]
+    failed_samples: list[str]
+    evidence: dict[str, Any]
     decision: Decision
 
 
@@ -91,14 +102,12 @@ BOOL_ALL_LITERALS = {v for pair in BOOL_LITERAL_PAIRS for v in pair}
 
 ID_NAME_PATTERNS = ["id", "_id", "id_", "pk", "key", "index", "code", "fips", "zip", "postal", "rownames"]
 
-UNIT_REGEXES = [
-    (r"^[$€£]\s*[\d,]+(\.\d+)?$", "$"),
-    (r"^[\d,]+(\.\d+)?\s*%$", "%"),
-    (r"^[\d,]+(\.\d+)?\s*(?:kg|g|mg)$", "kg"),
-    (r"^[\d,]+(\.\d+)?\s*(?:km|m|cm|mm)$", "km"),
-    (r"^[\d,]+(\.\d+)?\s*(?:kmpl|kpl|mpg|mph|kph)$", "kmpl"),
-    (r"^[\d,]+(\.\d+)?\s*(?:years|yrs|yr)$", "years"),
-]
+# A number with a unit: currency symbol before it, or a short run of letters / a percent
+# sign after it. The unit itself is whatever the data says (nothing is listed here).
+_RE_UNIT_VALUE = re.compile(
+    r"^(?P<pre>[$€£¥₹])?\s*(?P<num>[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|[-+]?\.\d+)\s*"
+    rf"(?P<suf>[A-Za-z]{{1,{UNIT_MAX_LETTERS}}}|%)?$"
+)
 
 DATE_PATTERNS = [
     r"^\d{4}-\d{2}-\d{2}$",
@@ -112,6 +121,16 @@ DATE_PATTERNS = [
 ]
 
 
+_RE_INT = re.compile(r"^[-+]?\d+$")
+_RE_INT_THOUSANDS = re.compile(r"^[-+]?\d{1,3}(,\d{3})+$")
+_RE_FLOAT_LZ = re.compile(r"^[-+]?0\d+(\.\d*)?$")
+_RE_FLOAT = re.compile(r"^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$")
+_RE_FLOAT_THOUSANDS = re.compile(r"^[-+]?\d{1,3}(,\d{3})*(\.\d+)?$")
+_RE_DEC_COMMA = re.compile(r"^[-+]?\d+(,\d+)$")
+_RE_DEC_COMMA_THOUSANDS = re.compile(r"^[-+]?\d{1,3}(\.\d{3})*(,\d+)$")
+_DATE_COMPILED = [re.compile(p) for p in DATE_PATTERNS]
+
+
 # ---------------------------------------------------------------------------
 # Individual Candidate Type Parsers
 # ---------------------------------------------------------------------------
@@ -120,7 +139,12 @@ def _parse_bool(v: str) -> bool:
     return v.strip().lower() in BOOL_ALL_LITERALS
 
 
-def _parse_int(v: str) -> Tuple[bool, bool]:
+def _is_plus_code(s: str) -> bool:
+    """'+' and a long run of digits (e.g. +447911123456): a code whose '+' a number would drop."""
+    return s.startswith("+") and s[1:].isdigit() and len(s) - 1 >= PLUS_CODE_MIN_DIGITS
+
+
+def _parse_int(v: str) -> tuple[bool, bool]:
     """
     Parse integer without leading zero corruption.
 
@@ -135,18 +159,44 @@ def _parse_int(v: str) -> Tuple[bool, bool]:
     if len(s) > 1 and s.isdigit() and s.startswith("0"):
         return False, True
 
+    # A '+' code is not an integer (the sign is part of the code)
+    if _is_plus_code(s):
+        return False, False
+
     # Standard integer with optional sign
-    if re.match(r"^[-+]?\d+$", s):
+    if _RE_INT.match(s):
         return True, False
 
     # Integer with thousands comma separators (e.g. "1,000,000")
-    if re.match(r"^[-+]?\d{1,3}(,\d{3})+$", s):
+    if _RE_INT_THOUSANDS.match(s):
         return True, False
 
     return False, False
 
 
-def _parse_float(v: str) -> Tuple[bool, bool, Optional[str], bool]:
+def _unit_of(s: str) -> Optional[str]:
+    """The unit of a number-with-unit value ('12 abc' -> 'abc', '$12.50' -> '$'), else None."""
+    m = _RE_UNIT_VALUE.match(s)
+    if m is None:
+        return None
+    return m.group("pre") or m.group("suf")
+
+
+def strip_unit(value: str, unit: str) -> Optional[str]:
+    """
+    The number part of `value` when it carries `unit` (or no unit at all), else None.
+    Used to read a unit column as numbers; the unit itself is kept in the Decision.
+    """
+    m = _RE_UNIT_VALUE.match(value.strip())
+    if m is None:
+        return None
+    found = m.group("pre") or m.group("suf")
+    if found is not None and found != unit:
+        return None
+    return m.group("num")
+
+
+def _parse_float(v: str) -> tuple[bool, bool, Optional[str], bool]:
     """
     Parse float handling decimal comma, embedded unit, and leading-zero traps.
 
@@ -161,27 +211,31 @@ def _parse_float(v: str) -> Tuple[bool, bool, Optional[str], bool]:
     if len(s) > 1 and s.isdigit() and s.startswith("0"):
         return False, False, None, True
 
+    # A '+' code is not a number either
+    if _is_plus_code(s):
+        return False, False, None, False
+
     # Check for embedded unit trap
-    for pat, unit_sym in UNIT_REGEXES:
-        if re.match(pat, s, re.IGNORECASE):
-            return False, False, unit_sym, False
+    unit_sym = _unit_of(s)
+    if unit_sym is not None:
+        return False, False, unit_sym, False
 
     # Standard float (e.g. 12.5, 0.123, -4.5, 1e-5)
     # Exclude digit strings starting with 0 that aren't 0.xxx or 0
-    if re.match(r"^[-+]?0\d+(\.\d*)?$", s):
+    if _RE_FLOAT_LZ.match(s):
         return False, False, None, True
 
-    if re.match(r"^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$", s):
+    if _RE_FLOAT.match(s):
         return True, False, None, False
 
     # Float with thousands comma separators: 1,000.50
-    if re.match(r"^[-+]?\d{1,3}(,\d{3})*(\.\d+)?$", s):
+    if _RE_FLOAT_THOUSANDS.match(s):
         return True, False, None, False
 
     # Decimal comma (European format): 12,5 or 1.234,56
-    if re.match(r"^[-+]?\d+(,\d+)$", s):
+    if _RE_DEC_COMMA.match(s):
         return True, True, None, False
-    if re.match(r"^[-+]?\d{1,3}(\.\d{3})*(,\d+)$", s):
+    if _RE_DEC_COMMA_THOUSANDS.match(s):
         return True, True, None, False
 
     return False, False, None, False
@@ -221,7 +275,62 @@ def _parse_datetime(v: str) -> bool:
     s = v.strip()
     if not s:
         return False
-    return any(re.match(p, s) for p in DATE_PATTERNS)
+    return any(p.match(s) for p in _DATE_COMPILED)
+
+
+# ---------------------------------------------------------------------------
+# Parse results for a whole column (each distinct value parsed once)
+# ---------------------------------------------------------------------------
+
+# Which mask proves a value parses as the winning type (used to verify the winner).
+_VERIFY_MASK = {"int": "int", "float": "float", "datetime": "datetime", "boolean": "bool"}
+
+_MASK_KEYS = ("int", "int_lz", "float", "float_lz", "dec_comma", "datetime", "bool", "plus_code")
+
+
+def _classify(v: str) -> tuple[tuple[bool, ...], Optional[str]]:
+    p_int, int_lz = _parse_int(v)
+    p_flt, dec_comma, unit, flt_lz = _parse_float(v)
+    flags = (p_int, int_lz, p_flt, flt_lz, p_flt and dec_comma, _parse_datetime(v), _parse_bool(v),
+             _is_plus_code(v.strip()))
+    return flags, unit
+
+
+def _value_masks(values: Sequence[str]) -> dict[str, np.ndarray]:
+    """
+    For every value, whether it parses as int, float, datetime or boolean, plus the trap
+    flags (leading zero, decimal comma, embedded unit). Each distinct value is parsed
+    once with the _parse_* functions and the result is spread back to every row.
+    """
+    codes, uniques = pd.factorize(pd.Series(list(values), dtype=object), sort=False)
+    parsed = [_classify(u) for u in uniques]
+    flags = np.array([f for f, _ in parsed], dtype=bool).reshape(len(parsed), len(_MASK_KEYS))
+    units = np.array([u for _, u in parsed] + [None], dtype=object)[:-1]
+    masks: dict[str, np.ndarray] = {k: flags[codes, i] for i, k in enumerate(_MASK_KEYS)}
+    masks["unit"] = units[codes]
+    return masks
+
+
+def _sample_positions(n: int) -> Optional[np.ndarray]:
+    """Sorted, seeded sample of row positions, or None when the column is small enough to score whole."""
+    if n <= TYPE_SAMPLE_SIZE:
+        return None
+    rng = np.random.default_rng(TYPE_SAMPLE_SEED)
+    return np.sort(rng.choice(n, size=TYPE_SAMPLE_SIZE, replace=False))
+
+
+def _first_failures(values: Sequence[str], ok: np.ndarray, limit: int = 5) -> list[str]:
+    """The first `limit` values (in column order) that do not parse."""
+    return [values[i] for i in np.flatnonzero(~ok)[:limit]]
+
+
+def _unit_counts(unit: np.ndarray) -> dict[str, int]:
+    """Count of each embedded unit, keyed in order of first appearance in the column."""
+    counts: dict[str, int] = {}
+    for u in unit:
+        if u is not None:
+            counts[u] = counts.get(u, 0) + 1
+    return counts
 
 
 # ---------------------------------------------------------------------------
@@ -251,13 +360,13 @@ def infer_column_type(
 
     # Step 1: Detect missing-value markers
     missing_markers = detect_missing_markers(raw_list, column_name=column_name)
-    missing_tokens: Set[str] = {m.marker for m in missing_markers}
+    missing_tokens: set[str] = {m.marker for m in missing_markers}
 
     # Extract non-missing values
     non_missing = [v for v in raw_list if v not in missing_tokens and v.strip() != ""]
     total_non_missing = len(non_missing)
 
-    anomalies: List[str] = []
+    anomalies: list[str] = []
     for m in missing_markers:
         if m.reason != "empty_string":
             anomalies.append(f"disguised_missing: {m.marker}")
@@ -301,90 +410,78 @@ def infer_column_type(
     unique_vals = set(non_missing)
     uniqueness_ratio = len(unique_vals) / total_non_missing
 
-    # Trap detection flags
-    leading_zero_count = 0
-    decimal_comma_count = 0
-    embedded_unit_counts: Dict[str, int] = {}
-    failed_int_samples: List[str] = []
-    failed_float_samples: List[str] = []
-    failed_dt_samples: List[str] = []
+    # Per-value parse results for the WHOLE column, computed with vectorized string
+    # operations (same rules as the _parse_* functions above). Candidate scores come
+    # from a seeded sample of these rows; trap counts, anomalies and failed samples
+    # always come from the whole column, so nothing is found only in the sample.
+    masks = _value_masks(non_missing)
+    sample_idx = _sample_positions(total_non_missing)
+    sampled = sample_idx is not None
+    n_scored = len(sample_idx) if sample_idx is not None else total_non_missing
+
+    def _rate(mask: Any) -> int:
+        return int(mask[sample_idx].sum()) if sample_idx is not None else int(mask.sum())
 
     # A. Constant Score
     const_score = 1.0 if len(unique_vals) <= 1 else 0.0
 
     # B. Boolean Score
-    bool_matches = 0
     unique_lower = {v.strip().lower() for v in unique_vals}
     is_binary_pair = any(unique_lower.issubset(pair) and len(unique_lower) > 0 for pair in BOOL_LITERAL_PAIRS)
-
-    for v in non_missing:
-        if _parse_bool(v):
-            bool_matches += 1
-    bool_score = bool_matches / total_non_missing if is_binary_pair else 0.0
+    bool_score = _rate(masks["bool"]) / n_scored if is_binary_pair else 0.0
 
     # C. Int Score & Traps
-    int_matches = 0
-    for v in non_missing:
-        p_int, has_lz = _parse_int(v)
-        if p_int:
-            int_matches += 1
-        else:
-            if len(failed_int_samples) < 5:
-                failed_int_samples.append(v)
-        if has_lz:
-            leading_zero_count += 1
+    int_score = _rate(masks["int"]) / n_scored
+    failed_int_samples = _first_failures(non_missing, masks["int"])
 
-    int_score = int_matches / total_non_missing
-
-    # If leading zeros detected in digit strings, record anomaly
+    # The leading-zero threshold is checked on the int parser's count alone
+    leading_zero_count = int(masks["int_lz"].sum())
     if leading_zero_count >= max(2, int(0.02 * total_non_missing)):
         anomalies.append("leading_zero")
+    plus_code_count = int(masks["plus_code"].sum())
+    if plus_code_count >= max(2, int(0.02 * total_non_missing)):
+        anomalies.append("plus_sign_code")
 
     # D. Float Score & Traps
-    float_matches = 0
-    for v in non_missing:
-        p_flt, is_dec_comma, unit_sym, flt_lz = _parse_float(v)
-        if p_flt:
-            float_matches += 1
-            if is_dec_comma:
-                decimal_comma_count += 1
-        else:
-            if len(failed_float_samples) < 5:
-                failed_float_samples.append(v)
-        if unit_sym:
-            embedded_unit_counts[unit_sym] = embedded_unit_counts.get(unit_sym, 0) + 1
-        if flt_lz:
-            leading_zero_count += 1
-
-    float_score = float_matches / total_non_missing
+    float_score = _rate(masks["float"]) / n_scored
+    failed_float_samples = _first_failures(non_missing, masks["float"])
+    decimal_comma_count = int(masks["dec_comma"].sum())
     decimal_comma_detected = decimal_comma_count >= max(2, int(0.1 * total_non_missing))
 
-    # Check for embedded units trap
+    # Check for embedded units trap (units in order of first appearance in the column)
     has_embedded_unit = False
     detected_unit = None
-    for u, count in embedded_unit_counts.items():
-        if count >= max(2, int(0.15 * total_non_missing)):
+    unit_counts = _unit_counts(masks["unit"])
+    for u, count in unit_counts.items():
+        if count >= max(UNIT_MIN_REPEATS, int(UNIT_FLAG_SHARE * total_non_missing)):
             anomalies.append(f"embedded_unit: {u}")
             has_embedded_unit = True
             detected_unit = u
             break
 
-    # E. Datetime Score & Traps
-    dt_matches = 0
-    for v in non_missing:
-        if _parse_datetime(v):
-            dt_matches += 1
-        else:
-            if len(failed_dt_samples) < 5:
-                failed_dt_samples.append(v)
+    # A unit column: one unit on most values and every value a number with that unit
+    # (or a bare number). It can be read as numbers with the unit kept in the Decision.
+    unit_column_type: Optional[str] = None
+    if has_embedded_unit:
+        dominant, dom_count = max(unit_counts.items(), key=lambda kv: kv[1])
+        with_dominant = masks["unit"] == dominant
+        bare_number = masks["int"] | masks["float"]
+        if dom_count >= UNIT_COLUMN_SHARE * total_non_missing and bool((with_dominant | bare_number).all()):
+            detected_unit = dominant
+            if f"embedded_unit: {dominant}" not in anomalies:
+                anomalies = [a for a in anomalies if not a.startswith("embedded_unit:")]
+                anomalies.append(f"embedded_unit: {dominant}")
+            numbers = [strip_unit(v, dominant) or "" for v in non_missing]
+            unit_column_type = "float" if any("." in x for x in numbers) else "int"
 
-    dt_score = dt_matches / total_non_missing
+    # E. Datetime Score & Traps
+    dt_score = _rate(masks["datetime"]) / n_scored
+    failed_dt_samples = _first_failures(non_missing, masks["datetime"])
     has_ambiguous_date = False
     if dt_score >= 0.70:
         if _check_date_ambiguity(non_missing):
             anomalies.append("ambiguous_date_format")
             has_ambiguous_date = True
-
     # F. ID Score
     is_id_name = any(
         re.search(rf"\b{p}\b", col_name_lower) or col_name_lower == p or col_name_lower.endswith(p)
@@ -396,11 +493,12 @@ def infer_column_type(
             ints = [int(v.replace(",", "")) for v in non_missing[:100]]
             if sorted(ints) == ints and len(set(ints)) == len(ints):
                 is_sequential_int = True
-        except ValueError:
+        except ValueError:  # Swallowed: a value that is not a plain integer means the column is not a sequence
             pass
 
     has_leading_zeros = "leading_zero" in anomalies
-    if has_leading_zeros:
+    has_plus_codes = "plus_sign_code" in anomalies
+    if has_leading_zeros or has_plus_codes:
         id_score = 0.98 if uniqueness_ratio >= 0.8 else 0.85
     elif is_id_name and (uniqueness_ratio >= 0.85 or is_sequential_int):
         id_score = 0.98
@@ -411,17 +509,8 @@ def infer_column_type(
 
     # G. Text vs Categorical Score
     # Count textual (non-numeric, non-date, non-bool) tokens
-    textual_count = 0
-    for v in non_missing:
-        s_clean = v.strip()
-        p_i, _ = _parse_int(s_clean)
-        p_f, _, _, _ = _parse_float(s_clean)
-        p_b = _parse_bool(s_clean)
-        p_d = _parse_datetime(s_clean)
-        if not (p_i or p_f or p_b or p_d):
-            textual_count += 1
-
-    textual_rate = textual_count / total_non_missing
+    textual = ~(masks["int"] | masks["float"] | masks["bool"] | masks["datetime"])
+    textual_rate = _rate(textual) / n_scored
 
     avg_len = sum(len(v) for v in non_missing) / total_non_missing
     avg_words = sum(len(v.split()) for v in non_missing) / total_non_missing
@@ -431,7 +520,7 @@ def infer_column_type(
     )
 
     if textual_rate > 0.0:
-        if avg_len > 40 or (avg_len > 25 and avg_words >= 5) or (is_text_domain and avg_words >= 3):
+        if avg_len > 40 or (avg_len > 25 and avg_words >= 5) or (is_text_domain and avg_words >= TEXT_NAME_HINT_MIN_WORDS):
             text_score = 0.95 * textual_rate
             cat_score = 0.20 * textual_rate
         else:
@@ -446,8 +535,8 @@ def infer_column_type(
         bool_score = 1.0
         int_score = 0.70  # Prioritize boolean for 2-state 0/1 indicator flags
 
-    # Disambiguation: leading zeros reject integer and float coercion
-    if has_leading_zeros:
+    # Disambiguation: leading zeros and '+' codes reject integer and float coercion
+    if has_leading_zeros or has_plus_codes:
         int_score = 0.0
         float_score = 0.0
         id_score = max(id_score, 0.98)
@@ -455,7 +544,7 @@ def infer_column_type(
 
 
     # Assemble candidate scores
-    scores: Dict[str, float] = {
+    scores: dict[str, float] = {
         "constant": const_score,
         "boolean": bool_score,
         "ID": id_score,
@@ -500,6 +589,16 @@ def infer_column_type(
 
     margin = top_score - runner_score
 
+    # Step 3b: Verify the winning type against the WHOLE column. With a sample, any value
+    # that does not parse as the winner is recorded as an anomaly, so a rare bad value
+    # outside the sample is never lost. Without a sample the scores already cover
+    # every value (failed values show in the score and in failed_samples).
+    verified_failures: Optional[int] = None
+    if top_cand in _VERIFY_MASK:
+        verified_failures = int((~masks[_VERIFY_MASK[top_cand]]).sum())
+        if sampled and verified_failures > 0:
+            anomalies.append(f"verification_failed: {verified_failures} values are not {top_cand}")
+
     # Step 4: Decision & Abstain Evaluation
     abstained = False
     needs_attention = False
@@ -517,8 +616,21 @@ def infer_column_type(
             f"Abstained from inferring datetime for column '{column_name}' due to "
             f"unresolved DD/MM vs MM/DD ambiguity across all date values. Defaulted to string."
         )
+    elif unresolved_trap and unresolved_trap.startswith("embedded_unit") and unit_column_type is not None:
+        # Every value is a number with the same unit: read as numbers, keep the unit in
+        # this Decision, and flag it (the text form is lost) so a person can check.
+        abstained = False
+        needs_attention = True
+        inferred_type = unit_column_type
+        action = f"cast_to_{unit_column_type}"
+        default_act = action
+        confidence = 0.90
+        plain_lang = (
+            f"Column '{column_name}' holds numbers with the unit '{detected_unit}'. Read as numbers; "
+            f"the unit '{detected_unit}' is kept in this record."
+        )
     elif unresolved_trap and unresolved_trap.startswith("embedded_unit"):
-        # Embedded units (e.g. 15 kmpl) would lose units if coerced
+        # Units that are not the same on every value would be lost if coerced
         abstained = True
         needs_attention = True
         inferred_type = "text"
@@ -584,6 +696,15 @@ def infer_column_type(
         "embedded_unit_detected": detected_unit,
         "unresolved_trap": unresolved_trap,
     }
+    if has_plus_codes:
+        evidence["plus_sign_code_detected"] = True
+    if unit_column_type is not None:
+        evidence["unit_column"] = True
+        evidence["lossy_coercion"] = True
+        failed_samples = []
+    if sampled:
+        evidence["scored_on_sample"] = n_scored
+        evidence["verified_failures"] = verified_failures
 
     # Construct Decision record
     kind = "type_abstain" if abstained else "type_inference"
@@ -646,7 +767,7 @@ def infer_table_types(
     col_meta_by_name = {c.name: c for c in res_schema.columns}
     col_meta_by_idx = {c.position: c for c in res_schema.columns}
 
-    new_decisions: List[Decision] = []
+    new_decisions: list[Decision] = []
 
     for idx, col_name in enumerate(df.columns):
         col_series = df[col_name]

@@ -15,19 +15,18 @@ that have an unambiguous target column, and verifies:
    fully-typed data with no unhandled exception.
 """
 
-import json
-import statistics
-import subprocess
-import sys
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import pandas as pd
 import pypdf
 import pytest
+from corpus_support import raw_params, record, run_worker
 
 from preflight.plan import apply, dry_run
+
+SUITE = "pipeline"
+pytestmark = pytest.mark.corpus
 
 CORPUS_ROOT = Path(__file__).resolve().parent.parent.parent / "corpus"
 RAW_DIR = CORPUS_ROOT / "raw"
@@ -59,7 +58,7 @@ class TestPipelineCorpusValidation:
 
         with tempfile.TemporaryDirectory() as td:
             out_dir = Path(td)
-            plan_obj, pdf_path = dry_run(raw_path, target=target, task=task, out_dir=out_dir)
+            plan_obj, pdf_path = dry_run(raw_path, target=target, task=task, out_dir=out_dir, mode=None)
 
             assert pdf_path.exists()
             assert pdf_path.stat().st_size > 0
@@ -105,13 +104,13 @@ class TestPipelineCorpusValidation:
                 f"{filename}: every clean/engineer PDF subsection is an empty placeholder"
             )
 
-    def test_apply_defaults_executes_full_pipeline(self, filename, target, task):
+    def test_apply_defaults_executes_full_pipeline(self, filename, target, task, tmp_path):
         raw_path = RAW_DIR / filename
-        plan_obj = None
-        with tempfile.TemporaryDirectory() as td:
-            plan_obj, _pdf_path = dry_run(raw_path, target=target, task=task, out_dir=Path(td))
+        plan_obj, _pdf_path = dry_run(raw_path, target=target, task=task, out_dir=tmp_path / "plan", mode=None)
 
-        result = apply(plan_obj, mode="defaults")
+        # out_dir keeps the resolved plan out of the working directory (Phase 7b fix: this
+        # call used to write ./preflight_out in the repository root).
+        result = apply(plan_obj, mode="defaults", out_dir=tmp_path / "out")
 
         assert isinstance(result.data, pd.DataFrame)
         assert len(result.data) > 0
@@ -124,58 +123,22 @@ class TestPipelineCorpusValidation:
 # Every corpus file with a usable target (see prep_worker.py for the rule)
 # ---------------------------------------------------------------------------
 
-ROOT = CORPUS_ROOT.parent
 WORKER = Path(__file__).with_name("prep_worker.py")
 PER_FILE_TIMEOUT = 1500  # seconds; the largest file needs three type-inference passes
-WORKERS = 4
 
 
-def _run_worker(path: Path) -> dict:
-    try:
-        proc = subprocess.run(
-            [sys.executable, str(WORKER), str(path)],
-            capture_output=True, text=True, timeout=PER_FILE_TIMEOUT, stdin=subprocess.DEVNULL,
-        )
-    except subprocess.TimeoutExpired:
-        return {"file": path.name, "eligible": True, "ok": False, "hang": True}
-    for line in proc.stdout.splitlines():
-        if line.startswith("@@RESULT@@"):
-            return json.loads(line[len("@@RESULT@@"):])
-    return {"file": path.name, "eligible": True, "ok": False, "stage": "no result", "error": (proc.stderr or "")[-500:]}
-
-
+@pytest.mark.timeout(PER_FILE_TIMEOUT + 60)
 @pytest.mark.skipif(not RAW_DIR.is_dir(), reason="corpus/raw not present")
-def test_full_pipeline_over_every_corpus_file_with_a_target():
-    files = sorted(p for p in RAW_DIR.iterdir() if p.is_file())
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        results = list(pool.map(_run_worker, files))
-
-    eligible = [r for r in results if r.get("eligible")]
-    done = [r for r in eligible if r.get("ok")]
-    failed = [r for r in eligible if not r.get("ok")]
-    disagree = [r["file"] for r in done if not r["plan_run_agree"]]
-    attn = [r["needs_attention"] for r in done]
-    summary = {
-        "files_in_corpus": len(files),
-        "files_with_usable_target": len(eligible),
-        "files_not_usable": len(files) - len(eligible),
-        "completed": len(done),
-        "unhandled_exceptions": [{"file": r["file"], "stage": r.get("stage"), "error": r.get("error")}
-                                 for r in failed if not r.get("hang")],
-        "hung": [r["file"] for r in failed if r.get("hang")],
-        "plan_and_run_disagree": disagree,
-        "needs_attention_median": statistics.median(attn) if attn else None,
-        "needs_attention_max": max(attn) if attn else None,
-        "files_above_10_needs_attention": sorted((r["file"], r["needs_attention"]) for r in done if r["needs_attention"] > 10),
-        "files_with_cleaning_or_engineering_decisions": sum(1 for r in done if r["prep_decisions"] > 0),
-        "total_seconds": round(sum(r.get("seconds", 0) for r in eligible), 1),
-        "slowest": sorted(((r.get("seconds", 0), r["file"]) for r in eligible), reverse=True)[:3],
-    }
-    out = ROOT / ".pytest_cache" / "prep_corpus_results.json"
-    out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps({"summary": summary, "files": results}, indent=1), encoding="utf-8")
-    print("\nPREP CORPUS SUMMARY\n" + json.dumps(summary, indent=1))
-
-    assert eligible, "no corpus file had a usable target"
-    assert not failed, f"unhandled exceptions or hangs: {summary['unhandled_exceptions']} {summary['hung']}"
-    assert not disagree, f"plan and run disagree on: {disagree}"
+@pytest.mark.parametrize("corpus_file", raw_params())
+def test_full_pipeline_on_file_with_a_target(corpus_file: Path):
+    """Phase 7b: one test per file (was one loop over the corpus). A file without a usable
+    target is recorded as not eligible and passes. The corpus-wide summary (eligible files,
+    needs_attention, slowest files) comes from scripts/corpus_summary.py and replaces
+    .pytest_cache/prep_corpus_results.json."""
+    r = run_worker(WORKER, corpus_file, PER_FILE_TIMEOUT, "@@RESULT@@")
+    r.setdefault("eligible", True)  # a hang or a crash before the eligibility check counts
+    record(SUITE, corpus_file.name, r)
+    if not r["eligible"]:
+        return
+    assert r.get("ok"), f"unhandled exception or hang: stage={r.get('stage')} hang={r.get('hang')} error={r.get('error')}"
+    assert r["plan_run_agree"], f"plan and run disagree on {corpus_file.name}"

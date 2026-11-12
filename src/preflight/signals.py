@@ -11,9 +11,8 @@ fallback when no schema entry exists for a column.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
-import numpy as np
 import pandas as pd
 from dateutil.parser import ParserError, parse
 
@@ -51,7 +50,7 @@ class ColumnSignals:
     dtype: str = ""
     outlier_rate: Optional[float] = None
     cardinality: int = 0
-    rare_categories: Optional[List[str]] = None
+    rare_categories: Optional[list[str]] = None
     vif_score: Optional[float] = None
     correlation_with_target: Optional[float] = None
     mutual_info_with_target: Optional[float] = None
@@ -61,7 +60,7 @@ class ColumnSignals:
     v2_type: Optional[str] = None
     confidence: float = 1.0
     abstained: bool = False
-    anomalies: List[str] = field(default_factory=list)
+    anomalies: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +94,7 @@ def compute_cardinality(series: pd.Series) -> int:
     return int(series.nunique())
 
 
-def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> List[str]:
+def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> list[str]:
     non_null = series.dropna()
     if len(non_null) == 0:
         return []
@@ -165,7 +164,7 @@ def v1_infer_kind(series: pd.Series, cardinality_threshold: int = DEFAULT_CARDIN
                     if isinstance(val, str):
                         parse(val, fuzzy=False)
                         success_count += 1
-                except (ValueError, TypeError, OverflowError, ParserError):
+                except (ValueError, TypeError, OverflowError, ParserError):  # Swallowed: counting parse failures is the measurement
                     pass
             if success_count / len(sample) > 0.9:
                 return DATETIME_STRING
@@ -243,7 +242,7 @@ def compute_signals(
     task: Optional[str] = None,
     cardinality_threshold: int = DEFAULT_CARDINALITY_THRESHOLD,
     rare_threshold: float = 0.01,
-) -> Dict[str, ColumnSignals]:
+) -> dict[str, ColumnSignals]:
     """
     Compute ColumnSignals for every non-target column of `df`.
 
@@ -256,8 +255,8 @@ def compute_signals(
             meta[c.name] = c
 
     target_series = df[target] if target and target in df.columns else None
-    out: Dict[str, ColumnSignals] = {}
-    numeric_feature_cols: List[str] = []
+    out: dict[str, ColumnSignals] = {}
+    numeric_feature_cols: list[str] = []
 
     for col in df.columns:
         if col == target:

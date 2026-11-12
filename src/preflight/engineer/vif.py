@@ -2,7 +2,8 @@
 Variance Inflation Factor (VIF) and Target Leakage Detection using NumPy.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
+
 import numpy as np
 import pandas as pd
 
@@ -15,8 +16,8 @@ if TYPE_CHECKING:
 
 def compute_vif_scores(
     df: pd.DataFrame,
-    numeric_columns: Optional[List[str]] = None,
-) -> Tuple[Dict[str, Optional[float]], bool]:
+    numeric_columns: Optional[list[str]] = None,
+) -> tuple[dict[str, Optional[float]], bool]:
     """
     Compute Variance Inflation Factor across numeric columns using NumPy.
     Uses inverse of correlation matrix without statsmodels.
@@ -25,7 +26,7 @@ def compute_vif_scores(
     """
     if numeric_columns is None:
         numeric_columns = [c for c in df.select_dtypes(include=[np.number]).columns]
-    result = {col: None for col in numeric_columns}
+    result: dict[str, Optional[float]] = {col: None for col in numeric_columns}
     if not numeric_columns:
         return result, False
 
@@ -47,7 +48,7 @@ def compute_vif_scores(
         for i, col in enumerate(cols_to_compute):
             vif = inv_corr[i, i]
             result[col] = float(vif) if vif > 0 else 0.0
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError:  # Swallowed: a singular correlation matrix leaves every score None ("not computed"), as in v1
         pass
 
     return result, capped
@@ -82,10 +83,10 @@ def flag_leakage_suspect(
 
 def plan_vif_and_leakage(
     df: pd.DataFrame,
-    signals: Dict[str, "ColumnSignals"],
+    signals: dict[str, "ColumnSignals"],
     target: Optional[str] = None,
     config: EngineerConfig = DEFAULT_ENGINEER_CONFIG,
-) -> List[Decision]:
+) -> list[Decision]:
     """
     Turn the leakage flag and VIF score of each numeric feature into Decisions.
 
@@ -95,7 +96,7 @@ def plan_vif_and_leakage(
       "drop_leaky_feature". Always needs_attention.
     - High overlap (VIF above config.vif_note_threshold): note only, never asks.
     """
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
 
     for col, sig in signals.items():
         if col == target or col not in df.columns:

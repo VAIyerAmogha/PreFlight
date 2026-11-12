@@ -8,7 +8,7 @@ the data itself.
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 from preflight.interact.channels.base import BaseChannel, ReviewPending
 from preflight.interact.question import ReviewSession, validate_answers
@@ -30,12 +30,12 @@ class ReviewFileError(ValueError):
 def write_review_file(
     session: ReviewSession,
     path: Union[str, Path],
-    meta: Optional[Dict[str, Any]] = None,
+    meta: Optional[dict[str, Any]] = None,
 ) -> Path:
     """Write review.json with empty answer fields."""
     p = Path(path).resolve()
     p.parent.mkdir(parents=True, exist_ok=True)
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "format": REVIEW_FORMAT,
         "version": REVIEW_VERSION,
         "source_path": session.source_path,
@@ -64,7 +64,7 @@ def write_review_file(
     return p
 
 
-def load_review_file(path: Union[str, Path]) -> Dict[str, Any]:
+def load_review_file(path: Union[str, Path]) -> dict[str, Any]:
     """Load and shape-check review.json."""
     p = Path(path).resolve()
     try:
@@ -87,11 +87,11 @@ def load_review_file(path: Union[str, Path]) -> Dict[str, Any]:
 class ReviewFileChannel(BaseChannel):
     name = "review_file"
 
-    def __init__(self, path: Union[str, Path], meta: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, path: Union[str, Path], meta: Optional[dict[str, Any]] = None) -> None:
         self.path = Path(path).resolve()
         self.meta = meta
 
-    def review(self, session: ReviewSession) -> Dict[str, str]:
+    def review(self, session: ReviewSession) -> dict[str, str]:
         if not session.questions:
             return {}
         if not self.path.exists():
@@ -105,7 +105,7 @@ class ReviewFileChannel(BaseChannel):
         return validate_answers(session, answers_from_review(session, data, self.path))
 
 
-def answers_from_review(session: ReviewSession, data: Dict[str, Any], path: Path) -> Dict[str, Any]:
+def answers_from_review(session: ReviewSession, data: dict[str, Any], path: Path) -> dict[str, Any]:
     """
     Extract answers from a loaded review file, refusing a file whose questions are not
     exactly the session's (stale file for different data or a changed plan).

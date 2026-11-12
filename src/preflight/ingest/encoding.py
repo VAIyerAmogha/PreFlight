@@ -7,11 +7,19 @@ low_confidence rather than guessing. Returns a typed EncodingResult object.
 """
 
 from dataclasses import dataclass
-import io
 from pathlib import Path
 from typing import BinaryIO, Optional, Union
 
 import charset_normalizer
+
+# How many other plausible encodings a low-confidence result lists for the person
+MAX_ENCODING_ALTERNATIVES = 4
+
+# Another candidate encoding is a rival when its charset-normalizer "chaos" (mess)
+# score is within this margin of the best one AND it decodes the sample to different
+# text. Single-byte code pages often tie this way (for example cp1252 vs cp775 for
+# Western text), so a rival makes the result low confidence instead of a silent guess.
+ENCODING_RIVAL_CHAOS_MARGIN = 0.10
 
 # Recognized BOM byte signatures
 BOM_SIGNATURES = [
@@ -31,6 +39,8 @@ class EncodingResult:
     has_bom: bool
     low_confidence: bool
     raw_detected: Optional[str] = None
+    # Other encodings the detector also found plausible (best first), for the person to choose from
+    alternatives: tuple[str, ...] = ()
 
 
 def normalize_encoding_name(name: str) -> str:
@@ -136,7 +146,7 @@ def detect_encoding(
             low_confidence=False,
             raw_detected="utf-8",
         )
-    except UnicodeDecodeError:
+    except UnicodeDecodeError:  # Swallowed: not valid UTF-8, so the next detector below decides
         pass
 
     # 4. Use charset-normalizer for non-UTF8 input
@@ -152,18 +162,23 @@ def detect_encoding(
         coherence = getattr(best_match, "coherence", 0.0) or 0.0
         calc_conf = max(0.0, min(1.0, 1.0 - (chaos * 0.5)))
 
-        # If linguistic coherence is zero on very short or ambiguous sample, flag low confidence
-        is_low_conf = (calc_conf < confidence_threshold) or (coherence == 0.0)
-
-        # For ambiguous non-UTF8 single-byte Western files with low coherence
-        if is_low_conf and norm_enc in ("cp932", "hp-roman8", "mac-latin2", "cp850", "cp1250"):
-            # Can it decode cleanly as ISO-8859-1?
-            try:
-                raw_bytes.decode("iso-8859-1")
-                # Western single-byte candidate
-                norm_enc = "iso-8859-1"
-            except Exception:
-                pass
+        # If linguistic coherence is zero on very short or ambiguous sample, flag low confidence.
+        # A low-confidence result is kept as detected (never swapped for another encoding
+        # here); the reading Decision flags it and lists the alternatives to choose from.
+        best_text = str(best_match)
+        rivals: list[tuple[float, str]] = []
+        others: list[str] = []
+        for m in matches:
+            alt = normalize_encoding_name(m.encoding)
+            if alt == norm_enc or alt in others or any(alt == r for _, r in rivals):
+                continue
+            close = abs((getattr(m, "chaos", 0.0) or 0.0) - chaos) <= ENCODING_RIVAL_CHAOS_MARGIN
+            if close and str(m) != best_text:
+                rivals.append((-(getattr(m, "coherence", 0.0) or 0.0), alt))
+            else:
+                others.append(alt)
+        is_low_conf = (calc_conf < confidence_threshold) or (coherence == 0.0) or bool(rivals)
+        alternatives = [r for _, r in sorted(rivals)] + others
 
         return EncodingResult(
             encoding=norm_enc,
@@ -171,6 +186,7 @@ def detect_encoding(
             has_bom=False,
             low_confidence=is_low_conf,
             raw_detected=raw_enc,
+            alternatives=tuple(alternatives[:MAX_ENCODING_ALTERNATIVES]),
         )
 
     # 5. Fallback for unresolvable streams

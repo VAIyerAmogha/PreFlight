@@ -6,7 +6,7 @@ Branch: `v2-dev`. v1.0.1 backup (read-only reference): `/home/amg/Desktop/PreFli
 
 ## 0. HANDOVER INSTRUCTIONS (read first if you are a new session)
 
-1. Read this file top to bottom, then `docs/v2_interact_report.md`, `CLAUDE.md`, `PLAN.md`.
+1. Read this file top to bottom, then `docs/v2_interact_report.md`, `CLAUDE.md`, `docs/PLAN.md`.
 2. Find the first subphase in section 3 whose status is not `DONE`. Work only on that one.
 3. Append to the ACTION LOG (section 5) after every meaningful action (file read/written, test run, decision, stop). Format: `YYYY-MM-DD | subphase | action | result`.
 4. Update the subphase status line when finishing. Never mark `DONE` without the exit check passing.

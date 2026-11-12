@@ -1,8 +1,8 @@
 """Question model, option bounds, previews, and trigger registry (Phase 5 / M4)."""
 
 import pytest
-
 from conftest import session_of
+
 from preflight.decisions import Decision
 from preflight.interact.question import (
     MAX_OPTIONS,
@@ -10,7 +10,6 @@ from preflight.interact.question import (
     Question,
     QuestionError,
     build_question_from_decision,
-    register_question_builder,
 )
 from preflight.interact.triggers import (
     TriggerCategory,
@@ -70,8 +69,9 @@ def test_preview_shows_what_would_go_wrong(messy_session):
 
 
 def test_preview_blank_marker_is_explained():
-    from preflight.interact.preview import BLANK, build_column_preview
     import pandas as pd
+
+    from preflight.interact.preview import BLANK, build_column_preview
 
     pv = build_column_preview(
         pd.Series(["1", "2", "oops"]),
@@ -210,6 +210,7 @@ def test_implemented_triggers_classify_real_decisions(messy_session):
 
 def test_disguised_missing_and_high_anomaly_use_column_evidence():
     import pandas as pd
+
     from preflight.interact.triggers import TriggerContext, anomaly_rate
     from preflight.schema import ColumnRawMetadata
 

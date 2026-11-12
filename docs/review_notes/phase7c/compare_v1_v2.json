@@ -1,0 +1,630 @@
+[
+ {
+  "file": "adult.data",
+  "target": "income",
+  "task": "classification",
+  "model": "linear",
+  "subsampled": true,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: \"target 'income' not in columns after plain read_csv: ['32', ' Private', ' 205019', ' Assoc-acdm', ' 12', ' Never-married']\"",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: \"target 'income' not in columns after plain read_csv: ['32', ' Private', ' 205019', ' Assoc-acdm', ' 12', ' Never-married']\"\n"
+  },
+  "v2": {
+   "scores": [
+    0.8530734632683659,
+    0.8379594898724682,
+    0.8484621155288822,
+    0.8343328335832084,
+    0.846211552888222,
+    0.8537134283570893,
+    0.8568215892053973,
+    0.8432108027006752,
+    0.8454613653413353
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "adult.data",
+  "target": "income",
+  "task": "classification",
+  "model": "tree",
+  "subsampled": true,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: \"target 'income' not in columns after plain read_csv: ['32', ' Private', ' 205019', ' Assoc-acdm', ' 12', ' Never-married']\"",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: \"target 'income' not in columns after plain read_csv: ['32', ' Private', ' 205019', ' Assoc-acdm', ' 12', ' Never-married']\"\n"
+  },
+  "v2": {
+   "scores": [
+    0.8515742128935532,
+    0.859714928732183,
+    0.8507126781695424,
+    0.8418290854572713,
+    0.8492123030757689,
+    0.8552138034508627,
+    0.8455772113943029,
+    0.8529632408102026,
+    0.8447111777944486
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "iris.data",
+  "target": "species",
+  "task": "classification",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: \"target 'species' not in columns after plain read_csv: ['5.1', '3.5', '1.4', '0.2', 'Iris-setosa']\"",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: \"target 'species' not in columns after plain read_csv: ['5.1', '3.5', '1.4', '0.2', 'Iris-setosa']\"\n"
+  },
+  "v2": {
+   "scores": [
+    0.9795918367346939,
+    0.9795918367346939,
+    0.8979591836734694,
+    0.9591836734693877,
+    0.9387755102040817,
+    0.9591836734693877,
+    0.9591836734693877,
+    0.9591836734693877,
+    0.9591836734693877
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "iris.data",
+  "target": "species",
+  "task": "classification",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: \"target 'species' not in columns after plain read_csv: ['5.1', '3.5', '1.4', '0.2', 'Iris-setosa']\"",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: \"target 'species' not in columns after plain read_csv: ['5.1', '3.5', '1.4', '0.2', 'Iris-setosa']\"\n"
+  },
+  "v2": {
+   "scores": [
+    0.9795918367346939,
+    0.9795918367346939,
+    0.9183673469387755,
+    0.9795918367346939,
+    0.9387755102040817,
+    0.9591836734693877,
+    0.9591836734693877,
+    0.9387755102040817,
+    0.9591836734693877
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "winequality-red.csv",
+  "target": "quality",
+  "task": "regression",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'\n"
+  },
+  "v2": {
+   "scores": [
+    0.36668714007511427,
+    0.3074118092423034,
+    0.3843187977529906,
+    0.4071116414542182,
+    0.3216564245018071,
+    0.34924802184588444,
+    0.31338938100993907,
+    0.39007301285003115,
+    0.39759143772125216
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "winequality-red.csv",
+  "target": "quality",
+  "task": "regression",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'\n"
+  },
+  "v2": {
+   "scores": [
+    0.4681337226999871,
+    0.45481110074526854,
+    0.462078937517996,
+    0.49837385995527606,
+    0.45448382263444964,
+    0.40988175272103367,
+    0.42199568482854777,
+    0.4512251307674292,
+    0.4800152644655591
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "winequality-white.csv",
+  "target": "quality",
+  "task": "regression",
+  "model": "linear",
+  "subsampled": true,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'\n"
+  },
+  "v2": {
+   "scores": [
+    0.29457811524847877,
+    0.25219237457391486,
+    0.29011908921609064,
+    0.253103743461902,
+    0.26386947195633526,
+    0.3248291107898299,
+    0.26504454254604515,
+    0.298276578894881,
+    0.272950034952018
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "winequality-white.csv",
+  "target": "quality",
+  "task": "regression",
+  "model": "tree",
+  "subsampled": true,
+  "v1": {
+   "scores": [],
+   "error": "KeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'",
+   "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 80, in <module>\nKeyError: 'target \\'quality\\' not in columns after plain read_csv: [\\'fixed acidity;\"volatile acidity\";\"citric acid\";\"residual sugar\";\"chlorides\";\"free sulfur dioxide\";\"total sulfur dioxide\";\"density\";\"pH\";\"sulphates\";\"alcohol\";\"quality\"\\']'\n"
+  },
+  "v2": {
+   "scores": [
+    0.49424907241019855,
+    0.4324949375632804,
+    0.4761235870860072,
+    0.46661189363153677,
+    0.4800694879845395,
+    0.49491286683156455,
+    0.46367199707232676,
+    0.4677689336767933,
+    0.456160548878359
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "titanic.csv",
+  "target": "survived",
+  "task": "classification",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "titanic.csv",
+  "target": "survived",
+  "task": "classification",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "tips.csv",
+  "target": "tip",
+  "task": "regression",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.2533916351176262,
+    0.46422237119996157,
+    0.3228505370190894,
+    0.38060281722617295,
+    0.3856492662373163,
+    0.43970375473466006,
+    0.44563822903096606,
+    0.4180129162995516,
+    0.3322625184229515
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.36890785531407577,
+    0.5148137841342917,
+    0.3248100970097536,
+    0.42119175417875143,
+    0.3198825574090677,
+    0.4664013757599371,
+    0.3878557907410155,
+    0.38748995599540104,
+    0.3760903757753755
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "tips.csv",
+  "target": "tip",
+  "task": "regression",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.2989803996054655,
+    0.48803952071573464,
+    0.22567790164843127,
+    0.1573710638204746,
+    0.2734435499742396,
+    0.1843718631978788,
+    0.13271292064762596,
+    -0.16000758762908185,
+    0.16018928093362128
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.24340666939552824,
+    0.355535202722186,
+    -0.055720610485057165,
+    0.18080842518284024,
+    0.25564592715726453,
+    0.2966680553257758,
+    0.15144197702651285,
+    0.12349248101164745,
+    0.21988804109105242
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "AER_Affairs.csv",
+  "target": "affairs",
+  "task": "regression",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.04662294585336757,
+    0.0818613613685567,
+    0.12906518011382206,
+    0.08083435277650208,
+    0.12237435008428854,
+    0.07399100884483678,
+    -0.006929429717405844,
+    0.13111346521374212,
+    0.12312264638663306
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.06903423079969628,
+    0.08380218746062895,
+    0.12926134661412392,
+    0.08674455808615578,
+    0.12238425486155835,
+    0.08486438612740255,
+    0.0016073342383321476,
+    0.13861299321237885,
+    0.12264151521547328
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "AER_Affairs.csv",
+  "target": "affairs",
+  "task": "regression",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.016319391337912603,
+    -0.0012039163799948405,
+    0.20723424830017623,
+    0.017156581536273974,
+    0.051511721168243874,
+    0.00869731702081955,
+    0.051701160241756194,
+    0.016221337184575968,
+    0.045023373125191335
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    -0.020030201740230513,
+    0.05651177560201115,
+    0.17722226139511466,
+    0.014078952924319488,
+    0.14740413418410625,
+    0.0831991414466623,
+    0.0011960110678158609,
+    0.05672118705305096,
+    0.0779827569023569
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "diamonds.csv",
+  "target": "price",
+  "task": "regression",
+  "model": "linear",
+  "subsampled": true,
+  "v1": {
+   "scores": [
+    0.927471838860231,
+    0.9124800468315478,
+    0.9214309176133748,
+    0.9188971499777605,
+    0.9188822062754476,
+    0.9253514939825432,
+    0.9215495188420538,
+    0.9239482589405836,
+    0.9119333131968576
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.8963676646140678,
+    0.9264605765826834,
+    0.9192061621189644,
+    0.9136182107490882,
+    0.9270224252819945,
+    0.9195882584459257,
+    0.924095031106299,
+    0.9132999809574479,
+    0.9252659354155809
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "diamonds.csv",
+  "target": "price",
+  "task": "regression",
+  "model": "tree",
+  "subsampled": true,
+  "v1": {
+   "scores": [
+    0.9653479891234986,
+    0.9571051141942213,
+    0.9596532382792033,
+    0.9597189544832466,
+    0.9589918167712097,
+    0.9653846938218194,
+    0.9651784210715968,
+    0.964964285466623,
+    0.9578033458155247
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.9558170388962983,
+    0.9687259560127295,
+    0.9684306853127664,
+    0.9538082054432373,
+    0.9719950586721945,
+    0.9620885530204789,
+    0.9646568771454358,
+    0.959727855502686,
+    0.9666721620877443
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "carData_TitanicSurvival.csv",
+  "target": "survived",
+  "task": "classification",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.6155606407322655,
+    0.6169724770642202,
+    0.6192660550458715,
+    0.6155606407322655,
+    0.6169724770642202,
+    0.6192660550458715,
+    0.6178489702517163,
+    0.6146788990825688,
+    0.6215596330275229
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.7665903890160183,
+    0.7844036697247706,
+    0.7958715596330275,
+    0.7963386727688787,
+    0.7752293577981652,
+    0.7844036697247706,
+    0.7848970251716247,
+    0.7821100917431193,
+    0.786697247706422
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "carData_TitanicSurvival.csv",
+  "target": "survived",
+  "task": "classification",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.6178489702517163,
+    0.6169724770642202,
+    0.6192660550458715,
+    0.6178489702517163,
+    0.6169724770642202,
+    0.6192660550458715,
+    0.6178489702517163,
+    0.6169724770642202,
+    0.6192660550458715
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.7437070938215103,
+    0.7706422018348624,
+    0.7568807339449541,
+    0.7757437070938215,
+    0.7224770642201835,
+    0.7247706422018348,
+    0.7780320366132724,
+    0.7522935779816514,
+    0.7660550458715596
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "COUNT_titanic.csv",
+  "target": "survived",
+  "task": "classification",
+  "model": "linear",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.7699316628701595,
+    0.7767653758542141,
+    0.7853881278538812,
+    0.7813211845102506,
+    0.7813211845102506,
+    0.769406392694064,
+    0.7949886104783599,
+    0.7835990888382688,
+    0.7534246575342466
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.7699316628701595,
+    0.7767653758542141,
+    0.7853881278538812,
+    0.7813211845102506,
+    0.7813211845102506,
+    0.769406392694064,
+    0.7949886104783599,
+    0.7835990888382688,
+    0.7534246575342466
+   ],
+   "error": null
+  }
+ },
+ {
+  "file": "COUNT_titanic.csv",
+  "target": "survived",
+  "task": "classification",
+  "model": "tree",
+  "subsampled": false,
+  "v1": {
+   "scores": [
+    0.7722095671981777,
+    0.7813211845102506,
+    0.8036529680365296,
+    0.7927107061503417,
+    0.7904328018223234,
+    0.8105022831050228,
+    0.7972665148063781,
+    0.7972665148063781,
+    0.7853881278538812
+   ],
+   "error": null
+  },
+  "v2": {
+   "scores": [
+    0.7722095671981777,
+    0.7767653758542141,
+    0.7899543378995434,
+    0.7949886104783599,
+    0.7904328018223234,
+    0.771689497716895,
+    0.8018223234624146,
+    0.7972665148063781,
+    0.7648401826484018
+   ],
+   "error": null
+  }
+ }
+]

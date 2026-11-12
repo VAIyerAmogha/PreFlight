@@ -35,20 +35,19 @@ already-saved files are not lost: a `ReportGenerationError` is raised naming
 every one of their paths.
 """
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
-from xml.sax.saxutils import escape as xml_escape
 import json
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, Optional, Union
+from xml.sax.saxutils import escape as xml_escape
 
 import pandas as pd
-
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.shapes import Drawing, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.graphics.shapes import Drawing, String
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics.charts.legends import Legend
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     HRFlowable,
@@ -63,7 +62,6 @@ from reportlab.platypus import (
 from preflight.decisions import Decision
 from preflight.report.templates import (
     assert_plain_language,
-    find_jargon_violations,
     friendly_type_name,
     render_decision_text,
     section_for_decision,
@@ -98,7 +96,7 @@ class ReportGenerationError(Exception):
 # Styles (reuses the Plan PDF's typography system)
 # ---------------------------------------------------------------------------
 
-def _build_styles() -> Dict[str, ParagraphStyle]:
+def _build_styles() -> dict[str, ParagraphStyle]:
     base = getSampleStyleSheet()
     styles = {
         "DocTitle": ParagraphStyle(
@@ -162,7 +160,7 @@ class NumberedCanvas(canvas.Canvas):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._saved_page_states: List[Any] = []
+        self._saved_page_states: list[Any] = []
 
     def showPage(self) -> None:
         self._saved_page_states.append(dict(self.__dict__))
@@ -238,7 +236,7 @@ def _status_pie_chart(decisions: Sequence[Decision]) -> Optional[Drawing]:
     return drawing
 
 
-def _anomaly_bar_chart(anomaly_counts_by_column: Dict[str, int]) -> Optional[Drawing]:
+def _anomaly_bar_chart(anomaly_counts_by_column: dict[str, int]) -> Optional[Drawing]:
     if not anomaly_counts_by_column:
         return None
     top = sorted(anomaly_counts_by_column.items(), key=lambda kv: kv[1], reverse=True)[:10]
@@ -284,10 +282,10 @@ def render_report_pdf(
     out_p.parent.mkdir(parents=True, exist_ok=True)
 
     styles = _build_styles()
-    story: List[Any] = []
+    story: list[Any] = []
 
-    decisions: List[Decision] = list(getattr(apply_result, "decisions", None) or getattr(plan, "decisions", []))
-    anomalies: List[Dict[str, Any]] = list(getattr(apply_result, "anomalies", []) or [])
+    decisions: list[Decision] = list(getattr(apply_result, "decisions", None) or getattr(plan, "decisions", []))
+    anomalies: list[dict[str, Any]] = list(getattr(apply_result, "anomalies", []) or [])
 
     filename = Path(getattr(plan, "source_path", "data.csv")).name
     row_count = getattr(plan, "row_count", None)
@@ -433,7 +431,7 @@ def render_report_pdf(
     # ---- 6. Anomaly lists (capped) ----
     story.append(Paragraph("Unusual entries found while reading your data", styles["SectionHeading"]))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CBD5E1"), spaceAfter=6))
-    anomaly_counts_by_column: Dict[str, int] = {}
+    anomaly_counts_by_column: dict[str, int] = {}
     for a in anomalies:
         col = str(a.get("column", "unknown"))
         anomaly_counts_by_column[col] = anomaly_counts_by_column.get(col, 0) + 1
@@ -477,7 +475,7 @@ def render_report_pdf(
     story.append(Spacer(1, 10))
 
     # ---- 8. Technical details appendix (jargon allowed here only) ----
-    appendix_flowables: List[Any] = [
+    appendix_flowables: list[Any] = [
         Paragraph("Technical details", styles["AppendixHeading"]),
         Paragraph(
             "This appendix is for technical readers. It repeats the decisions above with their "
@@ -516,10 +514,12 @@ def write_report_artifacts(
     pipeline: Any,
     out_dir: Union[str, Path],
     renderer: Optional[Any] = None,
-) -> Dict[str, Path]:
+    fitted_pipeline: Optional[Any] = None,
+) -> dict[str, Path]:
     """
-    Write the real-run outputs (cleaned data, schema.json, decisions.json, and
-    the fitted pipeline) to out_dir, THEN render the Report PDF.
+    Write the real-run outputs (cleaned data, schema.json, decisions.json, the
+    unfitted pipeline and, when given, the pipeline fitted on all rows) to
+    out_dir, THEN render the Report PDF.
 
     If PDF rendering raises, the exception is caught and re-raised as
     ReportGenerationError, whose message names every one of the already-saved
@@ -554,12 +554,12 @@ def write_report_artifacts(
     schema_path.write_text(schema_json, encoding="utf-8")
 
     # 3. decisions.json
-    decisions: List[Decision] = list(getattr(apply_result, "decisions", None) or getattr(plan, "decisions", []))
+    decisions: list[Decision] = list(getattr(apply_result, "decisions", None) or getattr(plan, "decisions", []))
     decisions_path.write_text(
         json.dumps([d.to_dict() for d in decisions], indent=2, default=str), encoding="utf-8"
     )
 
-    # 4. Fitted pipeline (joblib)
+    # 4. Pipelines (joblib): the unfitted one, and the all-rows fit (not for evaluation)
     import joblib
 
     joblib.dump(pipeline, pipeline_path)
@@ -570,6 +570,10 @@ def write_report_artifacts(
         "decisions": decisions_path,
         "pipeline": pipeline_path,
     }
+    if fitted_pipeline is not None:
+        fitted_path = out_d / "pipeline_fitted_on_all_rows.joblib"
+        joblib.dump(fitted_pipeline, fitted_path)
+        saved_paths["pipeline_fitted_on_all_rows"] = fitted_path
 
     # Only now attempt PDF rendering.
     render = renderer if renderer is not None else render_report_pdf

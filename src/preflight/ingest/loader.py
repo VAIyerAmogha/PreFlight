@@ -5,15 +5,15 @@ Loads every cell as a raw string without automatic NA casting or dtype coercion.
 Supports chunked reading for large datasets without loading the full file into memory.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-import io
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 
 from .dialect import DialectResult, detect_dialect
-from .encoding import EncodingResult, detect_encoding
+from .encoding import detect_encoding
 from .header import HeaderResult, detect_header
 
 
@@ -23,14 +23,14 @@ class RawLoadResult:
     data: Union[pd.DataFrame, Iterator[pd.DataFrame]]
     row_count: Optional[int]
     column_count: int
-    column_names: List[str]
+    column_names: list[str]
     is_chunked: bool
     ragged_rows_found: int
 
 
 def _clean_chunk(
     chunk: pd.DataFrame,
-    column_names: List[str],
+    column_names: list[str],
 ) -> pd.DataFrame:
     """Ensure chunk DataFrame strictly contains string data without NaN."""
     # Ensure columns match expected names
@@ -44,7 +44,7 @@ def _clean_chunk(
 def load_raw(
     source: Union[str, Path],
     encoding: Optional[str] = None,
-    dialect: Optional[Union[DialectResult, Dict[str, Any]]] = None,
+    dialect: Optional[Union[DialectResult, dict[str, Any]]] = None,
     header_result: Optional[HeaderResult] = None,
     chunksize: Optional[int] = None,
 ) -> RawLoadResult:
@@ -116,7 +116,7 @@ def load_raw(
     skiprows = h_res.title_rows if h_res.title_rows else None
     col_names = h_res.column_names
 
-    read_csv_kwargs: Dict[str, Any] = {
+    read_csv_kwargs: dict[str, Any] = {
         "filepath_or_buffer": p,
         "sep": delim,
         "encoding": enc_name,
@@ -141,15 +141,14 @@ def load_raw(
 
     # Check for bare carriage return line endings (Mac OS 9 style \r without \n)
     # Pandas C parser fails with Buffer Overflow on bare \r, so python engine is required.
-    try:
-        with open(p, "rb") as bf:
-            sample_bytes = bf.read(4096)
-            if b"\r" in sample_bytes and b"\n" not in sample_bytes:
-                read_csv_kwargs["engine"] = "python"
-    except Exception:
-        pass
+    # (No try: if the file cannot be read here, reading the table would fail the same way,
+    # so the real error is raised now instead of being hidden.)
+    with open(p, "rb") as bf:
+        sample_bytes = bf.read(4096)
+        if b"\r" in sample_bytes and b"\n" not in sample_bytes:
+            read_csv_kwargs["engine"] = "python"
 
-    def _safe_read_csv(kwargs: Dict[str, Any]) -> Any:
+    def _safe_read_csv(kwargs: dict[str, Any]) -> Any:
         try:
             return pd.read_csv(**kwargs)
         except pd.errors.ParserError:
@@ -167,6 +166,9 @@ def load_raw(
                 for chunk in reader_iter:
                     yield _clean_chunk(chunk, col_names)
             except pd.errors.ParserError:
+                close = getattr(reader_iter, "close", None)
+                if close is not None:
+                    close()  # release the file handle before reading again
                 fallback_kwargs = dict(read_csv_kwargs)
                 fallback_kwargs["engine"] = "python"
                 for chunk in pd.read_csv(**fallback_kwargs):

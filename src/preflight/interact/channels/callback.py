@@ -1,7 +1,7 @@
 """Callback channel: a user-supplied function answers the whole batch."""
 
 from collections.abc import Mapping
-from typing import Callable, Dict, List
+from typing import Callable
 
 from preflight.interact.channels.base import BaseChannel
 from preflight.interact.question import Question, ReviewSession, validate_answers
@@ -17,12 +17,12 @@ class CallbackChannel(BaseChannel):
 
     name = "callback"
 
-    def __init__(self, handler: Callable[[List[Question]], Dict[str, str]]) -> None:
+    def __init__(self, handler: Callable[[list[Question]], dict[str, str]]) -> None:
         if not callable(handler):
             raise TypeError("callback channel needs a callable that takes a list of Question")
         self.handler = handler
 
-    def review(self, session: ReviewSession) -> Dict[str, str]:
+    def review(self, session: ReviewSession) -> dict[str, str]:
         if not session.questions:
             return {}
         result = self.handler(list(session.questions))

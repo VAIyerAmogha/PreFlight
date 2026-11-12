@@ -21,18 +21,20 @@ from __future__ import annotations
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 import pandas as pd
+from sklearn.base import clone
 
-from preflight.clean.config import CleanerConfig
-from preflight.clean.cleaner import apply_clean
-from preflight.engineer.engineer import apply_engineer, plan_engineer
 from preflight.assemble import build_pipeline_two_phase
+from preflight.clean.cleaner import apply_clean
+from preflight.clean.config import CleanerConfig
 from preflight.decisions import Decision
+from preflight.engineer.engineer import apply_engineer, plan_engineer
+from preflight.interact.resolve import resolve
 from preflight.plan import (
     ApplyContext,
     Planner,
@@ -40,13 +42,22 @@ from preflight.plan import (
     TypingStage,
     _schema_with_actions,
     _working_frame,
-    apply as v2_apply,
     replan_prep,
 )
-from preflight.interact.resolve import resolve
+from preflight.plan import (
+    apply as v2_apply,
+)
 from preflight.report.report import Report
 from preflight.signals import compute_signals
-from preflight.types import PRESETS, ColumnProfile, FeatureConfig, PrepResult, ReportEntry, SemanticType, _UNSET
+from preflight.types import (
+    _UNSET,
+    PRESETS,
+    ColumnProfile,
+    FeatureConfig,
+    PrepResult,
+    ReportEntry,
+    SemanticType,
+)
 from preflight.validation import _validate_inputs
 
 __all__ = [
@@ -104,7 +115,7 @@ class _Run:
         )
         return _working_frame(TypingStage().apply(ctx, self.plan.decisions))
 
-    def profiles(self, typed: pd.DataFrame) -> List[ColumnProfile]:
+    def profiles(self, typed: pd.DataFrame) -> list[ColumnProfile]:
         schema = _schema_with_actions(self.plan.schema, [d for d in self.plan.decisions if d.stage == "infer"])
         sigs = compute_signals(
             typed, schema, self.target, task=self.task,
@@ -124,7 +135,7 @@ class _Run:
         return out
 
 
-def _entries(decisions: List[Decision], stages: Tuple[str, ...]) -> List[ReportEntry]:
+def _entries(decisions: list[Decision], stages: tuple[str, ...]) -> list[ReportEntry]:
     out = []
     for d in decisions:
         stage = "profiler" if d.stage in ("ingest", "infer") else d.stage
@@ -152,7 +163,6 @@ class _CsvPipeline:
             X.to_csv(csv, index=False)
             raw = ReadingStage().apply(ApplyContext(source_path=csv), self._run.plan.decisions)
             schema = self._run.plan.schema
-            keep = [c for c in schema.columns if c.name in raw.columns]
             sub = type(schema).from_dict(schema.to_dict())
             sub.columns = [c for c in sub.columns if c.name in raw.columns]
             ctx = ApplyContext(source_path=csv, raw_data=raw, schema=sub, decisions=self._run.plan.decisions)
@@ -177,13 +187,23 @@ def run_profiler(
     target: str,
     task: str = "classification",
     cardinality_threshold: int = 20,
-    column_types: Optional[Dict[str, SemanticType]] = None,
-) -> Tuple[List[ColumnProfile], List[ReportEntry]]:
+    column_types: dict[str, SemanticType] | None = None,
+) -> tuple[list[ColumnProfile], list[ReportEntry]]:
     run = _Run(df, target, task, "tree", _cleaner_config(0.6, "iqr", cardinality_threshold), None, column_types)
     try:
         return run.profiles(run.typed()), _entries(run.plan.decisions, ("profiler",))
     finally:
         run.close()
+
+
+def _v1_full_table(res, target: str) -> pd.DataFrame:
+    prepared = res.prepared
+    if res.pipeline is None or target not in prepared.columns:
+        return prepared.copy()
+    X, y = prepared.drop(columns=[target]), prepared[target]
+    out = clone(res.pipeline).fit_transform(X, y)
+    out[target] = y.to_numpy()
+    return out
 
 
 def prepare(
@@ -194,9 +214,9 @@ def prepare(
     drop_threshold: float = _UNSET,
     outlier_method: str = _UNSET,
     cardinality_threshold: int = _UNSET,
-    feature_config: Optional[FeatureConfig] = _UNSET,
-    column_types: Optional[Dict[str, SemanticType]] = _UNSET,
-    preset: Optional[str] = None,
+    feature_config: FeatureConfig | None = _UNSET,
+    column_types: dict[str, SemanticType] | None = _UNSET,
+    preset: str | None = None,
     dry_run: bool = False,
 ) -> PrepResult:
     if not isinstance(dry_run, bool):
@@ -226,7 +246,7 @@ def prepare(
     try:
         typed = run.typed()
         profiles = run.profiles(typed)
-        prefix: List[ReportEntry] = []
+        prefix: list[ReportEntry] = []
         if warning is not None:
             prefix.append(ReportEntry(stage="profiler", column=target, action="task_target_mismatch_warning",
                                       rationale=warning, severity="warning"))
@@ -246,7 +266,10 @@ def prepare(
             return PrepResult(df=df, pipeline=None, report=Report(entries, df=df, profiles=profiles, target=target))
 
         res = v2_apply(run.plan, mode="defaults", out_dir=run.tmp / "out2")
-        final = res.prepared.copy()
+        # v1's prepare(df) returned the table with every step fitted on all rows. v2's
+        # apply() leaves the data-learning steps to an unfitted pipeline (fit hygiene),
+        # so the v1 shape is rebuilt here by fitting that pipeline on every row.
+        final = _v1_full_table(res, target)
         X = typed.drop(columns=[target]) if target in typed.columns else typed
         y = typed[target] if target in typed.columns else None
         pipe = build_pipeline_two_phase(
@@ -268,7 +291,7 @@ def profile(
     task: str = "classification",
     model_hint: str = "tree",
     cardinality_threshold: int = 20,
-    column_types: Optional[Dict[str, SemanticType]] = None,
+    column_types: dict[str, SemanticType] | None = None,
 ) -> PrepResult:
     warning = _validate_inputs(df, target, task, model_hint=model_hint, column_types=column_types)
     profiles, entries = run_profiler(df, target, task, cardinality_threshold, column_types)
@@ -313,7 +336,7 @@ def engineer(df, target, task="classification", model_hint="tree", drop_threshol
                       cardinality_threshold, column_types, with_engineer=True)
 
 
-def add_features(result: PrepResult, config: FeatureConfig, target: Optional[str] = None) -> PrepResult:
+def add_features(result: PrepResult, config: FeatureConfig, target: str | None = None) -> PrepResult:
     """Add generated columns (interactions, clusters, ...) to an already prepared table."""
     if result is None or result.df is None:
         raise ValueError("You must provide a preparation result that has a dataset.")
@@ -331,16 +354,16 @@ def add_features(result: PrepResult, config: FeatureConfig, target: Optional[str
 # v1 test helpers carried over unchanged
 # ---------------------------------------------------------------------------
 
-def _extract_actions_per_column(report: Optional[Report]) -> Dict[str, set]:
+def _extract_actions_per_column(report: Report | None) -> dict[str, set]:
     if report is None:
         return {}
-    actions: Dict[str, set] = {}
+    actions: dict[str, set] = {}
     for entry in report.entries:
         actions.setdefault(entry.column, set()).add(entry.action)
     return actions
 
 
-def _compute_decision_diff(actions_a: Dict[str, set], actions_b: Dict[str, set]) -> List[str]:
+def _compute_decision_diff(actions_a: dict[str, set], actions_b: dict[str, set]) -> list[str]:
     diff = []
     for col in sorted(set(actions_a.keys()) & set(actions_b.keys())):
         if actions_a[col] != actions_b[col]:
@@ -394,7 +417,6 @@ def compare(a: PrepResult, b: PrepResult) -> dict:
 
 
 def save_compare_pdf(result_a: PrepResult, result_b: PrepResult, path: str) -> None:
-    import matplotlib.patches as patches
     from matplotlib.backends.backend_pdf import PdfPages
 
     if result_a is not None and not isinstance(result_a, PrepResult):

@@ -13,13 +13,13 @@ Re-run rules:
     longer one of the question's options or no longer maps to the same action.
 """
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
-from typing import Any, Dict, Optional, Union
 import warnings
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional, Union
 
 from preflight.interact.question import Question
 
@@ -37,7 +37,7 @@ class StoredAnswer:
     status: str
     timestamp: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -46,7 +46,7 @@ class AnswerStore:
 
     def __init__(self, out_dir: Union[str, Path]) -> None:
         self.path = Path(out_dir).resolve() / STORE_FILENAME
-        self._answers: Dict[str, StoredAnswer] = {}
+        self._answers: dict[str, StoredAnswer] = {}
         self._unreadable = False
         self._load()
 

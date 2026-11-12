@@ -13,13 +13,11 @@ ground-truth labels in corpus/labels/, and computes:
 Outputs full report to docs/v1_baseline_report.md.
 """
 
-import sys
-import os
 import json
-import csv
-from pathlib import Path
+import sys
 from collections import defaultdict
-from typing import Dict, List, Any, Optional, Tuple
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -35,9 +33,7 @@ if not V1_SRC_PATH.exists():
 # Import v1.0.1
 sys.path.insert(0, str(V1_SRC_PATH))
 try:
-    import preflight
     from preflight.profiler import run_profiler
-    from preflight.types import SemanticType, ColumnProfile, ReportEntry
 except ImportError as e:
     print(f"ERROR: Failed to import v1.0.1 from {V1_SRC_PATH}: {e}")
     sys.exit(1)
@@ -51,7 +47,7 @@ REPORT_PATH = Path("docs/v1_baseline_report.md")
 REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Mapping v1.0.1 internal SemanticType to canonical ground-truth semantic types
-V1_TYPE_MAP: Dict[str, str] = {
+V1_TYPE_MAP: dict[str, str] = {
     "NUMERIC_FEATURE": "numeric",
     "NUMERIC_ID": "ID",
     "CATEGORICAL_LOW": "categorical",
@@ -65,8 +61,8 @@ V1_TYPE_MAP: Dict[str, str] = {
 
 
 def evaluate_dataset(
-    file_id: str, label_data: Dict[str, Any]
-) -> Dict[str, Any]:
+    file_id: str, label_data: dict[str, Any]
+) -> dict[str, Any]:
     """
     Run v1.0.1 on a single dataset and compare against ground truth.
     """
@@ -95,8 +91,7 @@ def evaluate_dataset(
 
     # 1. Dialect Comparison
     # v1.0.1 has no dialect inference; it assumes sep=',', encoding='utf-8', header=0
-    v1_delim = ","
-    v1_encoding = "utf-8"
+    v1_delim = ","  # v1 also assumed encoding='utf-8'
     v1_header = 0
 
     true_delim = true_dialect["delimiter"]
@@ -247,7 +242,7 @@ def main():
     results_by_file = []
 
     for lf in label_files:
-        with open(lf, "r", encoding="utf-8") as f:
+        with open(lf, encoding="utf-8") as f:
             label_data = json.load(f)
 
         fid = label_data["file_id"]

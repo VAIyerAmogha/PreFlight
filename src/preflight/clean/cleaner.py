@@ -4,41 +4,31 @@ Cleaner orchestration and backwards-compatible API for PreFlight v2.0.
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Optional
+
 import dateutil.parser
 import numpy as np
 import pandas as pd
 
-from preflight.decisions import Decision
-from preflight.schema import ColumnRawMetadata, TableSchema
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
-from preflight.clean.dedupe import apply_dedupe, plan_dedupe, remove_duplicate_rows
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
+from preflight.clean.dedupe import apply_dedupe, plan_dedupe
 from preflight.clean.drops import (
     apply_drops,
-    drop_constant_columns,
-    drop_high_missingness_columns,
-    drop_numeric_id_columns,
     plan_drops,
-    should_drop_column,
 )
-from preflight.clean.markers import apply_markers, plan_markers
-from preflight.signals import ColumnSignals, compute_signals
 from preflight.clean.impute import (
-    add_missing_indicator,
     apply_impute,
-    constant_fill,
-    median_impute,
-    mode_impute,
     plan_impute,
 )
+from preflight.clean.markers import apply_markers, plan_markers
 from preflight.clean.normalize import (
     apply_normalization,
-    group_rare_categories,
-    identify_rare_categories,
-    normalize_category_values,
     plan_normalization,
 )
-from preflight.clean.outliers import apply_outliers, plan_outliers, winsorize_outliers
+from preflight.clean.outliers import apply_outliers, plan_outliers
+from preflight.decisions import Decision
+from preflight.schema import TableSchema
+from preflight.signals import ColumnSignals, compute_signals
 
 
 def coerce_string_dates_to_datetime(series: pd.Series) -> pd.Series:
@@ -46,7 +36,7 @@ def coerce_string_dates_to_datetime(series: pd.Series) -> pd.Series:
     Uses python-dateutil to parse a DATETIME_STRING column into proper datetime64.
     Unparseable individual values become NaT rather than raising.
     """
-    def _parse(val):
+    def _parse(val: Any) -> Any:
         if pd.isnull(val):
             return pd.NaT
         try:
@@ -58,10 +48,10 @@ def coerce_string_dates_to_datetime(series: pd.Series) -> pd.Series:
     return pd.to_datetime(parsed, errors="coerce")
 
 
-def coerce_numeric_string_column(series: pd.Series) -> Tuple[Optional[pd.Series], Optional[str]]:
+def coerce_numeric_string_column(series: pd.Series) -> tuple[Optional[pd.Series], Optional[str]]:
     """
     Tries to parse an object/string column as numeric.
-    Detects and strips whitespace and common unit suffixes (like CC, kmpl, bhp, Nm).
+    Detects and strips whitespace and a common trailing unit suffix (whatever text follows the number).
     Returns (coerced_series, common_unit_suffix) if at least 95% of non-missing values
     can be parsed, otherwise (None, None).
     """
@@ -133,14 +123,14 @@ def plan_coerce(
     df: pd.DataFrame,
     schema: Optional[TableSchema] = None,
     target: Optional[str] = None,
-) -> List[Decision]:
+) -> list[Decision]:
     """
     Plan conversion of text columns that the schema types as numbers but that
     still hold text with units or stray spaces (v1: Profiler/Cleaner
     `coerce_numeric_string_column`). Typed columns from the reading/typing
     stages never need this.
     """
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
     if not schema or not schema.columns:
         return decisions
     for c in schema.columns:
@@ -176,7 +166,7 @@ def plan_coerce(
     return decisions
 
 
-def apply_coerce(df: pd.DataFrame, decisions: List[Decision]) -> pd.DataFrame:
+def apply_coerce(df: pd.DataFrame, decisions: list[Decision]) -> pd.DataFrame:
     df_out = df.copy()
     for d in decisions:
         if d.kind == "coerce_numeric" and d.action == "coerce_numeric" and d.columns:
@@ -191,9 +181,9 @@ def apply_coerce(df: pd.DataFrame, decisions: List[Decision]) -> pd.DataFrame:
 @dataclass
 class CleanPlan:
     """Cleaning Decisions plus the state the engineer stage reads."""
-    decisions: List[Decision]
+    decisions: list[Decision]
     cleaned: pd.DataFrame
-    signals: Dict[str, ColumnSignals]
+    signals: dict[str, ColumnSignals]
 
 
 def plan_clean(
@@ -203,7 +193,7 @@ def plan_clean(
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
     target_column: Optional[str] = None,
     task: Optional[str] = None,
-) -> List[Decision]:
+) -> list[Decision]:
     """Cleaning Decisions only; see `plan_clean_full`."""
     return plan_clean_full(df, schema, target, config, target_column, task).decisions
 
@@ -226,7 +216,7 @@ def plan_clean_full(
     Decisions with `apply_clean` reproduces that same table.
     """
     target = target_column or target
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
     work = df.copy()
 
     d_mark = plan_markers(work, schema)
@@ -263,7 +253,7 @@ def plan_clean_full(
 
 def apply_clean(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
     schema: Optional[TableSchema] = None,
 ) -> pd.DataFrame:
     """Apply cleaning Decisions in the order `plan_clean` simulated them."""

@@ -14,25 +14,21 @@ Validates:
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from preflight.engineer.config import FeatureConfig, PRESETS
+from preflight.engineer.config import FeatureConfig
 from preflight.engineer.datetime import expand_datetime, generate_datetime_cyclical_features
-from preflight.engineer.encoding import one_hot_encode, ordinal_encode, target_encode_cross_fit
+from preflight.engineer.encoding import target_encode_cross_fit
+from preflight.engineer.engineer import plan_engineer
 from preflight.engineer.features import (
     generate_cluster_features,
     generate_interaction_features,
     generate_text_features,
 )
-from preflight.engineer.numeric import log1p_transform, needs_log_transform, standard_scale
-from preflight.signals import compute_signals
 from preflight.engineer.vif import (
-    compute_correlation_with_target,
     compute_vif_scores,
-    flag_leakage_suspect,
     plan_vif_and_leakage,
 )
-from preflight.engineer.engineer import apply_engineer, plan_engineer
+from preflight.signals import compute_signals
 
 
 def test_tree_vs_linear_model_hints():

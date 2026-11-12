@@ -2,69 +2,58 @@
 preflight.prepare(): the public real-run entry point.
 
 Runs the existing plan -> resolve -> apply flow (reusing `plan()` and `apply()`
-unchanged) and then, as the unconditional last step, builds a fitted
-scikit-learn pipeline and generates the compulsory Report PDF. There is no
-argument to turn the Report PDF off.
+unchanged) and then, as the unconditional last step, generates the compulsory
+Report PDF. There is no argument to turn the Report PDF off.
 
-Failure handling: the cleaned data, schema.json, decisions.json, and the
-fitted pipeline are written to out_dir BEFORE the PDF is rendered (see
+Fit hygiene (docs/fit_hygiene.md): the cleaned data written to out_dir has only
+the steps that learn nothing from data. Every step that learns from data is in
+the returned UNFITTED `pipeline`; fit it on training rows only (for example
+inside each CV fold, after sklearn.base.clone). `pipeline_fitted_on_all_rows`
+is the same pipeline fitted on every row, for transforming new data after model
+selection is finished: it has seen every row, so it must NOT be used to evaluate
+a model.
+
+Failure handling: the cleaned data, schema.json, decisions.json, and both
+pipelines are written to out_dir BEFORE the PDF is rendered (see
 preflight.report.report_pdf.write_report_artifacts). If rendering fails, a
 ReportGenerationError is raised naming all of those already-saved paths.
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
-from preflight.assemble import build_pipeline_two_phase
+from sklearn.base import clone
+
 from preflight.engineer.config import FeatureConfig
-from preflight.plan import ApplyResult, Plan, apply as _apply, plan as _plan
+from preflight.plan import ApplyResult, default_out_dir
+from preflight.plan import apply as _apply
+from preflight.plan import plan as _plan
 from preflight.report.report_pdf import write_report_artifacts
 
 
-def _resolved_task(plan_obj: Plan) -> str:
-    if plan_obj.task_type and plan_obj.task_type.lower() in ("classification", "regression"):
-        return plan_obj.task_type.lower()
-    for d in plan_obj.decisions:
-        if d.kind in ("task_inference", "ambiguous_task") and d.action in ("classification", "regression"):
-            return d.action
-    return "classification"
-
-
-def _fit_pipeline(plan_obj: Plan, result: ApplyResult, model_hint: str, feature_config: Optional[FeatureConfig]):
-    """Fit the real sklearn Pipeline from the Decisions actually in force for this run."""
-    target = plan_obj.target_column
-    df = result.data
-    if target is None or df is None or target not in df.columns:
-        # No target column to fit against: an empty, unfitted cleaner/engineer
-        # pair would be misleading, so build the pipeline on the full table
-        # with no target (cleaning/engineering Decisions still apply).
-        X, y = df, None
-    else:
-        X = df.drop(columns=[target])
-        y = df[target]
-
-    return build_pipeline_two_phase(
-        X,
-        y,
-        target,
-        model_hint=model_hint,
-        decisions=result.decisions,
-        schema=plan_obj.schema,
-        feature_config=feature_config,
-        task=_resolved_task(plan_obj),
-    )
+def _fit_on_all_rows(pipeline: Any, result: ApplyResult, target: str) -> Any:
+    """
+    Convenience only: a clone of the unfitted pipeline fitted on EVERY row.
+    Never use it to score a model (it has seen the rows you would test on).
+    """
+    df = result.prepared
+    if df is None or target not in df.columns:
+        return None
+    fitted = clone(pipeline)
+    fitted.fit(df.drop(columns=[target]), df[target])
+    return fitted
 
 
 def prepare(
     path: Union[str, Path],
     target: str,
     task: Optional[str] = None,
-    mode: str = "defaults",
+    mode: str = "auto",
     channel: Any = None,
     out_dir: Optional[Union[str, Path]] = None,
     model_hint: str = "tree",
     feature_config: Optional[FeatureConfig] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the full real pipeline on `path` and write every real-run artifact to
     out_dir, ending unconditionally with the Report PDF.
@@ -74,21 +63,28 @@ def prepare(
         target: target column for the pipeline (required: the fitted
             pipeline and task inference both need it).
         task: 'classification' | 'regression' | None (infer).
-        mode: 'ask' | 'defaults' | 'strict' -- how open questions are resolved
-            before the real run proceeds (see preflight.resolve). Defaults to
-            'defaults' (safe defaults applied automatically) since this is the
-            non-interactive, real-run entry point.
+        mode: 'auto' | 'ask' | 'defaults' | 'strict' -- how open questions are
+            resolved before the real run proceeds (see preflight.resolve). 'auto'
+            (default) asks in an interactive session (terminal or notebook) and is
+            strict otherwise: a non-interactive run with open questions stops with an
+            error that says how to proceed (mode='defaults', or answer the review file).
         channel: resolution channel, forwarded to preflight.resolve when mode='ask'.
         out_dir: destination directory for every artifact (plan.json, plan.pdf,
             cleaned_data.csv, schema.json, decisions.json, pipeline.joblib,
-            report.pdf). Defaults to <source file's folder>/preflight_out.
+            report.pdf). Defaults to preflight_out/ in the current working
+            directory; nothing is ever written next to the source file. The output
+            folder is printed at the end of the run.
         model_hint: 'tree' or 'linear', shapes the fitted pipeline's engineering step.
         feature_config: optional engineering feature configuration.
 
     Returns:
-        A dict with keys 'apply_result', 'pipeline', and 'paths' (the dict of
-        artifact paths returned by write_report_artifacts, plus 'plan_json'
-        and 'plan_pdf').
+        A dict with keys:
+        'apply_result'; 'pipeline' (UNFITTED: every step that learns from data;
+        fit it on training rows only, e.g. inside CV folds; its input is
+        apply_result.prepared without the target); 'pipeline_fitted_on_all_rows'
+        (the same pipeline fitted on every row, for new data once model choice is
+        done; NOT for evaluation); 'plan'; and 'paths' (artifact paths from
+        write_report_artifacts, plus 'plan_json' and 'plan_pdf').
 
     Raises:
         preflight.report.report_pdf.ReportGenerationError if the Report PDF
@@ -96,7 +92,7 @@ def prepare(
         decisions, and pipeline paths, which are saved before rendering is attempted.
     """
     p = Path(path).resolve()
-    out_d = Path(out_dir).resolve() if out_dir is not None else p.parent / "preflight_out"
+    out_d = Path(out_dir).resolve() if out_dir is not None else default_out_dir()
     out_d.mkdir(parents=True, exist_ok=True)
 
     plan_obj = _plan(p, target=target, task=task, model_hint=model_hint, feature_config=feature_config)
@@ -106,15 +102,18 @@ def prepare(
     # stages with the final decisions in force.
     result = _apply(plan_obj, mode=mode, channel=channel, out_dir=out_d)
 
-    pipeline = _fit_pipeline(plan_obj, result, model_hint, feature_config)
+    pipeline = result.pipeline
+    fitted_all = _fit_on_all_rows(pipeline, result, target)
 
-    artifact_paths = write_report_artifacts(plan_obj, result, pipeline, out_d)
+    artifact_paths = write_report_artifacts(plan_obj, result, pipeline, out_d, fitted_pipeline=fitted_all)
     artifact_paths["plan_json"] = out_d / "plan.json"
     artifact_paths["plan_pdf"] = out_d / "plan.pdf"
 
+    print(f"PreFlight: output written to {out_d}")
     return {
         "apply_result": result,
         "pipeline": pipeline,
+        "pipeline_fitted_on_all_rows": fitted_all,
         "plan": plan_obj,
         "paths": artifact_paths,
     }

@@ -1,6 +1,6 @@
 """Shared helpers for cleaning planners."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -20,11 +20,11 @@ def py(value: Any) -> Any:
 
 def need_signals(
     df: pd.DataFrame,
-    signals: Optional[Dict[str, ColumnSignals]],
+    signals: Optional[dict[str, ColumnSignals]],
     schema: Optional[TableSchema],
     target: Optional[str],
     cardinality_threshold: int,
-) -> Dict[str, ColumnSignals]:
+) -> dict[str, ColumnSignals]:
     """Return `signals`, computing them from `df` when not supplied."""
     if signals is not None:
         return signals

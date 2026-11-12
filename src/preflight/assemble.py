@@ -17,7 +17,9 @@ matched to the recomputed ones by kind and column, and only their action is
 carried over.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
+from dataclasses import replace
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -25,17 +27,30 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.pipeline import Pipeline
 
-from preflight.clean.cleaner import apply_clean, plan_clean_full
+from preflight.clean.cleaner import apply_clean, apply_coerce, plan_clean_full
 from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
+from preflight.clean.dedupe import apply_dedupe
+from preflight.clean.drops import apply_drops
+from preflight.clean.impute import apply_impute
+from preflight.clean.markers import apply_markers
+from preflight.clean.normalize import apply_normalization, identify_rare_categories
+from preflight.clean.outliers import apply_outliers
 from preflight.decisions import Decision
 from preflight.engineer.config import DEFAULT_ENGINEER_CONFIG, EngineerConfig, FeatureConfig
 from preflight.engineer.datetime import expand_datetime, generate_datetime_cyclical_features
-from preflight.engineer.engineer import apply_engineer, plan_engineer, _target_numeric
+from preflight.engineer.encoding import target_encode_cross_fit
+from preflight.engineer.engineer import _target_numeric, apply_engineer, plan_engineer
 from preflight.engineer.features import generate_interaction_features
 from preflight.schema import TableSchema
-from preflight.signals import ColumnSignals
+from preflight.signals import ColumnSignals, compute_signals
 
 __all__ = [
+    "STATELESS_CLEAN_KINDS",
+    "PIPELINE_CLEAN_KINDS",
+    "apply_stateless",
+    "plan_time_column_kinds",
+    "FoldCleaner",
+    "build_unfitted_pipeline",
     "CleanerTransformer",
     "EngineerTransformer",
     "build_pipeline",
@@ -45,7 +60,7 @@ __all__ = [
 ]
 
 
-def overlay_actions(fresh: List[Decision], in_force: Optional[Iterable[Decision]]) -> List[Decision]:
+def overlay_actions(fresh: list[Decision], in_force: Optional[Iterable[Decision]]) -> list[Decision]:
     """
     Copy the action in force from `in_force` onto the recomputed `fresh`
     Decisions with the same kind and columns. Recomputed values (evidence)
@@ -62,12 +77,186 @@ def overlay_actions(fresh: List[Decision], in_force: Optional[Iterable[Decision]
     return fresh
 
 
+# ---------------------------------------------------------------------------
+# Fit hygiene (docs/fit_hygiene.md)
+#
+# Steps before the first one that learns from data run on the full table
+# (apply_stateless). Every step from rare-value grouping onwards runs inside the
+# UNFITTED pipeline from build_unfitted_pipeline, which callers fit inside their
+# CV folds. Which columns get which step is fixed by the plan; only values
+# (fill values, limits, rare lists, encodings, scaling, ...) are learned in fit.
+# ---------------------------------------------------------------------------
+
+STATELESS_CLEAN_KINDS: tuple[str, ...] = (
+    "convert_missing_markers", "coerce_numeric", "remove_duplicates",
+    "drop_high_missingness", "drop_id", "drop_constant", "normalize_categories",
+)
+PIPELINE_CLEAN_KINDS: tuple[str, ...] = (
+    "group_rare_categories", "add_missing_indicator", "fill_median", "fill_mode",
+    "constant_fill", "clip_outliers",
+)
+
+
+def apply_stateless(df: pd.DataFrame, decisions: list[Decision]) -> pd.DataFrame:
+    """The steps that learn nothing from data, in plan order, on the full table."""
+    decs = [d for d in decisions if d.stage == "clean" and d.kind in STATELESS_CLEAN_KINDS]
+    out = apply_coerce(apply_markers(df.copy(), decs), decs)
+    out, _ = apply_dedupe(out, decs)
+    out, _ = apply_drops(out, decs)
+    return apply_normalization(out, decs)
+
+
+def plan_time_column_kinds(
+    typed: pd.DataFrame,
+    decisions: list[Decision],
+    schema: Optional[TableSchema],
+    target: Optional[str],
+    task: Optional[str],
+    config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
+) -> dict[str, str]:
+    """
+    Column kinds (numeric, low/high-variety categorical, ...) exactly as the plan
+    computed them (after markers and numeric coercion). They choose each column's
+    encoder and stay fixed in every fold.
+    """
+    decs = [d for d in decisions if d.stage == "clean"]
+    work = apply_coerce(apply_markers(typed.copy(), decs), decs)
+    sigs = compute_signals(
+        work, schema=schema, target=target, task=task,
+        cardinality_threshold=config.cardinality_threshold,
+        rare_threshold=config.rare_category_threshold,
+    )
+    return {c: s.kind for c, s in sigs.items()}
+
+
+def _with_evidence(d: Decision, **values: Any) -> Decision:
+    nd = Decision.from_dict(d.to_dict())
+    nd.evidence = {**nd.evidence, **values}
+    return nd
+
+
+class FoldCleaner(BaseEstimator, TransformerMixin):
+    """
+    The cleaning steps that learn from data: rare-value grouping, blank flags and
+    fills, and clipping. `decisions` are the plan's Decisions (with the actions in
+    force); `fit` recomputes their values from the rows it is given only.
+    """
+
+    def __init__(
+        self,
+        decisions: Optional[list[Decision]] = None,
+        config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
+    ) -> None:
+        self.decisions = decisions
+        self.config = config
+
+    def fit(self, X: pd.DataFrame, y: Any = None) -> "FoldCleaner":
+        decs = [d for d in (self.decisions or []) if d.stage == "clean" and d.kind in PIPELINE_CLEAN_KINDS]
+        work = X.copy()
+        fitted: list[Decision] = []
+
+        rare = []
+        for d in decs:
+            if d.kind == "group_rare_categories" and d.columns and d.columns[0] in work.columns:
+                found = identify_rare_categories(work[d.columns[0]], threshold=self.config.rare_category_threshold)
+                rare.append(_with_evidence(d, rare_categories=found))
+        work = apply_normalization(work, rare)
+        fitted.extend(rare)
+
+        gaps = []
+        for d in decs:
+            if d.kind not in ("add_missing_indicator", "fill_median", "fill_mode", "constant_fill"):
+                continue
+            col = d.columns[0] if d.columns else None
+            if d.kind == "fill_median" and col in work.columns:
+                s = pd.to_numeric(work[col], errors="coerce")
+                gaps.append(_with_evidence(d, fill_value=float(s.median()) if s.notna().any() else 0.0))
+            elif d.kind == "fill_mode" and col in work.columns:
+                modes = work[col].mode(dropna=True)
+                gaps.append(_with_evidence(d, fill_value=np.nan if modes.empty else modes.iloc[0]))
+            else:
+                gaps.append(d)
+        work = apply_impute(work, gaps)
+        fitted.extend(gaps)
+
+        for d in decs:
+            if d.kind != "clip_outliers" or not d.columns or d.columns[0] not in work.columns:
+                continue
+            s = pd.to_numeric(work[d.columns[0]], errors="coerce")
+            lower, upper = self._limits(s)
+            fitted.append(_with_evidence(d, lower_bound=lower, upper_bound=upper, method=self.config.outlier_method))
+
+        self.decisions_ = fitted
+        self.output_columns_ = list(self._apply(X).columns)
+        return self
+
+    def _limits(self, s: pd.Series) -> tuple[Optional[float], Optional[float]]:
+        """Clipping limits from these rows (same rules as clean.outliers.plan_outliers); None when the spread is zero."""
+        if self.config.outlier_method == "iqr":
+            q1, q3 = s.quantile(0.25), s.quantile(0.75)
+            iqr = q3 - q1
+            if iqr == 0 or pd.isna(iqr):
+                return None, None
+            return float(q1 - 1.5 * iqr), float(q3 + 1.5 * iqr)
+        if self.config.outlier_method == "zscore":
+            mean, std = s.mean(), s.std()
+            if std == 0 or pd.isna(std):
+                return None, None
+            return float(mean - 3 * std), float(mean + 3 * std)
+        raise ValueError(
+            f"Outlier clipping method '{self.config.outlier_method}' is not supported. Use 'iqr' or 'zscore'."
+        )
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        if not hasattr(self, "decisions_"):
+            raise NotFittedError("FoldCleaner is not fitted yet. Call 'fit' before 'transform'.")
+        return self._apply(X)
+
+    def _apply(self, X: pd.DataFrame) -> pd.DataFrame:
+        # Not wrapped by sklearn's set_output, so fit can use it before output_columns_ exists.
+        out = apply_normalization(X.copy(), self.decisions_)
+        out = apply_impute(out, self.decisions_)
+        return apply_outliers(out, self.decisions_)
+
+    def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
+        if not hasattr(self, "output_columns_"):
+            raise NotFittedError("FoldCleaner is not fitted yet.")
+        return np.array(self.output_columns_)
+
+
+def build_unfitted_pipeline(
+    target: Optional[str],
+    decisions: list[Decision],
+    column_kinds: dict[str, str],
+    schema: Optional[TableSchema] = None,
+    model_hint: str = "tree",
+    feature_config: Optional[FeatureConfig] = None,
+    cleaner_config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
+    task: str = "regression",
+) -> Pipeline:
+    """
+    UNFITTED pipeline holding every step that learns from data. Its input is the
+    table from apply_stateless without the target column. Fit it inside each CV
+    fold (it works with sklearn.base.clone); target encoding is cross-fit in fit_transform.
+    """
+    pipe = Pipeline([
+        ("cleaner", FoldCleaner([d for d in decisions if d.stage == "clean"], cleaner_config)),
+        ("engineer", EngineerTransformer(
+            [d for d in decisions if d.stage == "engineer"], target, model_hint, schema, None,
+            cleaner_config.cardinality_threshold, feature_config, task,
+            column_kinds=dict(column_kinds),
+        )),
+    ])
+    pipe.set_output(transform="pandas")
+    return pipe
+
+
 class CleanerTransformer(BaseEstimator, TransformerMixin):
     """Cleaning step: fitted on training data, applied to any table."""
 
     def __init__(
         self,
-        decisions: Optional[List[Decision]] = None,
+        decisions: Optional[list[Decision]] = None,
         target: Optional[str] = None,
         schema: Optional[TableSchema] = None,
         config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
@@ -79,7 +268,7 @@ class CleanerTransformer(BaseEstimator, TransformerMixin):
         self.config = config
         self.task = task
 
-    def fit(self, X: pd.DataFrame, y=None) -> "CleanerTransformer":
+    def fit(self, X: pd.DataFrame, y: Any = None) -> "CleanerTransformer":
         df = X.copy()
         if y is not None and self.target is not None and self.target not in df.columns:
             df[self.target] = list(y)
@@ -98,7 +287,7 @@ class CleanerTransformer(BaseEstimator, TransformerMixin):
         decs = [d for d in self.decisions_ if d.kind != "remove_duplicates"]
         return apply_clean(X, decs)
 
-    def get_feature_names_out(self, input_features=None) -> np.ndarray:
+    def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
         if not hasattr(self, "output_columns_"):
             raise NotFittedError("CleanerTransformer is not fitted yet.")
         return np.array(self.output_columns_)
@@ -109,15 +298,16 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
 
     def __init__(
         self,
-        decisions: Optional[List[Decision]] = None,
+        decisions: Optional[list[Decision]] = None,
         target: Optional[str] = None,
         model_hint: str = "tree",
         schema: Optional[TableSchema] = None,
-        signals: Optional[Dict[str, ColumnSignals]] = None,
+        signals: Optional[dict[str, ColumnSignals]] = None,
         cardinality_threshold: int = 20,
         feature_config: Optional[FeatureConfig] = None,
         task: str = "regression",
         config: EngineerConfig = DEFAULT_ENGINEER_CONFIG,
+        column_kinds: Optional[dict[str, str]] = None,
     ) -> None:
         self.decisions = decisions
         self.target = target
@@ -128,8 +318,22 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
         self.feature_config = feature_config
         self.task = task
         self.config = config
+        self.column_kinds = column_kinds
 
-    def fit(self, X: pd.DataFrame, y=None) -> "EngineerTransformer":
+    def _fold_signals(self, df: pd.DataFrame) -> Optional[dict[str, ColumnSignals]]:
+        """
+        With column_kinds (the plan's kinds), signals such as correlation with the
+        target are recomputed from these rows only, while each column keeps its plan kind.
+        """
+        if self.column_kinds is None:
+            return self.signals
+        sigs = compute_signals(
+            df, schema=self.schema, target=self.target, task=self.task,
+            cardinality_threshold=self.cardinality_threshold,
+        )
+        return {c: replace(sg, kind=self.column_kinds.get(c, sg.kind)) for c, sg in sigs.items()}
+
+    def fit(self, X: pd.DataFrame, y: Any = None) -> "EngineerTransformer":
         df = X.copy()
         if y is not None and self.target is not None and self.target not in df.columns:
             df[self.target] = list(y)
@@ -141,10 +345,18 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
             cardinality_threshold=self.cardinality_threshold,
             feature_config=self.feature_config,
             task=self.task,
-            signals=self.signals,
+            signals=self._fold_signals(df),
             config=self.config,
         )
         self.decisions_ = overlay_actions(fresh, self.decisions)
+        # A column the person chose to leave out stays out even when these rows
+        # alone would not raise the question.
+        have = {(d.kind, tuple(d.columns)) for d in self.decisions_}
+        chosen = [
+            Decision.from_dict(d.to_dict()) for d in (self.decisions or [])
+            if d.action == "drop_leaky_feature" and (d.kind, tuple(d.columns)) not in have
+        ]
+        self.decisions_ = chosen + self.decisions_
         needs_y = any(d.action == "target_encode_cross_fit" for d in self.decisions_)
         if needs_y and (y is None and self.target not in df.columns):
             raise ValueError("Target y must be provided for target encoding high-cardinality columns.")
@@ -162,6 +374,26 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
                 if isinstance(spec, dict) and spec.get("transform") == "target_encode_cross_fit":
                     spec["global_mean"] = global_mean
         return self
+
+    def fit_transform(self, X: pd.DataFrame, y: Any = None, **fit_params: Any) -> pd.DataFrame:
+        """
+        Fit, then transform the same rows. Target-encoded columns get out-of-fold
+        values here (each row encoded without its own target), as in fit-time
+        planning; new data passed to transform gets the mapping learned in fit.
+        """
+        self.fit(X, y)
+        out = self.transform(X)
+        df = X.copy()
+        if y is not None and self.target is not None and self.target not in df.columns:
+            df[self.target] = list(y)
+        y_numeric = _target_numeric(df, self.target)
+        if y_numeric is None:
+            return out
+        for col, spec in self.specs_.items():
+            if isinstance(spec, dict) and spec.get("transform") == "target_encode_cross_fit" and col in out.columns:
+                encoded, _ = target_encode_cross_fit(df[col], y_numeric)
+                out[col] = encoded.to_numpy()
+        return out
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not hasattr(self, "specs_"):
@@ -262,7 +494,7 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
                             X_out[name] = tf[name]
         return X_out
 
-    def get_feature_names_out(self, input_features=None) -> np.ndarray:
+    def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
         if not hasattr(self, "output_columns_"):
             raise NotFittedError("EngineerTransformer is not fitted yet.")
         return np.array(self.output_columns_)
@@ -271,7 +503,7 @@ class EngineerTransformer(BaseEstimator, TransformerMixin):
 def build_pipeline(
     target: Optional[str],
     model_hint: str = "tree",
-    decisions: Optional[List[Decision]] = None,
+    decisions: Optional[list[Decision]] = None,
     schema: Optional[TableSchema] = None,
     feature_config: Optional[FeatureConfig] = None,
     cleaner_config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
@@ -295,7 +527,7 @@ def build_pipeline_two_phase(
     y: pd.Series,
     target: str,
     model_hint: str = "tree",
-    decisions: Optional[List[Decision]] = None,
+    decisions: Optional[list[Decision]] = None,
     schema: Optional[TableSchema] = None,
     feature_config: Optional[FeatureConfig] = None,
     cleaner_config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
@@ -345,12 +577,12 @@ def run_assembler(
     target: str,
     task: str,
     model_hint: str,
-    decisions: Optional[List[Decision]] = None,
+    decisions: Optional[list[Decision]] = None,
     schema: Optional[TableSchema] = None,
     feature_config: Optional[FeatureConfig] = None,
     cleaner_config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
     cardinality_threshold: int = 20,
-) -> Tuple[pd.DataFrame, Pipeline]:
+) -> tuple[pd.DataFrame, Pipeline]:
     """Fit the pipeline on all of `df` and return (transformed table with target, pipeline)."""
     X = df.drop(columns=[target])
     y = df[target]

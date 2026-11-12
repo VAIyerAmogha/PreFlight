@@ -9,8 +9,9 @@ Exposes:
 - ingest: High-level orchestration function returning raw data and TableSchema.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -43,8 +44,8 @@ __all__ = [
 def ingest(
     source: Union[str, Path],
     chunksize: Optional[int] = None,
-    user_overrides: Optional[Dict[str, Any]] = None,
-) -> Tuple[Union[pd.DataFrame, Iterator[pd.DataFrame]], TableSchema]:
+    user_overrides: Optional[dict[str, Any]] = None,
+) -> tuple[Union[pd.DataFrame, Iterator[pd.DataFrame]], TableSchema]:
     """
     Run full ingestion pipeline on a tabular data file.
 

@@ -9,9 +9,9 @@ so the same (file, kind, seed) always yields byte-identical output.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
-from typing import Callable, Dict, List
+from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class CorruptionVariant:
     description: str
 
 
-def _read_lines(raw_text: str) -> List[str]:
+def _read_lines(raw_text: str) -> list[str]:
     return raw_text.splitlines()
 
 
@@ -175,7 +175,6 @@ def corrupt_quoted_delims_and_newlines(raw_text: str, seed: int) -> bytes:
     if len(lines) < 2:
         return raw_text.encode("utf-8")
     delim = max([",", ";", "\t", "|"], key=lambda d: lines[0].count(d))
-    header = lines[0].split(delim)
     data_idx = rng.randrange(1, len(lines))
     cells = lines[data_idx].split(delim)
     if cells:
@@ -186,7 +185,7 @@ def corrupt_quoted_delims_and_newlines(raw_text: str, seed: int) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
-CORRUPTIONS: Dict[str, Callable[[str, int], bytes]] = {
+CORRUPTIONS: dict[str, Callable[[str, int], bytes]] = {
     "wrong_encoding": corrupt_wrong_encoding,
     "mixed_delimiters": corrupt_mixed_delimiters,
     "extra_title_rows": corrupt_extra_title_rows,
@@ -208,5 +207,5 @@ def generate_corruption(raw_text: str, kind: str, seed: int = 1234) -> Corruptio
     return CorruptionVariant(kind=kind, data=data, description=fn.__doc__ or kind)
 
 
-def all_kinds() -> List[str]:
+def all_kinds() -> list[str]:
     return list(CORRUPTIONS.keys())

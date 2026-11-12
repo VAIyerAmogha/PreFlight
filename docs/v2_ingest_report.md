@@ -1,3 +1,5 @@
+> **SUPERSEDED (Phase 7c, 2026-10-30):** the accuracy numbers here predate Phase 7b and are replaced by docs/v2_hardening_report.md.
+
 # PreFlight v2.0 Ingest Pipeline Validation Report
 
 ## 1. Executive Summary

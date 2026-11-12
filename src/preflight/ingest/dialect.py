@@ -6,13 +6,12 @@ Scores delimiters by row-length regularity across a sample, verifies against a
 larger sample or full file, and flags low-margin winners. Returns a typed DialectResult.
 """
 
-from collections import Counter
 import csv
-from dataclasses import dataclass
-import io
-from pathlib import Path
 import statistics
-from typing import Any, Dict, List, Optional, Tuple, Union
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Union
 
 CANDIDATE_DELIMITERS = [",", ";", "\t", "|"]
 
@@ -32,10 +31,10 @@ class DialectResult:
 
 
 def _read_sample_lines(
-    source: Union[str, Path, bytes, List[str]],
+    source: Union[str, Path, bytes, list[str]],
     encoding: str = "utf-8",
     max_lines: int = 1000,
-) -> List[str]:
+) -> list[str]:
     """Read and decode lines from source up to max_lines."""
     if isinstance(source, list):
         return [line.rstrip("\r\n") for line in source[:max_lines]]
@@ -48,7 +47,7 @@ def _read_sample_lines(
         if not p.exists():
             raise FileNotFoundError(f"Input file not found: {p}")
         # Read up to ~1MB or full file to get lines
-        with open(p, "r", encoding=encoding, errors="replace") as f:
+        with open(p, encoding=encoding, errors="replace") as f:
             lines = []
             for _ in range(max_lines):
                 line = f.readline()
@@ -63,12 +62,12 @@ def _read_sample_lines(
 
 
 def _score_delimiter(
-    lines: List[str],
+    lines: list[str],
     delimiter: str,
     quotechar: str = '"',
     doublequote: bool = True,
     escapechar: Optional[str] = None,
-) -> Tuple[float, int, float]:
+) -> tuple[float, int, float]:
     """
     Score a candidate delimiter based on row-length regularity.
 
@@ -79,7 +78,7 @@ def _score_delimiter(
         return 0.0, 0, 0.0
 
     # Filter out empty or whitespace-only lines
-    non_empty = [l for l in lines if l.strip()]
+    non_empty = [ln for ln in lines if ln.strip()]
     if not non_empty:
         return 0.0, 0, 0.0
 
@@ -92,7 +91,7 @@ def _score_delimiter(
             escapechar=escapechar,
         )
         counts = [len(row) for row in reader]
-    except Exception:
+    except Exception:  # Swallowed: a candidate dialect that cannot parse the sample scores zero, which is the evidence against it
         return 0.0, 0, 0.0
 
     if not counts:
@@ -127,9 +126,9 @@ def _score_delimiter(
 
 
 def _detect_quoting_style(
-    lines: List[str],
+    lines: list[str],
     delimiter: str,
-) -> Tuple[str, bool, Optional[str]]:
+) -> tuple[str, bool, Optional[str]]:
     """Detect quote character, doublequote, and escape character."""
     sample_text = "\n".join(lines[:100])
 
@@ -163,7 +162,7 @@ def _detect_quoting_style(
 
 
 def detect_dialect(
-    source: Union[str, Path, bytes, List[str]],
+    source: Union[str, Path, bytes, list[str]],
     encoding: str = "utf-8",
     sample_size: int = 100,
     verify_size: int = 1000,
@@ -189,7 +188,7 @@ def detect_dialect(
     all_lines = _read_sample_lines(source, encoding=encoding, max_lines=verify_size)
     initial_sample = all_lines[:sample_size]
 
-    if not initial_sample or not any(l.strip() for l in initial_sample):
+    if not initial_sample or not any(ln.strip() for ln in initial_sample):
         # Empty or whitespace only
         return DialectResult(
             delimiter=",",
@@ -204,7 +203,7 @@ def detect_dialect(
         )
 
     # 2. Score candidate delimiters on initial sample
-    candidate_scores: Dict[str, Tuple[float, int, float]] = {}
+    candidate_scores: dict[str, tuple[float, int, float]] = {}
     for delim in CANDIDATE_DELIMITERS:
         score, mode_cnt, reg = _score_delimiter(initial_sample, delim)
         candidate_scores[delim] = (score, mode_cnt, reg)

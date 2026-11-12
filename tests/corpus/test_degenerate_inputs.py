@@ -5,8 +5,7 @@ and a wholly-missing column.
 
 Each case must either complete successfully or raise one of the library's
 own exception types with a clear message -- never a bare/unhandled traceback,
-and never hang (enforced with pytest-timeout if available, otherwise kept
-small enough that a hang would show up immediately).
+and never hang (enforced with pytest-timeout, a dev dependency).
 """
 
 from __future__ import annotations
@@ -17,19 +16,9 @@ import pytest
 
 from preflight.plan import plan
 
-try:
-    import pytest_timeout  # noqa: F401
-    TIMEOUT_AVAILABLE = True
-except ImportError:
-    TIMEOUT_AVAILABLE = False
+pytestmark = pytest.mark.corpus
 
 EXPECTED_EXC_TYPES = (ValueError, UnicodeDecodeError, FileNotFoundError, OSError, LookupError, KeyError)
-
-
-def _maybe_timeout(seconds):
-    if TIMEOUT_AVAILABLE:
-        return pytest.mark.timeout(seconds)
-    return pytest.mark.filterwarnings()  # no-op marker
 
 
 def _run_plan_expecting_ok_or_known_exception(path: Path):
@@ -43,14 +32,14 @@ def _run_plan_expecting_ok_or_known_exception(path: Path):
         return None, exc
 
 
-@pytest.mark.timeout(15) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(15)
 def test_empty_file(tmp_path):
     p = tmp_path / "empty.csv"
     p.write_bytes(b"")
     _run_plan_expecting_ok_or_known_exception(p)
 
 
-@pytest.mark.timeout(15) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(15)
 def test_header_only_file(tmp_path):
     p = tmp_path / "header_only.csv"
     p.write_text("col_a,col_b,col_c\n", encoding="utf-8")
@@ -59,7 +48,7 @@ def test_header_only_file(tmp_path):
         assert plan_obj.column_count >= 1
 
 
-@pytest.mark.timeout(15) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(15)
 def test_single_column_file(tmp_path):
     p = tmp_path / "single_col.csv"
     p.write_text("value\n1\n2\n3\n4\n5\n", encoding="utf-8")
@@ -68,7 +57,7 @@ def test_single_column_file(tmp_path):
         assert plan_obj.column_count == 1
 
 
-@pytest.mark.timeout(15) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(15)
 def test_single_row_file(tmp_path):
     p = tmp_path / "single_row.csv"
     p.write_text("a,b,c\n1,2,3\n", encoding="utf-8")
@@ -77,7 +66,7 @@ def test_single_row_file(tmp_path):
         assert plan_obj.row_count in (0, 1, None)
 
 
-@pytest.mark.timeout(15) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(15)
 def test_genuinely_binary_file(tmp_path):
     p = tmp_path / "binary_blob.csv"
     # PNG-like magic bytes plus random binary content, not CSV-shaped at all.
@@ -85,7 +74,7 @@ def test_genuinely_binary_file(tmp_path):
     _run_plan_expecting_ok_or_known_exception(p)
 
 
-@pytest.mark.timeout(30) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(30)
 def test_very_wide_file(tmp_path):
     p = tmp_path / "very_wide.csv"
     n_cols = 500
@@ -97,7 +86,7 @@ def test_very_wide_file(tmp_path):
         assert plan_obj.column_count == n_cols
 
 
-@pytest.mark.timeout(20) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(20)
 def test_one_very_long_cell(tmp_path):
     p = tmp_path / "long_cell.csv"
     # NOTE: a cell beyond ~131072 chars hits Python's csv field-size limit and
@@ -112,7 +101,7 @@ def test_one_very_long_cell(tmp_path):
         assert plan_obj.column_count == 2
 
 
-@pytest.mark.timeout(15) if TIMEOUT_AVAILABLE else pytest.mark.filterwarnings()
+@pytest.mark.timeout(15)
 def test_wholly_missing_column(tmp_path):
     p = tmp_path / "missing_col.csv"
     p.write_text("a,b,c\n1,,3\n2,,4\n3,,5\n", encoding="utf-8")

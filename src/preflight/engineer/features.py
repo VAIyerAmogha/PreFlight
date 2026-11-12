@@ -3,7 +3,9 @@ Advanced feature generation for PreFlight v2.0 (interactions, clustering, text f
 """
 
 import itertools
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
+from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
@@ -13,7 +15,6 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import OrdinalEncoder
 
 from preflight.engineer.config import FeatureConfig
-from preflight.engineer.vif import compute_correlation_with_target
 
 
 def compute_mutual_info_with_target(
@@ -46,15 +47,15 @@ def compute_mutual_info_with_target(
         else:
             return None
         return float(mi[0])
-    except Exception:
+    except Exception:  # Swallowed: mutual information is an optional signal; None means "not available" and callers treat it as such
         return None
 
 
 def rank_interaction_columns(
-    signals: Dict[str, Any],
+    signals: dict[str, Any],
     df_columns: Sequence[str],
     config: FeatureConfig,
-) -> List[str]:
+) -> list[str]:
     """
     Top-k numeric feature columns by max(|correlation|, |mutual information|)
     with the target, read from the column signals (as v1 read its profiles).
@@ -77,13 +78,13 @@ def generate_interaction_features(
     df: pd.DataFrame,
     top_columns: Sequence[str],
     config: FeatureConfig,
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
     """
     Generate ratio, product, and difference interactions across the given
     (already ranked) numeric columns. Never overwrites an existing column.
     """
     df_out = df.copy()
-    reports: List[Dict[str, Any]] = []
+    reports: list[dict[str, Any]] = []
     top_cols = [c for c in top_columns if c in df_out.columns]
 
     def _add(col_name: str, values: pd.Series, what: str, a: str, b: str) -> None:
@@ -116,12 +117,12 @@ def generate_cluster_features(
     df: pd.DataFrame,
     numeric_columns: Sequence[str],
     config: FeatureConfig,
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]], Dict[str, Any]]:
+) -> tuple[pd.DataFrame, list[dict[str, Any]], dict[str, Any]]:
     """
     Generate KMeans cluster assignments and distance-to-centroid features.
     """
     df_out = df.copy()
-    reports = []
+    reports: list[dict[str, Any]] = []
 
     if config.cluster_features == "numeric_only":
         features = [col for col in numeric_columns if col in df_out.columns]
@@ -181,15 +182,15 @@ def generate_text_features(
     df: pd.DataFrame,
     text_columns: Sequence[str],
     config: FeatureConfig,
-    original_cols: Optional[Set[str]] = None,
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]], Dict[str, Any]]:
+    original_cols: Optional[set[str]] = None,
+) -> tuple[pd.DataFrame, list[dict[str, Any]], dict[str, Any]]:
     """
     Generate basic text statistics (char_length, word_count, has_text) and optional TF-IDF features.
     Resolves column name collisions using original_cols.
     """
     df_out = df.copy()
-    reports = []
-    vectorizers = {}
+    reports: list[dict[str, Any]] = []
+    vectorizers: dict[str, Any] = {}
 
     collision_cols = original_cols if original_cols is not None else set(df.columns)
     valid_text_cols = [c for c in text_columns if c in df_out.columns]

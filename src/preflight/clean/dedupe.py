@@ -2,14 +2,14 @@
 Row deduplication planning and execution for PreFlight v2.0.
 """
 
-from typing import List, Tuple
+
 import pandas as pd
 
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
-def remove_duplicate_rows(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+def remove_duplicate_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """
     Returns (deduplicated df, count of rows removed).
     Uses standard full-row duplicate definition without mutating input.
@@ -23,7 +23,7 @@ def remove_duplicate_rows(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
 def plan_dedupe(
     df: pd.DataFrame,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-) -> List[Decision]:
+) -> list[Decision]:
     """
     Plan row deduplication. Emits a Decision if duplicate rows are present.
     If the fraction of rows removed exceeds config.dedupe_impact_threshold,
@@ -71,8 +71,8 @@ def plan_dedupe(
 
 def apply_dedupe(
     df: pd.DataFrame,
-    decisions: List[Decision],
-) -> Tuple[pd.DataFrame, int]:
+    decisions: list[Decision],
+) -> tuple[pd.DataFrame, int]:
     """
     Apply deduplication decision if confirmed or automatic with action 'remove_duplicates'.
     """

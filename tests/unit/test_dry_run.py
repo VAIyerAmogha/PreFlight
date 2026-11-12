@@ -10,6 +10,7 @@ Validates:
 
 import hashlib
 from pathlib import Path
+
 import pytest
 
 from preflight.plan import dry_run
@@ -30,7 +31,7 @@ def test_dry_run_source_file_hash_unchanged(messy_csv: Path, tmp_path: Path):
     initial_hash = hashlib.sha256(messy_csv.read_bytes()).hexdigest()
     out_dir = tmp_path / "run_out"
 
-    plan_obj, pdf_path = dry_run(messy_csv, out_dir=out_dir)
+    plan_obj, pdf_path = dry_run(messy_csv, out_dir=out_dir, mode=None)
 
     after_hash = hashlib.sha256(messy_csv.read_bytes()).hexdigest()
     assert initial_hash == after_hash, "dry_run altered the source file!"
@@ -41,7 +42,7 @@ def test_dry_run_source_file_hash_unchanged(messy_csv: Path, tmp_path: Path):
 def test_dry_run_no_cleaned_data_written(messy_csv: Path, tmp_path: Path):
     """Verify dry_run never writes cleaned data files or modifies working directory."""
     out_dir = tmp_path / "clean_check"
-    dry_run(messy_csv, out_dir=out_dir)
+    dry_run(messy_csv, out_dir=out_dir, mode=None)
 
     # Output directory must only contain plan.json and plan.pdf
     generated_files = sorted([f.name for f in out_dir.iterdir()])
@@ -67,7 +68,7 @@ def test_dry_run_pdf_failure_leaves_plan_json(messy_csv: Path, tmp_path: Path, m
     monkeypatch.setattr(plan_mod, "render_plan_pdf", mock_render_fail)
 
     with pytest.raises(RuntimeError) as exc_info:
-        dry_run(messy_csv, out_dir=out_dir)
+        dry_run(messy_csv, out_dir=out_dir, mode=None)
 
     # 1. Error message must name the saved plan.json file
     err_msg = str(exc_info.value)

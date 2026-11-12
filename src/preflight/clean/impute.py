@@ -2,16 +2,17 @@
 Missing value handling, indicators, and gap filling for PreFlight v2.0.
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
 
+from preflight.clean._common import need_signals, py
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
+from preflight.clean.markers import apply_missing_markers_to_series  # noqa: F401  (re-export)
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.clean._common import need_signals, py
-from preflight.clean.markers import apply_missing_markers_to_series  # noqa: F401  (re-export)
 from preflight.signals import CATEGORICAL_HIGH, CATEGORICAL_LOW, NUMERIC_FEATURE, ColumnSignals
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
 def add_missing_indicator(series: pd.Series) -> pd.Series:
@@ -24,7 +25,7 @@ def add_missing_indicator(series: pd.Series) -> pd.Series:
     return indicator
 
 
-def median_impute(series: pd.Series) -> Tuple[pd.Series, float]:
+def median_impute(series: pd.Series) -> tuple[pd.Series, float]:
     """
     Fill missing values with median for numeric columns.
     Returns (imputed series, median value used).
@@ -39,7 +40,7 @@ def median_impute(series: pd.Series) -> Tuple[pd.Series, float]:
     return imputed, median_val
 
 
-def mode_impute(series: pd.Series) -> Tuple[pd.Series, object]:
+def mode_impute(series: pd.Series) -> tuple[pd.Series, object]:
     """
     Fill missing values with mode for categorical columns.
     Returns (imputed series, mode value used).
@@ -67,8 +68,8 @@ def plan_impute(
     target: Optional[str] = None,
     cardinality_threshold: Optional[int] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-    signals: Optional[Dict[str, ColumnSignals]] = None,
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+) -> list[Decision]:
     """
     Plan blank-flag columns and gap filling, per v1 rules:
 
@@ -81,7 +82,7 @@ def plan_impute(
     """
     card = cardinality_threshold if cardinality_threshold is not None else config.cardinality_threshold
     sigs = need_signals(df, signals, schema, target, card)
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
 
     for col in df.columns:
         if col == target or col not in sigs:
@@ -185,7 +186,7 @@ def plan_impute(
 
 def apply_impute(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
 ) -> pd.DataFrame:
     """Add blank-flag columns and fill gaps as specified by decisions."""
     df_out = df.copy()

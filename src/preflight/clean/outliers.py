@@ -2,14 +2,15 @@
 Outlier handling and winsorization planning and execution for PreFlight v2.0.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional
+
 import pandas as pd
 
+from preflight.clean._common import need_signals
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.clean._common import need_signals
 from preflight.signals import NUMERIC_FEATURE, ColumnSignals
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
 def winsorize_outliers(series: pd.Series, method: str = "iqr") -> pd.Series:
@@ -48,8 +49,8 @@ def plan_outliers(
     schema: Optional[TableSchema] = None,
     target: Optional[str] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-    signals: Optional[Dict[str, ColumnSignals]] = None,
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+) -> list[Decision]:
     """
     Plan outlier clipping (winsorization) for numeric feature columns.
 
@@ -62,7 +63,7 @@ def plan_outliers(
     and the safe default is then to keep the values.
     """
     sigs = need_signals(df, signals, schema, target, config.cardinality_threshold)
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
 
     for col in df.columns:
         if col == target or col not in sigs:
@@ -147,7 +148,7 @@ def plan_outliers(
 
 def apply_outliers(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
 ) -> pd.DataFrame:
     """Apply outlier clipping specified by decisions."""
     df_out = df.copy()

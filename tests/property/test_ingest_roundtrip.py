@@ -12,7 +12,6 @@ written, and column names must round-trip too.
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
@@ -49,7 +48,7 @@ column_name_strategy = st.text(
 def test_raw_load_preserves_every_cell_exactly(tmp_path, n_cols, n_rows, data):
     col_names = []
     seen = set()
-    for i in range(n_cols):
+    for _ in range(n_cols):
         name = data.draw(column_name_strategy.filter(lambda s: s not in seen))
         seen.add(name)
         col_names.append(name)

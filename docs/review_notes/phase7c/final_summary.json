@@ -1,0 +1,87 @@
+{
+ "metrics": {
+  "tuning": {
+   "timeouts": 0,
+   "unhandled": [
+    0,
+    153
+   ],
+   "dialect": [
+    140,
+    153
+   ],
+   "coltype": [
+    1624,
+    1765
+   ],
+   "wrong_noflag": [
+    3,
+    1765
+   ],
+   "evidence": [
+    4736,
+    4736
+   ],
+   "na_median": 3,
+   "na_max": 109,
+   "na_gt10": 19
+  },
+  "held_out": {
+   "timeouts": 0,
+   "unhandled": [
+    0,
+    101
+   ],
+   "dialect": [
+    93,
+    101
+   ],
+   "coltype": [
+    976,
+    1085
+   ],
+   "wrong_noflag": [
+    10,
+    1085
+   ],
+   "evidence": [
+    3050,
+    3050
+   ],
+   "na_median": 2,
+   "na_max": 39,
+   "na_gt10": 10
+  },
+  "combined": {
+   "timeouts": 0,
+   "unhandled": [
+    0,
+    254
+   ],
+   "dialect": [
+    233,
+    254
+   ],
+   "coltype": [
+    2600,
+    2850
+   ],
+   "wrong_noflag": [
+    13,
+    2850
+   ],
+   "evidence": [
+    7786,
+    7786
+   ],
+   "na_median": 3.0,
+   "na_max": 109,
+   "na_gt10": 29
+  }
+ },
+ "files": {
+  "tuning": 153,
+  "held_out": 101,
+  "combined": 254
+ }
+}

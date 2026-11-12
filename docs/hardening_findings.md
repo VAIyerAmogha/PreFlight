@@ -1,3 +1,5 @@
+> **Held-out set:** every held-out number in this document is from a set that was **seen during review, not independent** (see docs/v2_hardening_report.md).
+
 # Hardening findings
 
 ## 2026-10-23: bare `_csv.Error` escapes on a very long cell value

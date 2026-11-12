@@ -1,17 +1,15 @@
 """ask / defaults / strict behaviour and mode auto-selection (Phase 5 / M4)."""
 
-from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from conftest import pick, recommended
+
 from preflight import apply, resolve
 from preflight.interact import modes
-from preflight.interact.channels import NonInteractiveError, ReviewPending
+from preflight.interact.channels import NonInteractiveError
 from preflight.interact.modes import StrictResolutionError, resolve_mode
 from preflight.plan import plan
-
 
 # --- defaults ---------------------------------------------------------------
 

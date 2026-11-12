@@ -2,7 +2,7 @@
 Numeric feature transformations for PreFlight v2.0 (scaling and log1p).
 """
 
-from typing import Dict, Tuple
+
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -30,7 +30,7 @@ def log1p_transform(series: pd.Series) -> pd.Series:
     return np.log1p(series)
 
 
-def standard_scale(series: pd.Series) -> Tuple[pd.Series, Dict[str, float]]:
+def standard_scale(series: pd.Series) -> tuple[pd.Series, dict[str, float]]:
     """
     Applies z-score scaling: (x - mean) / std.
     Returns (scaled series, {'mean': ..., 'std': ...}) for reuse at inference time.

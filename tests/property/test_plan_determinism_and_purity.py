@@ -96,7 +96,7 @@ column_name = st.text(alphabet="abcdefghij_", min_size=1, max_size=8)
 def test_plan_never_raises_unhandled_or_hangs_on_arbitrary_tables(tmp_path, n_cols, n_rows, data):
     seen = set()
     header = []
-    for i in range(n_cols):
+    for _ in range(n_cols):
         name = data.draw(column_name.filter(lambda s: s not in seen))
         seen.add(name)
         header.append(name)

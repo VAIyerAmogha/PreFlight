@@ -21,7 +21,7 @@ implemented is an empty plug-in point that `TriggerRegistry.register(...)` can f
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Optional
 
 import pandas as pd
 
@@ -87,7 +87,7 @@ def _never(_d: Decision, _c: TriggerContext) -> bool:
     return False
 
 
-def column_missing_markers(column: Optional[ColumnRawMetadata]) -> List[str]:
+def column_missing_markers(column: Optional[ColumnRawMetadata]) -> list[str]:
     """Missing-value marker strings recorded for a column."""
     if column is None:
         return []
@@ -97,7 +97,7 @@ def column_missing_markers(column: Optional[ColumnRawMetadata]) -> List[str]:
 def anomaly_rate(
     decision: Decision,
     series: Optional[pd.Series],
-    missing: Optional[List[str]] = None,
+    missing: Optional[list[str]] = None,
 ) -> Optional[float]:
     """
     Share of non-missing raw values that fail the Decision's proposed conversion.
@@ -191,11 +191,11 @@ class TriggerRegistry:
     """Ordered registry of trigger rules."""
 
     def __init__(self) -> None:
-        self._rules: List[TriggerRule] = []
+        self._rules: list[TriggerRule] = []
         self._register_defaults()
 
     @property
-    def rules(self) -> List[TriggerRule]:
+    def rules(self) -> list[TriggerRule]:
         return list(self._rules)
 
     def register(self, rule: TriggerRule) -> None:
@@ -218,10 +218,10 @@ class TriggerRegistry:
                 return rule.category
         return None
 
-    def implemented_categories(self) -> List[str]:
+    def implemented_categories(self) -> list[str]:
         return [r.category for r in self._rules if r.implemented]
 
-    def empty_plugin_categories(self) -> List[str]:
+    def empty_plugin_categories(self) -> list[str]:
         return [r.category for r in self._rules if not r.implemented]
 
     def _register_defaults(self) -> None:

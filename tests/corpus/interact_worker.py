@@ -42,6 +42,7 @@ def main(path: str) -> dict:
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "unit"))
     import re
+
     from test_jargon_lint import STRICT_BANNED_PATTERNS
 
     texts = []

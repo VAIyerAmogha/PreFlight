@@ -1,3 +1,7 @@
+> **SUPERSEDED (Phase 7b, 2026-10-30):** the numbers here are replaced by docs/v2_hardening_report.md.
+
+> **Held-out set:** every held-out number in this document is from a set that was **seen during review, not independent** (see docs/v2_hardening_report.md).
+
 # PreFlight v2.0 — Corpus Accuracy Report
 
 **Date**: 2026-10-23

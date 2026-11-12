@@ -1,3 +1,5 @@
+> **Updated in Phase 7c (2026-10-30):** the score table was re-run after the Categorical fix; the Phase 7 table is replaced. Held-out numbers in this document come from a set **seen during review, not independent**.
+
 # v2 vs v1.0.1: feature-building comparison on 10 corpus files
 
 ## IMPORTANT DISCLOSURE — targets are my assumption, not corpus ground truth
@@ -52,145 +54,113 @@ No fallback rule ("last column" / "only clear numeric non-ID column") was needed
 the 10 — all are recognized named public datasets with a standard outcome variable. This is
 stated explicitly rather than left to be inferred.
 
-## Method
+## Method (Phase 7c re-run, `scripts/compare_v1_v2.py`)
 
-- **v1.0.1 path**: raw file → plain `pandas.read_csv(path)` (no manual delimiter/header
-  fix-ups — this is deliberately naive, to test what actually happens when v1 is pointed at
-  these files with no special handling) → v1.0.1's own `profiler.run_profiler` →
-  `assembler.build_pipeline_two_phase` (which internally calls v1's `cleaner.run_cleaner`
-  and `engineer.run_engineer`), from `/home/amg/Desktop/PreFlight v1.0.1/src/preflight/`.
-- **v2 path**: raw file → `preflight.plan(path, target=, task=, model_hint=)` →
-  `preflight.apply(plan_obj, mode="defaults")` → `result.data` (the typed table) →
-  `preflight.assemble.build_pipeline_two_phase(X, y, target, model_hint=, decisions=,
-  schema=, task=)`, i.e. the same public ingest/plan/apply/assemble flow used elsewhere in
-  this repo (`prepare()`).
-- **Models**: one linear model (`LogisticRegression`/`LinearRegression`, `random_state=42`),
-  one tree model (`RandomForestClassifier`/`RandomForestRegressor`, 100 trees,
-  `random_state=42`), fit on standardized (linear) or raw (tree) features.
-- **CV**: `RepeatedStratifiedKFold`/`RepeatedKFold`, `n_splits=3`, `n_repeats=3`,
-  `random_state=42` (9 scored folds per file/model/path).
-- **No leakage**: for every fold, v1's `profiler.run_profiler` + `build_pipeline_two_phase`
-  and v2's `build_pipeline_two_phase` are **re-fit on the training fold only**
-  (`cleaner.fit(X_train, y_train)`, `engineer.fit(X_cleaned_train, y_train)` for both
-  versions); medians, scalers, encodings, winsorize bounds, interaction rankings are all
-  computed from train rows only and then applied to the held-out test fold via each
-  pipeline's own `transform()`. The one thing computed once outside the fold is column
-  *semantic typing* (which columns are numeric/categorical/ID etc.) — standard schema
-  inference, not a statistic of the target, so not treated as leakage here.
-- `diamonds.csv` (53,940 rows) and `adult.data` (32,561 rows) were subsampled to 4,000 rows
-  (fixed seed) purely for CV runtime; this is noted, not hidden.
+This is the same method as the Phase 7 comparison: fitting inside each fold, fixed seeds,
+repeated CV, and ties within one standard deviation. It is now a script, so it can be re-run.
 
-## Results table
+- **v1.0.1 path:** raw file -> plain `pandas.read_csv(path)` (no delimiter or header fix-ups,
+  on purpose) -> in each fold, v1's `profiler.run_profiler` and
+  `assembler.build_pipeline_two_phase` on the training rows only -> `transform` on the test rows.
+  Code from `/home/amg/Desktop/PreFlight v1.0.1/src/preflight/`.
+- **v2 path:** `preflight.plan(path, target=, task=, model_hint=)` ->
+  `preflight.apply(plan, mode="defaults")` -> in each fold, `sklearn.base.clone(result.pipeline)`
+  fitted on the training rows of `result.prepared` only -> `transform` on the test rows. This is the
+  Phase 7b fit-hygiene pattern (docs/fit_hygiene.md). Column choices made at plan time (types,
+  dropped columns, encoder choice) are fixed for all folds.
+- **Models:** linear (`LogisticRegression` / `LinearRegression` after standardizing) and tree
+  (`RandomForestClassifier` / `RandomForestRegressor`, 100 trees), `random_state=42`. A median
+  imputer runs first on both paths, in case either leaves a blank.
+- **Leftover text columns:** if a version's output still has a non-numeric column, it is
+  one-hot encoded with the training-fold categories. This applies to both versions alike.
+  In practice it applies to v1, which leaves yes/no-style text columns (`sex` = man/woman)
+  unencoded. Without this step those columns became blanks, and v1 scored at the
+  majority-class baseline (0.6824 on COUNT_titanic.csv). That would be a harness artefact, not
+  a v1 result.
+- **CV:** `RepeatedStratifiedKFold` / `RepeatedKFold`, 3 splits x 3 repeats, `random_state=42`:
+  9 scored folds per file, model and version.
+- **Subsampling:** `adult.data`, `diamonds.csv` and `winequality-white.csv` have more than 4,000
+  data rows. They are cut to 4,000 rows (seed 42) at the file level, so both versions read the
+  same rows.
+- **Tie rule:** `|v1_mean - v2_mean| <= v1_std + v2_std` -> TIE. Equal means with zero spread
+  count as a tie.
 
-Only files where **both** v1 and v2 produced usable, scoreable features are included here.
-Files where one side failed outright are in the Robustness section instead (not folded into
-means). Tie rule: if v1 vs v2 means differ by less than one combined standard deviation
-(`|v1_mean - v2_mean| < v1_std + v2_std`), it's reported TIE.
+Raw fold scores: `docs/review_notes/phase7c/compare_v1_v2.json`; table built by
+`scripts/compare_table.py`.
 
-| File | Model | v1 mean±std | v2 mean±std | Verdict | Note |
+## Results (Phase 7c, replaces the Phase 7 table)
+
+| File | Model | v1 mean ± std | v2 mean ± std | Verdict | Note |
 |---|---|---|---|---|---|
-| AER_Affairs.csv | linear (R²) | 0.0869 ± 0.0434 | 0.0869 ± 0.0434 | TIE | Identical — no categorical normalization changes anything here (gender/children values are already lowercase, no v2 defect triggered, see Robustness) |
-| AER_Affairs.csv | tree (R²) | 0.0456 ± 0.0650 | 0.0479 ± 0.0635 | TIE | Difference (0.002) is far under 1 combined std (0.13) |
-| carData_TitanicSurvival.csv | linear (acc) | 0.6259 ± 0.0066 | 0.6264 ± 0.0059 | TIE | Negligible difference |
-| carData_TitanicSurvival.csv | tree (acc) | 0.6180 ± 0.0009 | 0.6180 ± 0.0009 | TIE | Identical |
-| COUNT_titanic.csv | linear (acc) | 0.7773 ± 0.0112 | 0.7773 ± 0.0112 | TIE | Identical |
-| COUNT_titanic.csv | tree (acc) | 0.7923 ± 0.0110 | 0.7923 ± 0.0110 | TIE | Identical |
+| adult.data | linear (acc) | failed | 0.8466 ± 0.0074 | v1 failed | No header row: plain `read_csv` uses the first data row as names, so there is no `income` column. Subsampled to 4,000 rows. |
+| adult.data | tree (acc) | failed | 0.8502 ± 0.0056 | v1 failed | Same. |
+| iris.data | linear (acc) | failed | 0.9546 ± 0.0245 | v1 failed | No header row; no `species` column. |
+| iris.data | tree (acc) | failed | 0.9569 ± 0.0215 | v1 failed | Same. |
+| winequality-red.csv | linear (R²) | failed | 0.3597 ± 0.0382 | v1 failed | Semicolon separator: plain `read_csv` gives one column. |
+| winequality-red.csv | tree (R²) | failed | 0.4557 ± 0.0271 | v1 failed | Same. |
+| winequality-white.csv | linear (R²) | failed | 0.2794 ± 0.0242 | v1 failed | Same. Subsampled to 4,000 rows. |
+| winequality-white.csv | tree (R²) | failed | 0.4702 ± 0.0194 | v1 failed | Same. |
+| titanic.csv | linear (acc) | 1.0000 ± 0.0000 | 1.0000 ± 0.0000 | TIE (leakage, not a real score) | `alive` (yes/no) is a copy of `survived`; neither version removes it. See finding 3. |
+| titanic.csv | tree (acc) | 1.0000 ± 0.0000 | 1.0000 ± 0.0000 | TIE (leakage, not a real score) | Same. |
+| tips.csv | linear (R²) | 0.3825 ± 0.0689 | 0.3964 ± 0.0631 | TIE | |
+| tips.csv | tree (R²) | 0.1956 ± 0.1719 | 0.1968 ± 0.1187 | TIE | |
+| AER_Affairs.csv | linear (R²) | 0.0869 ± 0.0460 | 0.0932 ± 0.0422 | TIE | |
+| AER_Affairs.csv | tree (R²) | 0.0459 ± 0.0635 | 0.0660 ± 0.0651 | TIE | |
+| diamonds.csv | linear (R²) | 0.9202 ± 0.0053 | 0.9183 ± 0.0097 | TIE | Subsampled to 4,000 rows. |
+| diamonds.csv | tree (R²) | 0.9616 ± 0.0036 | 0.9635 ± 0.0062 | TIE | Subsampled to 4,000 rows. |
+| carData_TitanicSurvival.csv | linear (acc) | 0.6175 ± 0.0022 | 0.7841 ± 0.0093 | v2 better | v1 is at the majority-class rate: it reads `passengerClass` (1st/2nd/3rd) as a date, which gives one constant value. v2 ordinal-encodes `passengerClass`. Both versions target-encode the unique passenger-name column `rownames`. v2 types it as an ID but still encodes it, using cross-fitting; this is noted, not fixed. |
+| carData_TitanicSurvival.csv | tree (acc) | 0.6180 ± 0.0010 | 0.7545 ± 0.0207 | v2 better | Same. |
+| COUNT_titanic.csv | linear (acc) | 0.7773 ± 0.0119 | 0.7773 ± 0.0119 | TIE | |
+| COUNT_titanic.csv | tree (acc) | 0.7923 ± 0.0116 | 0.7844 ± 0.0132 | TIE | |
 
-**On these 3 "clean" files, v2 shows no measurable gain over v1 — stated plainly, as
-instructed.** The feature pipelines produce essentially the same numbers because both
-v1 and v2 implement the same cleaning/engineering rules by design (v2 was ported from v1,
-per `docs/port_log.md`), and these 3 files contain nothing (no messy delimiters, no
-case/whitespace-inconsistent categorical text) that would make the two diverge.
+Counts over 20 file/model pairs: v1 failed 8, TIE 10 (2 of them are the leaky titanic.csv
+pairs), v2 better 2, v1 better 0.
 
-No file in this set showed v1-better or v2-better by more than 1 combined std — every
-scoreable file/model pair is a TIE.
+## Findings
 
-A separate, unexplained observation on `titanic.csv` (v1 side only, since v2 could not run
-on it — see Robustness): v1's linear and tree models both scored 1.000 ± 0.000 accuracy for
-`survived`. This is very likely because the raw file contains an `alive` column
-(`"yes"`/`"no"`) that is a direct re-encoding of the `survived` target, and `class`/`who`
-columns that are near-duplicates of `pclass`/`sex`/`age`; v1's NUMERIC_ID/CONSTANT drop rules
-do not catch string-valued leakage columns like `alive`. This is a property of the raw
-dataset plus v1's drop rules, not a v2 comparison point (v2 never got the chance to run on
-this file, due to the defect below), and is reported here as an observation rather than a
-score claim.
+### 1. v1 cannot read 4 of the 10 files with a plain read
 
-## Robustness findings (not folded into the score table)
+Plain `pandas.read_csv(path)` misreads `adult.data` and `iris.data` (no header row) and both
+wine files (semicolon separator) before any v1 code runs. v2's reading stage (dialect, header
+and encoding detection) reads all 4 correctly, and all 8 v2 file/model pairs produce scores.
 
-### 1. v1 fails outright on every file with a naive read (4 files)
+### 2. The v2 Categorical defect from Phase 7 is fixed
 
-Plain `pandas.read_csv(path)` with no manual fix-ups mis-parses 4 of the 10 files before any
-v1 profiler/cleaner/engineer code runs at all:
+Phase 7 found that `clean/normalize.py` raised `TypeError: Categoricals can only be compared if
+'categories' are the same` on any Categorical column with upper-case letters or extra spaces.
+That error blocked 6 of the 10 files. It was fixed in Phase 7c, which now compares plain values,
+and has a regression test (`tests/unit/test_normalize_categorical.py`). All 10 files now run
+on v2.
 
-| File | What naive `pandas.read_csv` produces | Why it breaks v1 |
-|---|---|---|
-| `adult.data` | First data row (`39, State-gov, 77516, Bachelors, 13, ...`) is consumed as the header; resulting columns are string literals like `'39'`, `' State-gov'` | No column is or can be named/indexed `income`; `run_profiler(df, target, task)` cannot locate the target |
-| `iris.data` | Same problem: first row (`5.1,3.5,1.4,0.2,Iris-setosa`) becomes the header | No `species` column exists |
-| `winequality-red.csv` | Entire semicolon-delimited header+rows load into a single column (comma is the wrong delimiter) | No `quality` column exists — the whole file is one text column |
-| `winequality-white.csv` | Same single-column misparse as red wine | Same |
+### 3. Target leakage on titanic.csv (both versions)
 
-v2's `preflight.plan()`/`apply()` (via `detect_dialect`/`detect_header`/`detect_encoding` in
-`preflight.ingest`) correctly detects the no-header case for `adult.data`/`iris.data` and the
-semicolon delimiter for both wine-quality files, and produced a typed table with the target
-column present and usable in all 4 cases (`v2_status: "ok"` in the raw run output). This is
-a genuine, reproducible robustness advantage for v2's ingest stage on these 4 files — but
-see finding 2, which prevented these 4 files from reaching a scoreable comparison anyway.
-
-### 2. v2 has a reproducible defect that fails on virtually every categorical column with mixed case or whitespace (6 of 10 files, including all 4 files from finding 1)
-
-`src/preflight/clean/normalize.py`, `normalize_category_values()` (line ~22) lowercases and
-strips a categorical-dtype `pandas.Series` with `.apply(...)`. When the column actually
-needs changing (any value isn't already fully lowercase/trimmed), pandas returns a new
-`Categorical` whose **category set differs** from the original column's category set (e.g.
-`['Female','Male']` → `['female','male']`). `plan_normalization()` in
-`src/preflight/clean/cleaner.py` (via `clean/normalize.py:82`) then does
-`normalized != series`, which pandas raises on for two `Categorical`s with different
-category sets:
-
-```
-TypeError: Categoricals can only be compared if 'categories' are the same.
-```
-
-Minimal reproduction:
-```python
-import pandas as pd
-s = pd.Series(['Female', 'Male', 'Female'], dtype='category')
-normalized = s.apply(lambda x: x.strip().lower() if isinstance(x, str) else x)
-(normalized != s)   # raises TypeError
-```
-
-This crashes `plan_clean_full` → `CleanerTransformer.fit` → `build_pipeline_two_phase`
-deterministically, for **every** fold, on any file that has a categorical column with
-uppercase letters or leading/trailing whitespace anywhere in its values. That covers 6 of
-the 10 files selected here:
-
-| File | Example categorical value that triggers it |
-|---|---|
-| `adult.data` | `' State-gov'` (leading space + mixed case, workclass) |
-| `iris.data` | `'Iris-setosa'` (mixed case, species) |
-| `titanic.csv` | `'S'`/`'C'`/`'Q'` (embarked, uppercase) |
-| `tips.csv` | `'Female'`/`'Male'`, `'No'`/`'Yes'`, `'Sun'`, `'Dinner'` |
-| `diamonds.csv` | `'Ideal'`, `'E'`, `'SI2'` (cut/color/clarity) |
-
-(`winequality-red/white.csv` have no categorical columns at all, so this specific defect
-does not apply to them — but they are already excluded by finding 1.)
-
-**Net effect**: of the 10 files, v2 could only be scored on 3 (`AER_Affairs.csv`,
-`carData_TitanicSurvival.csv`, `COUNT_titanic.csv`) — the only 3 whose categorical columns
-happened to already be lowercase/whitespace-clean in the raw data (e.g. `'female'`/`'male'`,
-`'yes'`/`'no'`, `'1st class'`). This is a real, src-level defect in v2's `clean/normalize.py`
-discovered during this comparison, not a limitation of the comparison methodology. I did not
-patch it — the user's resolution authorized target inference, not scope to fix unrelated
-pipeline bugs, and fixing it would change what's being measured.
+`alive` (yes/no) is a direct re-encoding of the target `survived`, and both versions keep it. v2
+reads it as a yes/no column, and its leakage check only measures numeric columns
+(`engineer/vif.py`, `compute_correlation_with_target`), so it is not flagged. Both versions
+therefore score 1.000. This is a known gap and is listed in docs/v2_hardening_report.md.
 
 ## Summary
 
-- 3 of 10 files produced a genuine head-to-head score comparison: **all 6 model/file pairs
-  are TIEs** (v2 shows no regression and no gain vs. v1 on these).
-- 4 of 10 files show v2's ingest succeeding where v1's naive `pandas.read_csv` fails outright
-  (robustness finding in v2's favor, but these never reached scoring because of finding 2).
-- 6 of 10 files (a superset including those 4) hit a reproducible v2 defect in
-  `clean/normalize.py` that crashes cleaning whenever a categorical column has mixed-case or
-  whitespace content — these never reached scoring either.
-- No file in this set shows v1-better or v2-better by score; the only real differentiators
-  found were robustness ones (in opposite directions, on different files).
+- On the 6 files both versions can read, 10 of 12 pairs are TIEs. 2 of those ties are
+  meaningless because of the leakage in titanic.csv. The remaining 2 pairs (carData_TitanicSurvival)
+  are v2 better, because v1 reads a class column as a date. No pair is v1 better.
+- On the 4 messy files, v1 fails to read the file; v2 reads and scores all of them.
+- 10 files and assumed targets are too few to claim a general accuracy gain. v2's clear
+  advantage here is that it reads messy files and gets column types right; on files both
+  versions read, the feature building gives about the same scores.
+
+---
+
+## Corpus scores: v1.0.1 vs v2 after Phase 7c (254 files, 2,850 labelled columns)
+
+| Metric | v1.0.1 (docs/v1_baseline_report.md) | v2 Phase 7c (combined) |
+|---|---|---|
+| Files with an unhandled exception | 10/254 (3.94%) | 0/254 |
+| Dialect accuracy | 91.73% | 91.73% (233/254) |
+| Column type accuracy, strict | 80.77% | 91.23% (2600/2850) |
+| Wrong type with no flag (all columns) | 9.40% | 0.46% (13/2850) |
+
+v2 numbers come from the single Phase 7c run (docs/v2_hardening_report.md). They combine the
+tuning set and the held-out set, and the held-out set was **seen during review, not
+independent**. Dialect accuracy is level with v1: v2 gets different files right and wrong, and
+the totals happen to match.

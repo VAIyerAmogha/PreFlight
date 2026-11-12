@@ -13,15 +13,16 @@ Exposes the stage-based planner and apply lifecycle:
 """
 
 import csv
-from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime, timezone
 import json
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 from dateutil import parser as date_parser
 
+from preflight.assemble import build_unfitted_pipeline, plan_time_column_kinds
 from preflight.clean.cleaner import apply_coerce, plan_clean_full
 from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.clean.dedupe import apply_dedupe
@@ -30,23 +31,20 @@ from preflight.clean.impute import apply_impute
 from preflight.clean.markers import apply_markers
 from preflight.clean.normalize import apply_normalization
 from preflight.clean.outliers import apply_outliers
-from preflight.decisions import Decision, compute_decision_fingerprint
+from preflight.decisions import Decision
 from preflight.engineer.config import FeatureConfig
 from preflight.engineer.engineer import apply_engineer, plan_engineer
 from preflight.infer import infer_table_types
-from preflight.ingest import detect_dialect, detect_encoding, detect_header, load_raw
+from preflight.infer.types import strip_unit
+from preflight.ingest import HeaderResult, detect_dialect, detect_encoding, detect_header, load_raw
 from preflight.report.plan_pdf import render_plan_pdf
 from preflight.report.templates import (
-    friendly_separator_name,
-    friendly_text_format,
-    friendly_type_name,
     template_ambiguous_task,
     template_dialect,
     template_encoding,
     template_header,
 )
 from preflight.schema import ColumnRawMetadata, TableSchema
-
 
 # ===========================================================================
 # Context & Result Objects
@@ -60,12 +58,12 @@ class PlanContext:
     task_type: Optional[str] = None
     raw_data: Optional[pd.DataFrame] = None
     schema: Optional[TableSchema] = None
-    decisions: List[Decision] = field(default_factory=list)
+    decisions: list[Decision] = field(default_factory=list)
     model_hint: str = "tree"
     feature_config: Optional[FeatureConfig] = None
     cleaner_config: CleanerConfig = field(default_factory=lambda: DEFAULT_CLEANER_CONFIG)
     # Cleaning and engineering Decisions, computed once on first use (see _ensure_prep_plan)
-    prep_decisions: Optional[List[Decision]] = None
+    prep_decisions: Optional[list[Decision]] = None
 
 
 @dataclass
@@ -77,10 +75,12 @@ class ApplyContext:
     raw_data: Optional[pd.DataFrame] = None
     typed_data: Optional[pd.DataFrame] = None
     schema: Optional[TableSchema] = None
-    decisions: List[Decision] = field(default_factory=list)
-    anomalies: List[Dict[str, Any]] = field(default_factory=list)
+    decisions: list[Decision] = field(default_factory=list)
+    anomalies: list[dict[str, Any]] = field(default_factory=list)
     prepared_data: Optional[pd.DataFrame] = None
-    engineer_specs: Dict[str, Any] = field(default_factory=dict)
+    engineer_specs: dict[str, Any] = field(default_factory=dict)
+    model_hint: str = "tree"
+    feature_config: Optional[FeatureConfig] = None
 
 
 @dataclass
@@ -88,14 +88,20 @@ class ApplyResult:
     """
     Result returned by full pipeline apply execution.
 
-    data: the typed table (Phase 4 contract). prepared: the table after cleaning and
-    feature creation. specs: fitted state of the creating step (mappings, scales...).
+    data: the typed table (Phase 4 contract). prepared: the full table after the steps
+    that learn nothing from data (markers, numeric coercion, repeated rows, column
+    removal, text tidying; see docs/fit_hygiene.md). pipeline: an UNFITTED sklearn
+    Pipeline with every step that learns from data (rare values, blank fills,
+    clipping, encodings, rescaling, generated columns); fit it on training rows only,
+    for example inside each CV fold. Its input is `prepared` without the target column.
+    specs: kept for compatibility; always empty now that nothing is fitted in apply.
     """
     data: pd.DataFrame
-    decisions: List[Decision]
-    anomalies: List[Dict[str, Any]]
+    decisions: list[Decision]
+    anomalies: list[dict[str, Any]]
     prepared: Optional[pd.DataFrame] = None
-    specs: Dict[str, Any] = field(default_factory=dict)
+    specs: dict[str, Any] = field(default_factory=dict)
+    pipeline: Optional[Any] = None
 
 
 @dataclass
@@ -109,11 +115,11 @@ class Plan:
     row_count: Optional[int] = None
     column_count: int = 0
     schema: Optional[TableSchema] = None
-    decisions: List[Decision] = field(default_factory=list)
+    decisions: list[Decision] = field(default_factory=list)
     model_hint: str = "tree"
     feature_config: Optional[FeatureConfig] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert Plan to dictionary."""
         return {
             "source_path": self.source_path,
@@ -139,7 +145,7 @@ class Plan:
         return p
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Plan":
+    def from_dict(cls, data: dict[str, Any]) -> "Plan":
         """Reconstruct Plan from dictionary."""
         schema_data = data.get("schema")
         schema = TableSchema.from_dict(schema_data) if schema_data else None
@@ -174,11 +180,11 @@ class Stage:
     name: str = "base"
     section: str = "reading"
 
-    def plan(self, context: PlanContext) -> List[Decision]:
+    def plan(self, context: PlanContext) -> list[Decision]:
         """Generate pipeline Decision proposals without mutating source or state."""
         raise NotImplementedError
 
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
+    def apply(self, context: ApplyContext, decisions: list[Decision]) -> Any:
         """Execute stage transformations given active decisions."""
         raise NotImplementedError
 
@@ -191,7 +197,7 @@ class ReadingStage(Stage):
     name: str = "reading"
     section: str = "reading"
 
-    def plan(self, context: PlanContext) -> List[Decision]:
+    def plan(self, context: PlanContext) -> list[Decision]:
         p = context.source_path
         enc_res = detect_encoding(p)
         dialect_res = detect_dialect(p, encoding=enc_res.encoding)
@@ -217,9 +223,13 @@ class ReadingStage(Stage):
                 "confidence": enc_res.confidence,
                 "has_bom": enc_res.has_bom,
                 "low_confidence": enc_res.low_confidence,
+                "detected_as": enc_res.raw_detected,
+                "alternatives": list(enc_res.alternatives),
             },
             confidence=enc_res.confidence,
-            default="use_encoding_utf-8",
+            # The safe default is the detected encoding: it is the one that decoded the
+            # sample (UTF-8 is only chosen when the bytes are valid UTF-8).
+            default=f"use_encoding_{enc_res.encoding}",
             needs_attention=enc_needs_att,
             plain_language=template_encoding(
                 enc_res.encoding,
@@ -313,7 +323,7 @@ class ReadingStage(Stage):
 
         return [enc_dec, dial_dec, hdr_dec]
 
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> pd.DataFrame:
+    def apply(self, context: ApplyContext, decisions: list[Decision]) -> pd.DataFrame:
         """
         Read the file using the actions in force on the reading Decisions (text format,
         separator, column-names row), so a confirmed or changed answer is what is used.
@@ -356,7 +366,7 @@ def _action_value(action: str, prefix: str) -> Optional[str]:
 
 def _header_for_action(
     path: Path, encoding: Optional[str], delimiter: Optional[str], action: str
-):
+) -> HeaderResult:
     """HeaderResult for a column-names row chosen by the user, not the one detected."""
     detected = detect_header(path, delimiter=delimiter or ",", encoding=encoding or "utf-8")
     if action == "no_header":
@@ -392,7 +402,7 @@ class TypingStage(Stage):
     name: str = "typing"
     section: str = "reading"
 
-    def plan(self, context: PlanContext) -> List[Decision]:
+    def plan(self, context: PlanContext) -> list[Decision]:
         df = context.raw_data
         if df is None:
             return []
@@ -401,7 +411,7 @@ class TypingStage(Stage):
         inferred_schema = infer_table_types(df, context.schema)
         context.schema = inferred_schema
 
-        typing_decisions: List[Decision] = []
+        typing_decisions: list[Decision] = []
         for dec in inferred_schema.decisions:
             if dec.stage == "infer":
                 typing_decisions.append(dec)
@@ -505,7 +515,7 @@ class TypingStage(Stage):
 
         return typing_decisions
 
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> pd.DataFrame:
+    def apply(self, context: ApplyContext, decisions: list[Decision]) -> pd.DataFrame:
         """
         Apply inferred or confirmed types to raw string DataFrame.
 
@@ -519,7 +529,7 @@ class TypingStage(Stage):
         typed_df = pd.DataFrame(index=raw_df.index)
 
         # Index type decisions by column
-        col_decisions: Dict[str, Decision] = {}
+        col_decisions: dict[str, Decision] = {}
         for d in decisions:
             if d.stage == "infer" and d.kind in ("type_inference", "type_abstain"):
                 if d.columns:
@@ -536,9 +546,11 @@ class TypingStage(Stage):
             action = dec.action
             evidence = dec.evidence or {}
             dec_comma = bool(evidence.get("decimal_comma_detected", False))
+            # A unit column is read as numbers; the unit stays in the Decision's evidence
+            unit = evidence.get("embedded_unit_detected") if evidence.get("unit_column") else None
 
             # Missing value sentinels from column metadata
-            missing_markers: List[str] = []
+            missing_markers: list[str] = []
             if context.schema:
                 col_meta = next(
                     (c for c in context.schema.columns if c.name == col_name), None
@@ -549,7 +561,7 @@ class TypingStage(Stage):
                     ]
             missing_set = set(missing_markers) | {""}
 
-            converted_vals: List[Any] = []
+            converted_vals: list[Any] = []
 
             for r_idx, val in enumerate(series):
                 s_val = str(val).strip()
@@ -558,6 +570,9 @@ class TypingStage(Stage):
                 if s_val in missing_set:
                     converted_vals.append(pd.NA)
                     continue
+
+                if unit and action in ("cast_to_int", "cast_to_float"):
+                    s_val = strip_unit(s_val, unit) or s_val
 
                 # Type conversions
                 if action == "cast_to_int":
@@ -588,8 +603,8 @@ class TypingStage(Stage):
                                 clean_flt = clean_flt.replace(",", ".")
                         else:
                             clean_flt = clean_flt.replace(",", "")
-                        c_val = float(clean_flt)
-                        converted_vals.append(c_val)
+                        f_val = float(clean_flt)
+                        converted_vals.append(f_val)
                     except (ValueError, TypeError) as err:
                         context.anomalies.append(
                             {
@@ -624,7 +639,7 @@ class TypingStage(Stage):
                     try:
                         dt_val = date_parser.parse(s_val)
                         converted_vals.append(dt_val)
-                    except Exception as err:
+                    except (ValueError, OverflowError) as err:
                         context.anomalies.append(
                             {
                                 "row": r_idx,
@@ -686,7 +701,7 @@ def _working_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _resolved_task(context: PlanContext) -> str:
+def _resolved_task(context: Union[PlanContext, ApplyContext]) -> str:
     """classification | regression for the target, from the user or the task Decision."""
     if context.task_type and context.task_type.lower() in ("classification", "regression"):
         return context.task_type.lower()
@@ -722,7 +737,22 @@ def _schema_with_actions(schema: TableSchema, decisions: Sequence[Decision]) -> 
     return out
 
 
-def _ensure_prep_plan(context: PlanContext) -> List[Decision]:
+def _unfitted_pipeline(context: ApplyContext, decisions: list[Decision]) -> Optional[Any]:
+    """The unfitted pipeline of data-learning steps for this run (docs/fit_hygiene.md)."""
+    if context.typed_data is None:
+        return None
+    typed = _working_frame(context.typed_data)
+    target = context.target_column if context.target_column in typed.columns else None
+    schema = _schema_with_actions(context.schema, decisions) if context.schema is not None else None
+    task = _resolved_task(context)
+    kinds = plan_time_column_kinds(typed, decisions, schema, target, task)
+    return build_unfitted_pipeline(
+        target, decisions, kinds, schema=schema, model_hint=context.model_hint,
+        feature_config=context.feature_config, task=task,
+    )
+
+
+def _ensure_prep_plan(context: PlanContext) -> list[Decision]:
     """
     Plan cleaning and engineering once per planning run. The typed table is built in
     memory from the typing Decisions (nothing is written), then the steps are
@@ -768,21 +798,26 @@ class PrepStage(Stage):
     order v1 ran them in); `section` is the heading they appear under in the Plan PDF,
     so one section can be served by several steps.
     """
-    kinds: Tuple[str, ...] = ()
+    kinds: tuple[str, ...] = ()
+    # True for steps that learn from data: apply() leaves them to the returned
+    # unfitted pipeline (docs/fit_hygiene.md) and does not run them on the full table.
+    in_pipeline: bool = False
 
     def runner(
-        self, df: pd.DataFrame, decisions: List[Decision], context: ApplyContext
+        self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext
     ) -> pd.DataFrame:
         raise NotImplementedError
 
-    def plan(self, context: PlanContext) -> List[Decision]:
+    def plan(self, context: PlanContext) -> list[Decision]:
         return [d for d in _ensure_prep_plan(context) if d.kind in self.kinds]
 
-    def apply(self, context: ApplyContext, decisions: List[Decision]) -> Any:
+    def apply(self, context: ApplyContext, decisions: list[Decision]) -> Any:
         if context.typed_data is None:
             return None
         if context.prepared_data is None:
             context.prepared_data = _working_frame(context.typed_data)
+        if self.in_pipeline:
+            return context.prepared_data
         mine = [d for d in decisions if d.stage in ("clean", "engineer") and d.kind in self.kinds]
         context.prepared_data = self.runner(context.prepared_data, mine, context)
         return context.prepared_data
@@ -794,7 +829,7 @@ class FixingStage(PrepStage):
     section: str = "fixing"
     kinds = ("convert_missing_markers", "coerce_numeric")
 
-    def runner(self, df, decisions, context):
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
         return apply_coerce(apply_markers(df, decisions), decisions)
 
 
@@ -804,7 +839,7 @@ class RemovingStage(PrepStage):
     section: str = "removing"
     kinds = ("remove_duplicates", "drop_high_missingness", "drop_id", "drop_constant")
 
-    def runner(self, df, decisions, context):
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
         df, _ = apply_dedupe(df, decisions)
         df, _ = apply_drops(df, decisions)
         return df
@@ -816,8 +851,9 @@ class TidyingStage(PrepStage):
     section: str = "fixing"
     kinds = ("normalize_categories", "group_rare_categories")
 
-    def runner(self, df, decisions, context):
-        return apply_normalization(df, decisions)
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
+        # Rare-value grouping learns from data, so it runs in the pipeline instead.
+        return apply_normalization(df, [d for d in decisions if d.kind == "normalize_categories"])
 
 
 class FillingGapsStage(PrepStage):
@@ -826,7 +862,9 @@ class FillingGapsStage(PrepStage):
     section: str = "filling gaps"
     kinds = ("add_missing_indicator", "fill_median", "fill_mode", "constant_fill")
 
-    def runner(self, df, decisions, context):
+    in_pipeline = True
+
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
         return apply_impute(df, decisions)
 
 
@@ -836,7 +874,9 @@ class OutlierStage(PrepStage):
     section: str = "fixing"
     kinds = ("clip_outliers",)
 
-    def runner(self, df, decisions, context):
+    in_pipeline = True
+
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
         return apply_outliers(df, decisions)
 
 
@@ -846,7 +886,9 @@ class LeakageStage(PrepStage):
     section: str = "removing"
     kinds = ("suspected_leakage", "feature_overlap")
 
-    def runner(self, df, decisions, context):
+    in_pipeline = True
+
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
         out, _ = apply_engineer(df, decisions, target=context.target_column)
         return out
 
@@ -861,7 +903,9 @@ class CreatingStage(PrepStage):
         "create_datetime_features", "create_cluster_features", "create_text_features",
     )
 
-    def runner(self, df, decisions, context):
+    in_pipeline = True
+
+    def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
         out, specs = apply_engineer(df, decisions, target=context.target_column)
         context.engineer_specs = specs
         return out
@@ -871,13 +915,13 @@ class StageRegistry:
     """Registry managing execution order and extensibility of pipeline stages."""
 
     def __init__(self) -> None:
-        self._stages: List[Stage] = []
+        self._stages: list[Stage] = []
 
     def register(self, stage: Stage) -> None:
         """Register a pipeline stage."""
         self._stages.append(stage)
 
-    def get_stages(self) -> List[Stage]:
+    def get_stages(self) -> list[Stage]:
         """Return registered stages in pipeline execution order."""
         return list(self._stages)
 
@@ -931,7 +975,7 @@ class Planner:
             feature_config=feature_config,
             cleaner_config=cleaner_config,
         )
-        all_decisions: List[Decision] = []
+        all_decisions: list[Decision] = []
 
         for stage in self.registry.get_stages():
             stage_decisions = stage.plan(context)
@@ -967,7 +1011,7 @@ class Planner:
     def apply(
         self,
         plan_or_context: Union[Plan, ApplyContext],
-        decisions: Optional[List[Decision]] = None,
+        decisions: Optional[list[Decision]] = None,
     ) -> ApplyResult:
         """
         Execute pipeline stages using decisions from plan or context.
@@ -982,6 +1026,8 @@ class Planner:
                 task_type=plan_obj.task_type,
                 schema=plan_obj.schema,
                 decisions=decs,
+                model_hint=plan_obj.model_hint,
+                feature_config=plan_obj.feature_config,
             )
         else:
             context = plan_or_context
@@ -1001,6 +1047,7 @@ class Planner:
             anomalies=context.anomalies,
             prepared=context.prepared_data,
             specs=context.engineer_specs,
+            pipeline=_unfitted_pipeline(context, decs),
         )
 
 
@@ -1040,7 +1087,16 @@ def plan(
     return planner.plan(path, target=target, task=task, model_hint=model_hint, feature_config=feature_config)
 
 
-def write_plan_artifacts(plan_obj: Plan, out_dir: Union[str, Path]) -> Tuple[Path, Path]:
+DEFAULT_OUT_DIR_NAME = "preflight_out"
+
+
+def default_out_dir() -> Path:
+    """Where outputs go when no out_dir is given: preflight_out/ in the current working
+    directory. Never the source file's folder (it may be read-only or shared)."""
+    return Path.cwd().resolve() / DEFAULT_OUT_DIR_NAME
+
+
+def write_plan_artifacts(plan_obj: Plan, out_dir: Union[str, Path]) -> tuple[Path, Path]:
     """
     Write plan.json, THEN render the Plan PDF, into out_dir.
 
@@ -1066,7 +1122,7 @@ def write_plan_artifacts(plan_obj: Plan, out_dir: Union[str, Path]) -> Tuple[Pat
 
 def apply(
     plan_or_context: Union[Plan, ApplyContext],
-    decisions: Optional[List[Decision]] = None,
+    decisions: Optional[list[Decision]] = None,
     mode: Optional[str] = None,
     channel: Any = None,
     out_dir: Optional[Union[str, Path]] = None,
@@ -1094,11 +1150,11 @@ def dry_run(
     target: Optional[str] = None,
     task: Optional[str] = None,
     out_dir: Optional[Union[str, Path]] = None,
-    mode: Optional[str] = None,
+    mode: Optional[str] = "auto",
     channel: Any = None,
     model_hint: str = "tree",
     feature_config: Optional[FeatureConfig] = None,
-) -> Tuple[Plan, Path]:
+) -> tuple[Plan, Path]:
     """
     Run pipeline ingest, infer, cleaning and engineering in plan-only form, write plan.json and Plan PDF,
     and return the Plan object plus the PDF path.
@@ -1107,9 +1163,14 @@ def dry_run(
     - Never modifies the source file.
     - Never produces cleaned data.
 
-    mode=None writes the plan with its questions still open (Phase 4 behaviour). With
-    mode='ask' | 'defaults' | 'strict' the questions are resolved first (see
-    preflight.resolve) and plan.json and the Plan PDF show the final answers.
+    mode: 'auto' (default) asks when the session is interactive (terminal or notebook)
+    and is strict otherwise; 'ask' | 'defaults' | 'strict' choose directly. The
+    questions are resolved first (see preflight.resolve) and plan.json and the Plan PDF
+    show the final answers. mode=None writes the plan with its questions still open
+    (Phase 4 behaviour).
+
+    out_dir defaults to preflight_out/ in the current working directory; nothing is
+    ever written next to the source file. The output folder is printed at the end.
 
     Failure handling:
     - Writes plan.json BEFORE rendering the PDF.
@@ -1120,7 +1181,7 @@ def dry_run(
     if not p.exists():
         raise FileNotFoundError(f"Source file not found: {p}")
 
-    out_d = Path(out_dir).resolve() if out_dir is not None else p.parent / "preflight_plan"
+    out_d = Path(out_dir).resolve() if out_dir is not None else default_out_dir()
     out_d.mkdir(parents=True, exist_ok=True)
 
     plan_obj = plan(p, target=target, task=task, model_hint=model_hint, feature_config=feature_config)
@@ -1128,7 +1189,10 @@ def dry_run(
     if mode is not None:
         from preflight.interact.resolve import resolve
 
-        return resolve(plan_obj, mode=mode, channel=channel, out_dir=out_d)
+        result = resolve(plan_obj, mode=mode, channel=channel, out_dir=out_d)
+        print(f"PreFlight dry run: output written to {out_d}")
+        return result
 
     _, plan_pdf_path = write_plan_artifacts(plan_obj, out_d)
+    print(f"PreFlight dry run: output written to {out_d}")
     return plan_obj, plan_pdf_path

@@ -45,3 +45,79 @@ I could not identify a separate set of 13 bug-repro tests in v1. The only tests 
 ## Environment note
 
 While investigating the skips I ran the v1 suite with this repo's venv. v1's `test_scaffold.py` runs `pip install -e .` inside the v1 folder, which replaced the editable install of this repo with v1.0.1 in `.venv`. I reinstalled this repo (`pip install -e . --no-deps`); `import preflight` resolves to `src/preflight` (2.0.0.dev0) again. No project files were changed by this.
+
+## Phase 7b updates
+
+### Failure 4 ("1248 CC"): fixed, test unedited
+`UNIT_REGEXES` is gone. A unit is now any number followed by a short repeated run of letters
+(up to `UNIT_MAX_LETTERS`), or with a currency symbol before it or a percent sign after it.
+The thresholds are named in `infer/config.py`. When every non-missing value is a number with
+the same unit (`UNIT_COLUMN_SHARE`), the column is read as numbers and the unit is kept in
+the Decision (`embedded_unit_detected`, `lossy_coercion: true`). The Decision is still
+flagged `needs_attention`, and the "conversion would lose information" question still
+applies. A partly-unit column is kept as text and flagged, as before. The test now passes,
+and its assertion was not edited. Tests: `tests/unit/test_units_generic.py`.
+
+### Failure 2 (phone-like column): (b) a limitation of the test input; a related real gap was fixed
+- **Investigation.** The test writes bare 10-digit strings with no leading zero, plus sign,
+  dash or space, such as `7970309701`. Once that column is in a CSV, it is byte-for-byte
+  the same as a column of large integers. The CSV carries no "this was text" fact, and v2
+  takes only file paths. So this exact input cannot be told apart from numbers. The test
+  still fails, and its assertion was not edited.
+- **The real formats were checked** (`infer_column_type`, 200 values each):
+  - Leading zero `0897078953`: ID, flagged.
+  - Dashes `251-233-6851`, parentheses `(754) 838-2136`, `+1-313-...`, spaces and dots:
+    categorical, never cast.
+  - `+447388114765`: **was cast to int with no question**. This was a real v2 gap (the `+`
+    is dropped).
+- **Fix (generic).** A value that is a `+` followed by at least `PLUS_CODE_MIN_DIGITS`
+  digits is not a number. It is handled like leading zeros: anomaly `plus_sign_code`,
+  evidence `plus_sign_code_detected`, type ID, flagged, with a plain-language reason.
+  Short signed values such as `+2.5` are still numbers. Tests:
+  `tests/unit/test_units_generic.py::test_phone_like_values_are_never_cast_to_numbers`,
+  `::test_plus_codes_are_flagged_as_identifiers` and
+  `::test_signed_measurements_are_still_numbers`.
+
+### Unit tests changed in Phase 7b (not regression assertions), with reasons
+| Test | Change | Reason |
+|---|---|---|
+| `tests/unit/test_ingest.py::test_encoding_non_utf8_latin1` | It used to assert the encoding name is iso-8859-1 or cp1252. It now asserts the decoded text is right, or the result is flagged with a Western encoding offered. | That name was only produced by the removed ISO-8859-1 "clean decode" check, which can never fail. The detected cp1250 decodes this sample to the same text. |
+| `tests/unit/test_infer.py::test_trap_embedded_units_abstains` | A column whose every value has the same unit is now cast with the unit kept and flagged. The abstain case is now tested with a partly-unit column. | Generic unit detection (above). The lossy flag is still asserted. |
+| `tests/unit/test_infer.py::test_schema_extension_and_json_roundtrip` | The `unit` column (`15 kmpl` on every row) is now expected to be `int`, with the unit in the evidence, instead of abstained. | Same. |
+| `tests/unit/test_infer_sampling.py::test_small_columns_match_pre_sampling_output` | Three golden cases (`units_kg`, `money`, `pct`) are now checked against the new unit rule, and the old golden output for them is asserted to have been "abstained, flagged". Every other case must still match exactly. | Same. |
+| `tests/unit/test_prep_integration.py::test_leakage_decision_asks_and_answer_is_applied` | "Leave the column out" is now checked on the output of the fitted pipeline. | Fit hygiene (docs/fit_hygiene.md): leaving out a leaky column learns from the target, so it now runs in the unfitted pipeline. |
+
+### Approved stale-test updates (Phase 7b, Stage 4)
+| Test | Old assertion | New assertion | Reason |
+|---|---|---|---|
+| `TestRegression_StringAndMultiClassTargets::test_multiclass_string_target_does_not_crash` (failure 1) | `result.df.shape[0] == 150` | `== 149` | Iris has one exact duplicate row. v2 removes it on the full table: the removal is below the 2% impact threshold, so it happens without asking. v1's `prepare()` skipped de-duplication. The behaviour is deliberate and documented above. |
+| `TestRegression_IdLikeColumnsNotCoercedToNumeric::test_genuinely_messy_numeric_string_still_coerces_correctly` (failure 3) | `semantic_type == NUMERIC_FEATURE` | `!= NUMERIC_FEATURE`, and the decision in force is `keep_as_string` | Deliberate v2 policy: a conversion that turns entries blank is lossy, so v2 asks, and the safe default keeps the text. The adapter runs `mode="defaults"`. |
+
+No other regression assertion was edited.
+
+### New failure caused by removing the HTML output (needs your decision)
+`TestPublicApiCompleteness::test_report_has_all_export_methods` checks that the v1 `Report`
+still has `to_html` and `save_html`. Phase 7b removed the v1 HTML output as instructed (M3).
+This assertion is not one of the two approved edits, so it was not changed and now fails.
+To accept the removal, take `"to_html"` and `"save_html"` out of that list. That one-line
+change is not made.
+
+### Encoding question fix found by the per-file corpus run (Phase 7b, Stage 6)
+`avengers.csv` failed the interaction corpus test. Its encoding is now flagged as ambiguous
+(Stage 3), but the question could offer only one choice. Two causes:
+1. The question builder offered only ISO-8859-1 as an alternative and ignored the detected rivals
+   in `evidence["alternatives"]`. It now offers the rivals first, then ISO-8859-1, then UTF-8.
+2. `friendly_text_format` labelled every encoding outside UTF-8/ASCII/UTF-16/Western European as
+   "standard text format". So a Japanese (cp932) or Baltic (cp1257) file was described as
+   "Read the file using standard text format", and the rivals collapsed into one label. Each
+   encoding family now has its own plain name (Central European, Baltic, Cyrillic, Greek,
+   Japanese and others). An encoding not in the table is shown as "regional text format (<name>)".
+Tests: three new tests in tests/unit/test_encoding_evidence.py.
+
+### Owner-approved follow-up (Phase 7b, after the final report)
+- `TestPublicApiCompleteness::test_report_has_all_export_methods`: the owner approved removing `"to_html"`
+  and `"save_html"` from the method list (the HTML output was removed). It passes.
+- `tests/corpus/test_pipeline_corpus.py::test_apply_defaults_executes_full_pipeline` called `apply()` without
+  `out_dir`, so it wrote `./preflight_out` into the repository root. It now uses the test's temporary folder.
+- `ingest/loader.py`: the chunked reader closes the failed C-engine reader before the python-engine retry
+  (it was found as a ResourceWarning).

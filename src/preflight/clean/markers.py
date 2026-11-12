@@ -5,7 +5,8 @@ Phase 3 records disguised missing values ("N/A", "?", "unknown"...) in the
 schema. This is the stage that converts them into real blanks.
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ from preflight.decisions import Decision
 from preflight.schema import TableSchema
 
 
-def marker_strings(missing_markers: Sequence[Union[str, Dict[str, Any]]]) -> List[str]:
+def marker_strings(missing_markers: Sequence[Union[str, dict[str, Any]]]) -> list[str]:
     out = set()
     for m in missing_markers:
         out.add(str(m.get("marker", "")).strip() if isinstance(m, dict) else str(m).strip())
@@ -24,7 +25,7 @@ def marker_strings(missing_markers: Sequence[Union[str, Dict[str, Any]]]) -> Lis
 
 def apply_missing_markers_to_series(
     series: pd.Series,
-    missing_markers: Sequence[Union[str, Dict[str, Any]]],
+    missing_markers: Sequence[Union[str, dict[str, Any]]],
 ) -> pd.Series:
     """Replace detected missing-value markers with np.nan."""
     markers = set(marker_strings(missing_markers))
@@ -41,9 +42,9 @@ def apply_missing_markers_to_series(
     return series.apply(_clean)
 
 
-def plan_markers(df: pd.DataFrame, schema: Optional[TableSchema] = None) -> List[Decision]:
+def plan_markers(df: pd.DataFrame, schema: Optional[TableSchema] = None) -> list[Decision]:
     """One Decision per column whose schema markers actually occur in the data."""
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
     if not schema or not schema.columns:
         return decisions
 
@@ -54,7 +55,8 @@ def plan_markers(df: pd.DataFrame, schema: Optional[TableSchema] = None) -> List
         if not markers:
             continue
         series = df[c.name]
-        hits = int(series.map(lambda v: (not pd.isna(v)) and str(v).strip() in set(markers)).sum())
+        marker_set = set(markers)
+        hits = int(series.map(lambda v, ms=marker_set: (not pd.isna(v)) and str(v).strip() in ms).sum())
         if hits == 0:
             continue
         decisions.append(
@@ -78,7 +80,7 @@ def plan_markers(df: pd.DataFrame, schema: Optional[TableSchema] = None) -> List
     return decisions
 
 
-def apply_markers(df: pd.DataFrame, decisions: List[Decision]) -> pd.DataFrame:
+def apply_markers(df: pd.DataFrame, decisions: list[Decision]) -> pd.DataFrame:
     df_out = df.copy()
     for d in decisions:
         if d.kind == "convert_missing_markers" and d.action == "convert_missing_markers" and d.columns:

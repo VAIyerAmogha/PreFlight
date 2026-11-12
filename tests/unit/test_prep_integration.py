@@ -13,16 +13,19 @@ from dataclasses import fields
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pypdf
 import pytest
+from sklearn.base import clone
+from test_jargon_lint import STRICT_BANNED_PATTERNS
 
 from preflight.engineer.config import FeatureConfig
 from preflight.interact.triggers import TriggerCategory, TriggerRegistry
 from preflight.plan import apply, dry_run, plan
-from preflight.report.templates import render_decision_text, render_question_text, section_for_decision
-
-from test_jargon_lint import STRICT_BANNED_PATTERNS
+from preflight.report.templates import (
+    render_decision_text,
+    render_question_text,
+    section_for_decision,
+)
 
 
 def _messy_csv(tmp_path: Path, rows: int = 120) -> Path:
@@ -83,7 +86,7 @@ def test_dry_run_is_pure_for_cleaning_and_engineering(tmp_path):
     src = _messy_csv(tmp_path)
     before_src = _sha(src)
     out = tmp_path / "out"
-    dry_run(src, target="target", out_dir=out, model_hint="linear", feature_config=FULL)
+    dry_run(src, target="target", out_dir=out, model_hint="linear", feature_config=FULL, mode=None)
     assert _sha(src) == before_src
     assert sorted(p.name for p in out.iterdir()) == ["plan.json", "plan.pdf"]
     def _plan_without_timestamps():
@@ -96,7 +99,7 @@ def test_dry_run_is_pure_for_cleaning_and_engineering(tmp_path):
         return strip(json.loads((out / "plan.json").read_text()))
 
     first = _plan_without_timestamps()
-    dry_run(src, target="target", out_dir=out, model_hint="linear", feature_config=FULL)
+    dry_run(src, target="target", out_dir=out, model_hint="linear", feature_config=FULL, mode=None)
     assert _sha(src) == before_src
     assert _plan_without_timestamps() == first  # deterministic
 
@@ -171,8 +174,15 @@ def test_leakage_decision_asks_and_answer_is_applied(tmp_path):
     assert len(leak) == 1 and leak[0].columns == ["leak"] and leak[0].needs_attention
     assert TriggerRegistry().classify(leak[0]) == TriggerCategory.SUSPECTED_LEAKAGE
 
+    def pipeline_output(res):
+        # Leaving a column out learns from the target, so it happens in the unfitted
+        # pipeline (docs/fit_hygiene.md); fit it on the prepared rows to see the result.
+        X, y = res.prepared.drop(columns=["target"]), res.prepared["target"]
+        return clone(res.pipeline).fit(X, y).transform(X)
+
     kept = apply(plan(src, target="target"), mode="defaults", out_dir=tmp_path / "o1")
     assert "leak" in kept.prepared.columns
+    assert "leak" in pipeline_output(kept).columns
 
     proposed = {d.id: d.action for d in p.decisions}
 
@@ -184,4 +194,5 @@ def test_leakage_decision_asks_and_answer_is_applied(tmp_path):
         return out
 
     dropped = apply(plan(src, target="target"), mode="ask", channel=drop_it, out_dir=tmp_path / "o2")
-    assert "leak" not in dropped.prepared.columns
+    assert "leak" in dropped.prepared.columns  # the full table only gets steps that learn nothing
+    assert "leak" not in pipeline_output(dropped).columns

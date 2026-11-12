@@ -3,7 +3,9 @@ Datetime expansion and cyclical feature generation for PreFlight v2.0.
 """
 
 import itertools
-from typing import Any, Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -21,8 +23,8 @@ def expand_datetime(series: pd.Series) -> pd.DataFrame:
         # Attempt date parsing if string/object
         try:
             series = coerce_string_dates_to_datetime(series)
-        except Exception:
-            raise ValueError(f"The column '{series.name}' must be a datetime format to extract date features.")
+        except Exception as err:
+            raise ValueError(f"The column '{series.name}' must be a datetime format to extract date features.") from err
 
     df = pd.DataFrame(index=series.index)
     prefix = series.name
@@ -44,7 +46,7 @@ def generate_datetime_cyclical_features(
     df: pd.DataFrame,
     dt_columns: Sequence[str],
     config: FeatureConfig,
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
     """
     Generate cyclical sine/cosine features and pairwise datetime deltas.
     """

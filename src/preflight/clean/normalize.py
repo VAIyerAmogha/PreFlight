@@ -2,15 +2,17 @@
 Category normalization and rare-category grouping for PreFlight v2.0.
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
+from preflight.clean._common import need_signals
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.clean._common import need_signals
 from preflight.signals import CATEGORICAL_HIGH, CATEGORICAL_KINDS, ColumnSignals
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
 def normalize_category_values(series: pd.Series) -> pd.Series:
@@ -26,7 +28,7 @@ def normalize_category_values(series: pd.Series) -> pd.Series:
     return series.copy()
 
 
-def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> List[str]:
+def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> list[str]:
     """
     Identify categories occurring below the threshold frequency of non-null values.
     """
@@ -57,8 +59,8 @@ def plan_normalization(
     target: Optional[str] = None,
     cardinality_threshold: Optional[int] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-    signals: Optional[Dict[str, ColumnSignals]] = None,
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+) -> list[Decision]:
     """
     Plan text tidying for categorical columns (v1: CATEGORICAL_LOW and HIGH) and
     rare-value grouping for high-variety columns (CATEGORICAL_HIGH only).
@@ -68,7 +70,7 @@ def plan_normalization(
     """
     card = cardinality_threshold if cardinality_threshold is not None else config.cardinality_threshold
     sigs = need_signals(df, signals, schema, target, card)
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
 
     for col in df.columns:
         if col == target or col not in sigs:
@@ -79,7 +81,13 @@ def plan_normalization(
 
         series = df[col]
         normalized = normalize_category_values(series)
-        changed = int(((normalized != series) & series.notna()).sum()) if len(series) else 0
+        # Compare plain values: two Categoricals with different category sets
+        # (e.g. 'Male' -> 'male') cannot be compared directly and pandas raises.
+        changed = (
+            int(((normalized.astype(object) != series.astype(object)) & series.notna()).sum())
+            if len(series)
+            else 0
+        )
         if changed > 0:
             decisions.append(
                 Decision(
@@ -130,7 +138,7 @@ def plan_normalization(
 
 def apply_normalization(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
 ) -> pd.DataFrame:
     """Apply text tidying and rare-value grouping from decisions."""
     df_out = df.copy()

@@ -8,20 +8,20 @@ safe defaults, human-readable explanations, and a stable fingerprint for reuse
 across pipeline re-runs.
 """
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Any, Dict, List, Optional
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 
 def compute_decision_fingerprint(
     stage: str,
     kind: str,
-    columns: List[str],
+    columns: list[str],
     action: str,
     default: str,
-    evidence: Dict[str, Any],
+    evidence: dict[str, Any],
 ) -> str:
     """
     Compute a deterministic fingerprint hash across re-runs of the same file.
@@ -31,7 +31,7 @@ def compute_decision_fingerprint(
     timestamps.
     """
     # Normalize evidence to ensure deterministic serialization across runs
-    norm_ev: Dict[str, Any] = {}
+    norm_ev: dict[str, Any] = {}
     for k in sorted(evidence.keys()):
         v = evidence[k]
         if isinstance(v, float):
@@ -89,9 +89,9 @@ class Decision:
     id: str
     stage: str
     kind: str
-    columns: List[str]
+    columns: list[str]
     action: str
-    evidence: Dict[str, Any]
+    evidence: dict[str, Any]
     confidence: float
     default: str
     needs_attention: bool
@@ -99,7 +99,7 @@ class Decision:
     status: str = "automatic"
     timestamp: Optional[str] = None
     fingerprint: Optional[str] = None
-    history: List[Dict[str, Any]] = field(default_factory=list)
+    history: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.timestamp is None:
@@ -178,11 +178,11 @@ class Decision:
         self._log(source, None)
         return self
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert Decision to dictionary representation."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Decision":
+    def from_dict(cls, data: dict[str, Any]) -> "Decision":
         """Reconstruct Decision instance from dictionary."""
         return cls(**data)

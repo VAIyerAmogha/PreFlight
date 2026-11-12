@@ -18,13 +18,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from corruption import all_kinds, generate_corruption
 
-from preflight.plan import plan, Planner
+from preflight.plan import Planner, plan
 
-import sys as _sys
-
-_sys.path.insert(0, str(Path(__file__).resolve().parent))
-from corruption import all_kinds, generate_corruption  # noqa: E402
+pytestmark = pytest.mark.corpus
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORPUS_DIR = REPO_ROOT / "corpus" / "raw"

@@ -1,3 +1,7 @@
+> **SUPERSEDED (Phase 7c, 2026-10-30):** the accuracy numbers here predate Phase 7b and are replaced by docs/v2_hardening_report.md.
+
+> **Held-out set:** every held-out number in this document is from a set that was **seen during review, not independent** (see docs/v2_hardening_report.md).
+
 # PreFlight v2.0 Type Inference Validation Report
 
 ## 1. Executive Summary

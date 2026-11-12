@@ -15,7 +15,6 @@ from __future__ import annotations
 import csv
 import resource
 import time
-from pathlib import Path
 
 import pytest
 

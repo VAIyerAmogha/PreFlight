@@ -11,7 +11,8 @@ waiting for input.
 """
 
 import sys
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 from preflight.decisions import Decision
 from preflight.interact.question import (
@@ -21,7 +22,7 @@ from preflight.interact.question import (
 )
 from preflight.report.templates import render_decision_text
 
-MODES = ("ask", "defaults", "strict")
+MODES = ("auto", "ask", "defaults", "strict")
 
 
 class StrictResolutionError(RuntimeError):
@@ -34,8 +35,11 @@ class StrictResolutionError(RuntimeError):
             for q in self.unresolved_questions
         ]
         super().__init__(
-            f"Strict mode: {len(lines)} unresolved item(s). Answer them (mode='ask'), "
-            "accept safe defaults (mode='defaults'), or reuse stored answers.\n" + "\n".join(lines)
+            f"Strict mode: {len(lines)} unresolved item(s), and this session cannot ask "
+            "(no terminal or notebook). To proceed: rerun with mode='defaults' to accept the "
+            "safe default for each item; or write a review file with mode='ask', "
+            "channel='review_file', fill in its answers, and run again (stored answers are "
+            "reused); or run interactively with mode='ask'.\n" + "\n".join(lines)
         )
 
 
@@ -47,7 +51,7 @@ def in_notebook_kernel() -> bool:
         return False
     try:
         shell = get_ip()
-    except Exception:
+    except Exception:  # Swallowed: if IPython cannot report its shell, this is not a usable notebook kernel
         return False
     return shell is not None and type(shell).__name__ == "ZMQInteractiveShell"
 
@@ -63,16 +67,16 @@ def is_interactive_context() -> bool:
 
 
 def resolve_mode(explicit: Optional[str] = None) -> str:
-    """Explicit mode wins; otherwise 'ask' if interactive, else 'strict'."""
-    if explicit is not None:
-        mode = str(explicit).lower().strip()
-        if mode not in MODES:
-            raise ValueError(f"Unknown mode {explicit!r}; choose one of {list(MODES)}.")
-        return mode
-    return "ask" if is_interactive_context() else "strict"
+    """'ask', 'defaults' or 'strict' as given; 'auto' (or None) is 'ask' if interactive, else 'strict'."""
+    mode = "auto" if explicit is None else str(explicit).lower().strip()
+    if mode not in MODES:
+        raise ValueError(f"Unknown mode {explicit!r}; choose one of {list(MODES)}.")
+    if mode == "auto":
+        return "ask" if is_interactive_context() else "strict"
+    return mode
 
 
-def _decision_index(decisions: Sequence[Decision]) -> Dict[str, Decision]:
+def _decision_index(decisions: Sequence[Decision]) -> dict[str, Decision]:
     return {d.id: d for d in decisions}
 
 
@@ -120,15 +124,15 @@ def apply_strict_mode(session: ReviewSession) -> None:
 def apply_ask_mode(
     session: ReviewSession,
     decisions: Sequence[Decision],
-    answers: Dict[str, str],
+    answers: dict[str, str],
     source: str,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Apply validated channel answers {question_id: option}. Returns {question_id: status}.
     The answers must already have passed validation (every channel does this).
     """
     index = _decision_index(decisions)
-    statuses: Dict[str, str] = {}
+    statuses: dict[str, str] = {}
     for q in session.questions:
         statuses[q.question_id] = apply_answer(index[q.decision_id], q, q.check_answer(answers.get(q.question_id)), source)
     return statuses

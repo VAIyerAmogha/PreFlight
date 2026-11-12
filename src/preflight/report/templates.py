@@ -12,12 +12,13 @@ Design Rules:
   never raw unvetted free text from internal diagnostic dumps.
 """
 
-from dataclasses import dataclass, field
+import codecs
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from preflight.decisions import Decision
-
 
 # Banned jargon terms that must never appear in user-facing sentences or PDFs
 BANNED_JARGON = [
@@ -74,7 +75,7 @@ BANNED_JARGON = [
 ]
 
 
-def find_jargon_violations(text: str) -> List[str]:
+def find_jargon_violations(text: str) -> list[str]:
     """
     Return every banned jargon term that appears in `text` (case-insensitive,
     whole-word match). Empty list means the text is plain language.
@@ -85,7 +86,7 @@ def find_jargon_violations(text: str) -> List[str]:
     if not text:
         return []
     lower = text.lower()
-    found: List[str] = []
+    found: list[str] = []
     for term in BANNED_JARGON:
         pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
         if re.search(pattern, lower):
@@ -106,7 +107,7 @@ class RenderedDecisionText:
     """Structured plain-language rendered text for a pipeline Decision."""
     summary: str
     question: Optional[str] = None
-    options: List[str] = field(default_factory=list)
+    options: list[str] = field(default_factory=list)
     recommended_default: Optional[str] = None
     explanation: Optional[str] = None
 
@@ -115,20 +116,44 @@ class RenderedDecisionText:
 # Friendly Term Mappings (Plain Equivalents)
 # ---------------------------------------------------------------------------
 
+# Plain names for encoding families, keyed by codecs.lookup() names. Each family gets its own
+# name so that rival encodings offered in a question never share a label.
+_TEXT_FORMAT_FAMILIES: dict[str, tuple[str, ...]] = {
+    "standard text format": ("utf-8", "utf-8-sig"),
+    "basic text format": ("ascii",),
+    "wide character text format": ("utf-16", "utf-16-le", "utf-16-be", "utf-32"),
+    "Western European text format": ("cp1252", "iso8859-1", "iso8859-15"),
+    "older Western European text format": ("cp437", "cp850", "cp858", "mac-roman"),
+    "Central European text format": ("cp1250", "iso8859-2", "cp852", "mac-latin2"),
+    "Baltic text format": ("cp1257", "cp775", "iso8859-4", "iso8859-13"),
+    "Cyrillic text format": ("cp1251", "koi8-r", "koi8-u", "cp866", "cp855", "iso8859-5", "mac-cyrillic"),
+    "Greek text format": ("cp1253", "iso8859-7", "mac-greek", "cp737", "cp869"),
+    "Turkish text format": ("cp1254", "iso8859-9", "cp857", "mac-turkish"),
+    "Hebrew text format": ("cp1255", "iso8859-8", "cp862"),
+    "Arabic text format": ("cp1256", "iso8859-6", "cp864", "cp720"),
+    "Vietnamese text format": ("cp1258",),
+    "Thai text format": ("tis-620", "cp874", "iso8859-11"),
+    "Japanese text format": ("cp932", "shift_jis", "euc_jp", "iso2022_jp", "shift_jis_2004", "euc_jis_2004"),
+    "Simplified Chinese text format": ("gb2312", "gbk", "gb18030", "hz"),
+    "Traditional Chinese text format": ("big5", "cp950", "big5hkscs"),
+    "Korean text format": ("euc_kr", "cp949", "johab", "iso2022_kr"),
+}
+_TEXT_FORMAT_BY_CODEC = {c: name for name, codecs_ in _TEXT_FORMAT_FAMILIES.items() for c in codecs_}
+
+
 def friendly_text_format(enc_name: Optional[str]) -> str:
     """Map character encoding identifiers to user-friendly plain descriptions."""
     if not enc_name:
         return "standard text format"
-    norm = enc_name.lower().replace("_", "-").strip()
-    if norm in ("utf-8", "utf8", "utf-8-sig"):
-        return "standard text format"
-    if norm in ("windows-1252", "cp1252", "iso-8859-1", "latin-1", "iso8859-1"):
-        return "Western European text format"
-    if norm == "ascii":
-        return "basic text format"
-    if norm in ("utf-16", "utf-16-le", "utf-16-be"):
-        return "wide character text format"
-    return "standard text format"
+    raw = enc_name.strip()
+    try:
+        norm = codecs.lookup(raw).name
+    except LookupError:
+        norm = raw.lower()
+    if norm in _TEXT_FORMAT_BY_CODEC:
+        return _TEXT_FORMAT_BY_CODEC[norm]
+    # Unknown to the table: name it, so it is never mistaken for the standard format.
+    return f"regional text format ({raw})"
 
 
 def friendly_separator_name(sep_char: Optional[str]) -> str:
@@ -718,7 +743,7 @@ def _pct(value: Any) -> str:
         return "an unknown share"
 
 
-def describe_type_scores(evidence: Dict[str, Any]) -> str:
+def describe_type_scores(evidence: dict[str, Any]) -> str:
     """Plain-language summary of how well each reading fits a column's values."""
     scores = evidence.get("candidate_scores") or {}
     ranked = sorted(
@@ -735,12 +760,12 @@ def describe_type_scores(evidence: Dict[str, Any]) -> str:
 def template_type_question(
     column_name: str,
     action: str,
-    evidence: Dict[str, Any],
+    evidence: dict[str, Any],
 ) -> RenderedDecisionText:
     """Plain-language question for an uncertain column type decision."""
     ev = evidence or {}
     trap = str(ev.get("unresolved_trap") or "")
-    reasons: List[str] = []
+    reasons: list[str] = []
     if trap == "ambiguous_date_format":
         reasons.append(
             "Some dates could be read day-first or month-first, so they cannot be "
@@ -751,6 +776,11 @@ def template_type_question(
         unit_txt = f" ({unit})" if unit else ""
         reasons.append(
             f"Values include units{unit_txt}; turning them into numbers would lose the units."
+        )
+    if ev.get("plus_sign_code_detected"):
+        reasons.append(
+            "Some values are a plus sign followed by many digits (like +447911123456), such as "
+            "phone numbers; turning them into numbers would drop the plus sign."
         )
     if ev.get("leading_zero_detected") and action in ("cast_to_int", "cast_to_float"):
         reasons.append(

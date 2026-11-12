@@ -11,8 +11,9 @@ Preview shape:
      "note": "..."}          # only when something needs explaining
 """
 
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Optional
 
 import pandas as pd
 from dateutil import parser as date_parser
@@ -23,7 +24,7 @@ PREVIEW_SAMPLES = 3
 Converter = Callable[[str], Optional[str]]
 
 
-def converter_for(action: str, evidence: Dict[str, Any]) -> Optional[Converter]:
+def converter_for(action: str, evidence: dict[str, Any]) -> Optional[Converter]:
     """
     Return a function str -> converted text (or None if the value cannot be
     converted) for a conversion action, or None if the action is not a conversion.
@@ -72,7 +73,7 @@ def converter_for(action: str, evidence: Dict[str, Any]) -> Optional[Converter]:
         def to_dt(s: str) -> Optional[str]:
             try:
                 dt = date_parser.parse(s)
-            except Exception:
+            except (ValueError, OverflowError, TypeError):
                 return None
             if isinstance(dt, datetime):
                 return dt.strftime("%Y-%m-%d") if (dt.hour, dt.minute, dt.second) == (0, 0, 0) else dt.isoformat(" ")
@@ -83,7 +84,7 @@ def converter_for(action: str, evidence: Dict[str, Any]) -> Optional[Converter]:
     return None
 
 
-def after_value(value: str, action: str, evidence: Dict[str, Any]) -> str:
+def after_value(value: str, action: str, evidence: dict[str, Any]) -> str:
     """What a single raw value becomes under an action."""
     conv = converter_for(action, evidence)
     if conv is None:
@@ -97,7 +98,7 @@ def pick_samples(
     missing: Iterable[str] = (),
     prefer_failing: Optional[Callable[[str], bool]] = None,
     n: int = PREVIEW_SAMPLES,
-) -> List[str]:
+) -> list[str]:
     """
     Pick up to n distinct real values from a raw column, skipping empty cells and
     known missing-value markers. If `prefer_failing` is given, one value for which it
@@ -105,8 +106,8 @@ def pick_samples(
     """
     if series is None:
         return []
-    skip: Set[str] = {m for m in missing} | {""}
-    seen: List[str] = []
+    skip: set[str] = {m for m in missing} | {""}
+    seen: list[str] = []
     for v in series.astype(str).tolist():
         v = v.strip() if isinstance(v, str) else v
         if v in skip or v in seen:
@@ -126,12 +127,12 @@ def pick_samples(
 
 def build_column_preview(
     series: Optional[pd.Series],
-    option_actions: Dict[str, str],
-    evidence: Dict[str, Any],
+    option_actions: dict[str, str],
+    evidence: dict[str, Any],
     missing: Iterable[str] = (),
-    fallback_values: Optional[List[Any]] = None,
-    action_effects: Optional[Dict[str, Callable[[str], str]]] = None,
-) -> Dict[str, Any]:
+    fallback_values: Optional[list[Any]] = None,
+    action_effects: Optional[dict[str, Callable[[str], str]]] = None,
+) -> dict[str, Any]:
     """
     Build a before/after preview for a column question.
 
@@ -160,11 +161,11 @@ def build_column_preview(
             "note": "No non-empty values were available to show.",
         }
 
-    after: Dict[str, List[str]] = {}
+    after: dict[str, list[str]] = {}
     for label, action in option_actions.items():
         fx = effects.get(action)
         after[label] = [fx(v) if fx is not None else after_value(v, action, evidence) for v in before]
-    preview: Dict[str, Any] = {"before": before, "after": after}
+    preview: dict[str, Any] = {"before": before, "after": after}
     if any(BLANK in vals for vals in after.values()):
         extra = f"'{BLANK}' means that value cannot be converted and is recorded as a problem value."
         note = f"{note} {extra}" if note else extra

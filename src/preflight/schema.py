@@ -11,10 +11,9 @@ Provides versioned schema dataclasses representing structural ingestion metadata
 Supports lossless JSON round-trip serialization and deserialization.
 """
 
-from dataclasses import asdict, dataclass, field
 import json
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from dataclasses import asdict, dataclass, field
+from typing import Any, Optional
 
 from preflight.decisions import Decision
 
@@ -60,11 +59,11 @@ class HeaderSchema:
     """Header and table boundary metadata and override shape."""
     header_row_index: Optional[int] = 0
     confidence: float = 1.0
-    title_rows: List[int] = field(default_factory=list)
-    footer_rows: List[int] = field(default_factory=list)
-    blank_rows: List[int] = field(default_factory=list)
-    total_rows: List[int] = field(default_factory=list)
-    ragged_rows: List[int] = field(default_factory=list)
+    title_rows: list[int] = field(default_factory=list)
+    footer_rows: list[int] = field(default_factory=list)
+    blank_rows: list[int] = field(default_factory=list)
+    total_rows: list[int] = field(default_factory=list)
+    ragged_rows: list[int] = field(default_factory=list)
     is_ragged: bool = False
     flagged: bool = False
     header_row_override: Optional[int] = None
@@ -87,12 +86,12 @@ class ColumnRawMetadata:
     # Phase 3: Type inference, confidence, missing markers, anomalies, and samples
     inferred_type: Optional[str] = None
     confidence: float = 1.0
-    missing_markers: List[Dict[str, Any]] = field(default_factory=list)
+    missing_markers: list[dict[str, Any]] = field(default_factory=list)
     runner_up: Optional[str] = None
     abstained: bool = False
-    anomalies: List[str] = field(default_factory=list)
-    failed_samples: List[str] = field(default_factory=list)
-    evidence: Dict[str, Any] = field(default_factory=dict)
+    anomalies: list[str] = field(default_factory=list)
+    failed_samples: list[str] = field(default_factory=list)
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def effective_name(self) -> str:
         """Return user name override if specified, otherwise raw column name."""
@@ -128,11 +127,11 @@ class TableSchema:
     header: HeaderSchema = field(
         default_factory=lambda: HeaderSchema(0, 1.0)
     )
-    columns: List[ColumnRawMetadata] = field(default_factory=list)
-    decisions: List[Decision] = field(default_factory=list)
-    user_overrides: Dict[str, Any] = field(default_factory=dict)
+    columns: list[ColumnRawMetadata] = field(default_factory=list)
+    decisions: list[Decision] = field(default_factory=list)
+    user_overrides: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert schema to dictionary representation."""
         return asdict(self)
 
@@ -141,7 +140,7 @@ class TableSchema:
         return json.dumps(self.to_dict(), indent=indent)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TableSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "TableSchema":
         """Reconstruct TableSchema from a dictionary."""
         enc_data = data.get("encoding", {})
         encoding = EncodingSchema(**enc_data) if isinstance(enc_data, dict) else enc_data

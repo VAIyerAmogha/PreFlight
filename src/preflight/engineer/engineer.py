@@ -8,9 +8,8 @@ simulates the steps on a private copy so each step sees what the previous one
 left behind (v1 behaviour), and `apply_engineer` replays the same Decisions.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Optional
 
-import numpy as np
 import pandas as pd
 
 from preflight.decisions import Decision
@@ -50,7 +49,7 @@ def _target_numeric(df: pd.DataFrame, target: Optional[str]) -> Optional[pd.Seri
     return s.map(mapping)
 
 
-def _cfg_from_evidence(ev: Dict[str, Any]) -> FeatureConfig:
+def _cfg_from_evidence(ev: dict[str, Any]) -> FeatureConfig:
     return FeatureConfig(
         interaction_types=list(ev.get("interaction_types", ["ratio", "product"])),
         datetime_cyclical=bool(ev.get("cyclical", False)),
@@ -67,7 +66,7 @@ def _cfg_from_evidence(ev: Dict[str, Any]) -> FeatureConfig:
 def _apply_one(
     work: pd.DataFrame,
     d: Decision,
-    specs: Dict[str, Any],
+    specs: dict[str, Any],
     target: Optional[str],
     target_numeric: Optional[pd.Series],
     df_in: pd.DataFrame,
@@ -99,9 +98,9 @@ def _apply_one(
             specs[col] = {"transform": "one_hot_encode", "columns": list(dummies.columns)}
         elif act == "target_encode_cross_fit":
             if target_numeric is not None:
-                encoded, mapping = target_encode_cross_fit(work[col], target_numeric)
+                encoded, te_mapping = target_encode_cross_fit(work[col], target_numeric)
                 work[col] = encoded
-                specs[col] = {"transform": "target_encode_cross_fit", "mapping": mapping}
+                specs[col] = {"transform": "target_encode_cross_fit", "mapping": te_mapping}
         elif act == "log1p_transform":
             work[col] = log1p_transform(work[col])
             specs[col] = {"transform": "linear_numeric", "log1p": True,
@@ -172,7 +171,7 @@ def _apply_one(
     return work
 
 
-def _mk(kind: str, col: List[str], action: str, evidence: Dict[str, Any], plain: str,
+def _mk(kind: str, col: list[str], action: str, evidence: dict[str, Any], plain: str,
         confidence: float = 1.0, default: Optional[str] = None) -> Decision:
     return Decision(
         id="",
@@ -197,9 +196,9 @@ def plan_engineer(
     cardinality_threshold: int = 20,
     feature_config: Optional[FeatureConfig] = None,
     task: str = "regression",
-    signals: Optional[Dict[str, ColumnSignals]] = None,
+    signals: Optional[dict[str, ColumnSignals]] = None,
     config: EngineerConfig = DEFAULT_ENGINEER_CONFIG,
-) -> List[Decision]:
+) -> list[Decision]:
     """
     Plan feature engineering without changing `df`.
 
@@ -216,10 +215,10 @@ def plan_engineer(
         )
     sigs = {c: s for c, s in sigs.items() if c != target}
 
-    decisions: List[Decision] = list(plan_vif_and_leakage(df, sigs, target=target, config=config))
+    decisions: list[Decision] = list(plan_vif_and_leakage(df, sigs, target=target, config=config))
 
     work = df.copy()
-    specs: Dict[str, Any] = {}
+    specs: dict[str, Any] = {}
     target_numeric = _target_numeric(df, target)
 
     def emit(d: Decision) -> None:
@@ -273,11 +272,11 @@ def plan_engineer(
 def _plan_generated(
     df: pd.DataFrame,
     work: pd.DataFrame,
-    sigs: Dict[str, ColumnSignals],
+    sigs: dict[str, ColumnSignals],
     cfg: FeatureConfig,
     target: Optional[str],
     task: str,
-    emit,
+    emit: Callable[[Decision], None],
 ) -> None:
     """Plan the opt-in generated features, in v1 order: combinations, dates, clusters, text."""
     if cfg.interactions:
@@ -335,16 +334,16 @@ def _plan_generated(
 
 def apply_engineer(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
     target: Optional[str] = None,
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
     Apply engineering Decisions. Returns the new table and the fitted state
     (mappings, scale parameters, cluster model, word lists) keyed like v1's specs.
     The target column is carried through unchanged.
     """
     work = df.copy()
-    specs: Dict[str, Any] = {}
+    specs: dict[str, Any] = {}
     target_numeric = _target_numeric(df, target)
     for d in decisions:
         if d.stage != "engineer":

@@ -17,17 +17,16 @@ Generates:
 - corpus/labels/sources.csv
 """
 
-import os
-import sys
-import json
 import csv
 import io
+import json
 import re
-import zipfile
-import urllib.request
+import sys
 import urllib.error
+import urllib.request
+import zipfile
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Optional
 
 RAW_DIR = Path("corpus/raw")
 LABELS_DIR = Path("corpus/labels")
@@ -50,7 +49,7 @@ def fetch_url(url: str, timeout: int = 20) -> bytes:
 # Curated Dataset Catalog
 # -------------------------------------------------------------
 
-def build_dataset_manifest() -> List[Dict[str, Any]]:
+def build_dataset_manifest() -> list[dict[str, Any]]:
     manifest = []
 
     # 1. Frictionless Messy Benchmarks (MIT)
@@ -388,11 +387,11 @@ ID_NAME_PATTERNS = ["id", "_id", "id_", "pk", "key", "index", "code", "fips", "z
 def analyze_column(
     col_name: str,
     col_idx: int,
-    raw_values: List[str],
+    raw_values: list[str],
     total_rows: int
-) -> Tuple[str, List[str]]:
+) -> tuple[str, list[str]]:
     """Inspect raw column values and determine ground truth semantic_type and anomalies."""
-    anomalies: List[str] = []
+    anomalies: list[str] = []
     name_lower = col_name.strip().lower()
 
     # Detect disguised missing values
@@ -498,7 +497,7 @@ def analyze_column(
 # Dataset Ingestion & Processing
 # -------------------------------------------------------------
 
-def process_dataset(spec: Dict[str, Any]) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
+def process_dataset(spec: dict[str, Any]) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
     """Downloads or uses cached dataset, parses rows and produces label record."""
     fid = spec["file_id"]
     fn = spec["filename"]
@@ -577,7 +576,7 @@ def process_dataset(spec: Dict[str, Any]) -> Tuple[bool, Optional[str], Optional
         else:
             col_names = [f"col_{i}" for i in range(col_count)]
 
-    col_values: Dict[int, List[str]] = {i: [] for i in range(len(col_names))}
+    col_values: dict[int, list[str]] = {i: [] for i in range(len(col_names))}
     for row in data_rows:
         for i in range(len(col_names)):
             if i < len(row):

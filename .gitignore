@@ -13,3 +13,7 @@ htmlcov/
 venv/
 .ipynb_checkpoints/
 corpus/raw/
+.review/
+
+# PreFlight's default output folder (created where it is run)
+preflight_out/

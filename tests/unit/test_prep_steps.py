@@ -7,7 +7,6 @@ import copy
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from preflight.clean.cleaner import apply_clean, plan_clean_full
 from preflight.clean.config import CleanerConfig

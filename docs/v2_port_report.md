@@ -1,3 +1,5 @@
+> **Held-out set:** every held-out number in this document is from a set that was **seen during review, not independent** (see docs/v2_hardening_report.md).
+
 # v2 port report (Phase 6 / M5): actual numbers only
 
 All numbers are from one full run: `pytest tests -v` (raw output: `docs/v2_port_pytest_output.txt`, 1825.7 s).
