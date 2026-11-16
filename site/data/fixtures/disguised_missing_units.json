@@ -1,0 +1,3528 @@
+{
+ "meta": {
+  "preflight": "2.0.0.dev0",
+  "pandas": "3.0.6"
+ },
+ "sample": "disguised_missing_units.csv",
+ "target": "outcome",
+ "analysis": {
+  "file": "disguised_missing_units.csv",
+  "rows": 60,
+  "columns": 5,
+  "task": null,
+  "reading": {
+   "encoding": {
+    "name": "utf-8",
+    "confidence": 1.0,
+    "has_bom": false
+   },
+   "delimiter": {
+    "char": ",",
+    "confidence": 0.95,
+    "margin": 0.95
+   },
+   "header": {
+    "row": 0,
+    "confidence": 0.85,
+    "title_rows": [],
+    "blank_rows": []
+   }
+  },
+  "raw_lines": [
+   "patient_id,weight,temp,smoker,outcome",
+   "P0000,69 kg,39.0,Y,sick",
+   "P0001,88 kg,-999,?,sick",
+   "P0002,61 kg,36.9,?,healthy",
+   "P0003,81 kg,38.5,N,healthy",
+   "P0004,84 kg,37.8,N,healthy",
+   "P0005,67 kg,39.4,?,healthy",
+   "P0006,78 kg,39.4,N,sick",
+   "P0007,60 kg,-999,N,healthy",
+   "P0008,57 kg,38.1,Y,sick",
+   "P0009,67 kg,37.3,Y,healthy",
+   "P0010,83 kg,38.0,?,healthy",
+   "P0011,103 kg,36.7,Y,healthy",
+   "P0012,67 kg,38.1,?,sick"
+  ],
+  "naive_pandas": {
+   "ok": true,
+   "frame": {
+    "columns": [
+     "patient_id",
+     "weight",
+     "temp",
+     "smoker",
+     "outcome"
+    ],
+    "dtypes": [
+     "str",
+     "str",
+     "float64",
+     "str",
+     "str"
+    ],
+    "index": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ],
+    "rows": [
+     [
+      "P0000",
+      "69 kg",
+      39.0,
+      "Y",
+      "sick"
+     ],
+     [
+      "P0001",
+      "88 kg",
+      -999.0,
+      "?",
+      "sick"
+     ],
+     [
+      "P0002",
+      "61 kg",
+      36.9,
+      "?",
+      "healthy"
+     ],
+     [
+      "P0003",
+      "81 kg",
+      38.5,
+      "N",
+      "healthy"
+     ],
+     [
+      "P0004",
+      "84 kg",
+      37.8,
+      "N",
+      "healthy"
+     ],
+     [
+      "P0005",
+      "67 kg",
+      39.4,
+      "?",
+      "healthy"
+     ],
+     [
+      "P0006",
+      "78 kg",
+      39.4,
+      "N",
+      "sick"
+     ],
+     [
+      "P0007",
+      "60 kg",
+      -999.0,
+      "N",
+      "healthy"
+     ]
+    ],
+    "shape": [
+     60,
+     5
+    ]
+   }
+  },
+  "raw_table": {
+   "columns": [
+    "patient_id",
+    "weight",
+    "temp",
+    "smoker",
+    "outcome"
+   ],
+   "dtypes": [
+    "str",
+    "str",
+    "str",
+    "str",
+    "str"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     "P0000",
+     "69 kg",
+     "39.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0001",
+     "88 kg",
+     "-999",
+     "?",
+     "sick"
+    ],
+    [
+     "P0002",
+     "61 kg",
+     "36.9",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0003",
+     "81 kg",
+     "38.5",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0004",
+     "84 kg",
+     "37.8",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0005",
+     "67 kg",
+     "39.4",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0006",
+     "78 kg",
+     "39.4",
+     "N",
+     "sick"
+    ],
+    [
+     "P0007",
+     "60 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0008",
+     "57 kg",
+     "38.1",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0009",
+     "67 kg",
+     "37.3",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0010",
+     "83 kg",
+     "38.0",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0011",
+     "103 kg",
+     "36.7",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0012",
+     "67 kg",
+     "38.1",
+     "?",
+     "sick"
+    ],
+    [
+     "P0013",
+     "100 kg",
+     "37.9",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0014",
+     "99 kg",
+     "38.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0015",
+     "101 kg",
+     "39.2",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0016",
+     "84 kg",
+     "39.4",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0017",
+     "86 kg",
+     "37.5",
+     "?",
+     "sick"
+    ],
+    [
+     "P0018",
+     "50 kg",
+     "37.5",
+     "N",
+     "sick"
+    ],
+    [
+     "P0019",
+     "84 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0020",
+     "91 kg",
+     "37.3",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0021",
+     "N/A",
+     "38.5",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0022",
+     "88 kg",
+     "37.4",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0023",
+     "N/A",
+     "38.3",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0024",
+     "93 kg",
+     "38.0",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0025",
+     "81 kg",
+     "38.2",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0026",
+     "76 kg",
+     "38.2",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0027",
+     "99 kg",
+     "-999",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0028",
+     "108 kg",
+     "38.8",
+     "?",
+     "sick"
+    ],
+    [
+     "P0029",
+     "59 kg",
+     "38.9",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0030",
+     "82 kg",
+     "36.9",
+     "?",
+     "sick"
+    ],
+    [
+     "P0031",
+     "54 kg",
+     "36.2",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0032",
+     "82 kg",
+     "38.4",
+     "?",
+     "sick"
+    ],
+    [
+     "P0033",
+     "88 kg",
+     "36.7",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0034",
+     "67 kg",
+     "36.3",
+     "?",
+     "sick"
+    ],
+    [
+     "P0035",
+     "79 kg",
+     "38.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0036",
+     "91 kg",
+     "-999",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0037",
+     "75 kg",
+     "37.4",
+     "N",
+     "sick"
+    ],
+    [
+     "P0038",
+     "95 kg",
+     "-999",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0039",
+     "104 kg",
+     "-999",
+     "N",
+     "sick"
+    ],
+    [
+     "P0040",
+     "109 kg",
+     "39.3",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0041",
+     "54 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0042",
+     "88 kg",
+     "37.6",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0043",
+     "107 kg",
+     "37.3",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0044",
+     "95 kg",
+     "38.5",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0045",
+     "64 kg",
+     "37.1",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0046",
+     "N/A",
+     "36.1",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0047",
+     "81 kg",
+     "-999",
+     "N",
+     "sick"
+    ],
+    [
+     "P0048",
+     "92 kg",
+     "36.4",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0049",
+     "75 kg",
+     "37.7",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0050",
+     "65 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0051",
+     "78 kg",
+     "-999",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0052",
+     "55 kg",
+     "36.1",
+     "N",
+     "sick"
+    ],
+    [
+     "P0053",
+     "106 kg",
+     "39.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0054",
+     "60 kg",
+     "38.8",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0055",
+     "59 kg",
+     "36.2",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0056",
+     "55 kg",
+     "38.3",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0057",
+     "84 kg",
+     "37.8",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0058",
+     "99 kg",
+     "37.5",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0059",
+     "90 kg",
+     "38.6",
+     "?",
+     "sick"
+    ]
+   ],
+   "shape": [
+    60,
+    5
+   ]
+  },
+  "schema": [
+   {
+    "name": "patient_id",
+    "position": 0,
+    "type": "ID",
+    "confidence": 0.98,
+    "runner_up": "categorical",
+    "abstained": false,
+    "missing_markers": [],
+    "anomalies": [],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.98,
+     "int": 0.0,
+     "float": 0.0,
+     "datetime": 0.0,
+     "categorical": 0.95,
+     "text": 0.2
+    },
+    "margin": 0.03,
+    "non_missing": 60,
+    "total_rows": 60
+   },
+   {
+    "name": "weight",
+    "position": 1,
+    "type": "int",
+    "confidence": 0.9,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [
+     {
+      "marker": "N/A",
+      "confidence": 1.0,
+      "reason": "standard_sentinel: N/A",
+      "count": 3,
+      "frequency": 0.05
+     }
+    ],
+    "anomalies": [
+     "disguised_missing: N/A",
+     "embedded_unit: kg"
+    ],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 0.0,
+     "datetime": 0.0,
+     "categorical": 0.95,
+     "text": 0.2
+    },
+    "margin": 0.95,
+    "non_missing": 57,
+    "total_rows": 60
+   },
+   {
+    "name": "temp",
+    "position": 2,
+    "type": "float",
+    "confidence": 1.0,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [
+     {
+      "marker": "-999",
+      "confidence": 0.9,
+      "reason": "contextually_suspicious: -999 far below distribution min 36.1",
+      "count": 11,
+      "frequency": 0.18333333333333332
+     }
+    ],
+    "anomalies": [
+     "disguised_missing: -999"
+    ],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 1.0,
+     "datetime": 0.0,
+     "categorical": 0.05,
+     "text": 0.05
+    },
+    "margin": 0.95,
+    "non_missing": 49,
+    "total_rows": 60
+   },
+   {
+    "name": "smoker",
+    "position": 3,
+    "type": "boolean",
+    "confidence": 1.0,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [
+     {
+      "marker": "?",
+      "confidence": 1.0,
+      "reason": "standard_sentinel: ?",
+      "count": 16,
+      "frequency": 0.26666666666666666
+     }
+    ],
+    "anomalies": [
+     "disguised_missing: ?"
+    ],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 1.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 0.0,
+     "datetime": 0.0,
+     "categorical": 0.05,
+     "text": 0.05
+    },
+    "margin": 0.95,
+    "non_missing": 44,
+    "total_rows": 60
+   },
+   {
+    "name": "outcome",
+    "position": 4,
+    "type": "categorical",
+    "confidence": 0.95,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [],
+    "anomalies": [],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 0.0,
+     "datetime": 0.0,
+     "categorical": 0.95,
+     "text": 0.2
+    },
+    "margin": 0.95,
+    "non_missing": 60,
+    "total_rows": 60
+   }
+  ],
+  "decisions": [
+   {
+    "id": "dec_reading_table_3b308e77",
+    "stage": "reading",
+    "kind": "encoding",
+    "columns": [],
+    "action": "use_encoding_utf-8",
+    "default": "use_encoding_utf-8",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Read the file using standard text format.",
+    "evidence": {
+     "encoding": "utf-8",
+     "confidence": 1.0,
+     "has_bom": false,
+     "low_confidence": false,
+     "detected_as": "ascii",
+     "alternatives": []
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_ba0679ea",
+    "stage": "reading",
+    "kind": "dialect",
+    "columns": [],
+    "action": "separate_by_,",
+    "default": "separate_by_,",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Separate columns using comma separators.",
+    "evidence": {
+     "delimiter": ",",
+     "quotechar": "\"",
+     "confidence": 0.95,
+     "margin": 0.95,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_4a3c0670",
+    "stage": "reading",
+    "kind": "header",
+    "columns": [],
+    "action": "use_header_row_0",
+    "default": "use_header_row_0",
+    "confidence": 0.85,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Use row 1 as column names.",
+    "evidence": {
+     "header_row_index": 0,
+     "confidence": 0.85,
+     "title_rows": [],
+     "ragged_rows": [],
+     "is_ragged": false,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_patient_id_1e3f2400",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "patient_id"
+    ],
+    "action": "keep_as_id",
+    "default": "keep_as_string",
+    "confidence": 0.98,
+    "needs_attention": true,
+    "status": "automatic",
+    "plain_language": "Inferred column 'patient_id' as ID with confidence 0.98 (margin: 0.03 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.98,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.98,
+     "runner_score": 0.95,
+     "margin": 0.03,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_weight_b4b5b4ac",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "weight"
+    ],
+    "action": "cast_to_int",
+    "default": "cast_to_int",
+    "confidence": 0.9,
+    "needs_attention": true,
+    "status": "automatic",
+    "plain_language": "Column 'weight' holds numbers with the unit 'kg'. Read as numbers; the unit 'kg' is kept in this record.",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.95,
+     "runner_score": 0.0,
+     "margin": 0.95,
+     "non_missing_count": 57,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": "kg",
+     "unresolved_trap": "embedded_unit: kg",
+     "unit_column": true,
+     "lossy_coercion": true
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_temp_31623d10",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "temp"
+    ],
+    "action": "cast_to_float",
+    "default": "cast_to_float",
+    "confidence": 1.0,
+    "needs_attention": true,
+    "status": "automatic",
+    "plain_language": "Inferred column 'temp' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 49,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_smoker_8b2696ec",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "smoker"
+    ],
+    "action": "cast_to_boolean",
+    "default": "cast_to_boolean",
+    "confidence": 1.0,
+    "needs_attention": true,
+    "status": "automatic",
+    "plain_language": "Inferred column 'smoker' as boolean with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 1.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 44,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_outcome_0a6325dc",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "outcome"
+    ],
+    "action": "keep_as_categorical",
+    "default": "keep_as_string",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'outcome' as categorical with confidence 0.95 (margin: 0.95 over constant).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.95,
+     "runner_score": 0.0,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_outcome_7068fdc6",
+    "stage": "infer",
+    "kind": "ambiguous_task",
+    "columns": [
+     "outcome"
+    ],
+    "action": "classification",
+    "default": "classification",
+    "confidence": 0.5,
+    "needs_attention": true,
+    "status": "automatic",
+    "plain_language": "Select prediction objective for target column 'outcome' (2 distinct values) (examples: sick, healthy).",
+    "evidence": {
+     "target": "outcome",
+     "num_unique": 2,
+     "unique_samples": [
+      "sick",
+      "healthy"
+     ],
+     "inferred_type": "categorical",
+     "ambiguous": true
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_patient_id_92050c01",
+    "stage": "clean",
+    "kind": "drop_id",
+    "columns": [
+     "patient_id"
+    ],
+    "action": "drop_column",
+    "default": "drop_column",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Remove identifier column 'patient_id' (a unique label for each row, not useful for learning).",
+    "evidence": {
+     "reason": "row_label",
+     "total_columns": 5,
+     "columns_dropped_count": 1,
+     "column_impact_fraction": 0.2,
+     "impact_threshold": 0.25,
+     "cardinality": 60,
+     "unique_ratio": 1.0
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_weight_ed9de881",
+    "stage": "clean",
+    "kind": "add_missing_indicator",
+    "columns": [
+     "weight"
+    ],
+    "action": "add_missing_indicator",
+    "default": "add_missing_indicator",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Add a yes/no column 'weight_missing' marking where 'weight' was blank (5.0% blank).",
+    "evidence": {
+     "missing_rate": 0.05,
+     "indicator_column": "weight_missing"
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_weight_7de9c811",
+    "stage": "clean",
+    "kind": "fill_median",
+    "columns": [
+     "weight"
+    ],
+    "action": "fill_median",
+    "default": "fill_median",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Fill blanks in 'weight' with the middle value (82).",
+    "evidence": {
+     "missing_rate": 0.05,
+     "fill_value": 82.0,
+     "threshold": 0.3
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_temp_bc0e6311",
+    "stage": "clean",
+    "kind": "add_missing_indicator",
+    "columns": [
+     "temp"
+    ],
+    "action": "add_missing_indicator",
+    "default": "add_missing_indicator",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Add a yes/no column 'temp_missing' marking where 'temp' was blank (18.3% blank).",
+    "evidence": {
+     "missing_rate": 0.18333333333333332,
+     "indicator_column": "temp_missing"
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_temp_8cbe05fb",
+    "stage": "clean",
+    "kind": "fill_median",
+    "columns": [
+     "temp"
+    ],
+    "action": "fill_median",
+    "default": "fill_median",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Fill blanks in 'temp' with the middle value (38).",
+    "evidence": {
+     "missing_rate": 0.18333333333333332,
+     "fill_value": 38.0,
+     "threshold": 0.3
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_weight_6e1310a3",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "weight"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [30.62, 127.6] for 'weight' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 30.625,
+     "upper_bound": 127.625,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_temp_af422a9d",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "temp"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [36.01, 39.71] for 'temp' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 36.0125,
+     "upper_bound": 39.71249999999999,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   }
+  ],
+  "questions": [
+   {
+    "question_id": "q001_1e3f24",
+    "decision_id": "dec_infer_patient_id_1e3f2400",
+    "category": "ambiguous_type",
+    "column": "patient_id",
+    "text": "How should column 'patient_id' be read?",
+    "explanation": "The values fit more than one reading closely enough that a wrong guess could change them.",
+    "evidence_summary": "Best matches: identifiers fit 98% of the values; categories fit 95% of the values; plain text fit 20% of the values.",
+    "options": [
+     "Keep as plain text",
+     "Keep identifier text",
+     "Convert to categories"
+    ],
+    "option_actions": {
+     "Keep as plain text": "keep_as_string",
+     "Keep identifier text": "keep_as_id",
+     "Convert to categories": "keep_as_categorical"
+    },
+    "recommended_default": "Keep as plain text",
+    "preview": {
+     "before": [
+      "P0000",
+      "P0001",
+      "P0002"
+     ],
+     "after": {
+      "Keep as plain text": [
+       "P0000",
+       "P0001",
+       "P0002"
+      ],
+      "Keep identifier text": [
+       "P0000",
+       "P0001",
+       "P0002"
+      ],
+      "Convert to categories": [
+       "P0000",
+       "P0001",
+       "P0002"
+      ]
+     }
+    }
+   },
+   {
+    "question_id": "q002_b4b5b4",
+    "decision_id": "dec_infer_weight_b4b5b4ac",
+    "category": "lossy_coercion",
+    "column": "weight",
+    "text": "How should column 'weight' be read?",
+    "explanation": "Values include units (kg); turning them into numbers would lose the units.",
+    "evidence_summary": "Best matches: categories fit 95% of the values; plain text fit 20% of the values.",
+    "options": [
+     "Convert to whole numbers",
+     "Keep as plain text",
+     "Convert to categories"
+    ],
+    "option_actions": {
+     "Convert to whole numbers": "cast_to_int",
+     "Keep as plain text": "keep_as_string",
+     "Convert to categories": "keep_as_categorical"
+    },
+    "recommended_default": "Convert to whole numbers",
+    "preview": {
+     "before": [
+      "69 kg",
+      "88 kg",
+      "61 kg"
+     ],
+     "after": {
+      "Convert to whole numbers": [
+       "(left blank)",
+       "(left blank)",
+       "(left blank)"
+      ],
+      "Keep as plain text": [
+       "69 kg",
+       "88 kg",
+       "61 kg"
+      ],
+      "Convert to categories": [
+       "69 kg",
+       "88 kg",
+       "61 kg"
+      ]
+     },
+     "note": "'(left blank)' means that value cannot be converted and is recorded as a problem value."
+    }
+   },
+   {
+    "question_id": "q003_31623d",
+    "decision_id": "dec_infer_temp_31623d10",
+    "category": "disguised_missing",
+    "column": "temp",
+    "text": "How should column 'temp' be read?",
+    "explanation": "The reading itself is clear. This is flagged because some values look like placeholders for missing data (like '?' or -999); they will be treated as missing.",
+    "evidence_summary": "Best matches: decimal numbers fit 100% of the values; categories fit 5% of the values; plain text fit 5% of the values.",
+    "options": [
+     "Convert to decimal numbers",
+     "Keep as plain text",
+     "Convert to categories"
+    ],
+    "option_actions": {
+     "Convert to decimal numbers": "cast_to_float",
+     "Keep as plain text": "keep_as_string",
+     "Convert to categories": "keep_as_categorical"
+    },
+    "recommended_default": "Convert to decimal numbers",
+    "preview": {
+     "before": [
+      "39.0",
+      "36.9",
+      "38.5"
+     ],
+     "after": {
+      "Convert to decimal numbers": [
+       "39.0",
+       "36.9",
+       "38.5"
+      ],
+      "Keep as plain text": [
+       "39.0",
+       "36.9",
+       "38.5"
+      ],
+      "Convert to categories": [
+       "39.0",
+       "36.9",
+       "38.5"
+      ]
+     }
+    }
+   },
+   {
+    "question_id": "q004_8b2696",
+    "decision_id": "dec_infer_smoker_8b2696ec",
+    "category": "ambiguous_type",
+    "column": "smoker",
+    "text": "How should column 'smoker' be read?",
+    "explanation": "The reading itself is clear. This is flagged because some values look like placeholders for missing data (like '?' or -999); they will be treated as missing.",
+    "evidence_summary": "Best matches: yes/no values fit 100% of the values; categories fit 5% of the values; plain text fit 5% of the values.",
+    "options": [
+     "Convert to yes/no values",
+     "Keep as plain text",
+     "Convert to categories"
+    ],
+    "option_actions": {
+     "Convert to yes/no values": "cast_to_boolean",
+     "Keep as plain text": "keep_as_string",
+     "Convert to categories": "keep_as_categorical"
+    },
+    "recommended_default": "Convert to yes/no values",
+    "preview": {
+     "before": [
+      "Y",
+      "N"
+     ],
+     "after": {
+      "Convert to yes/no values": [
+       "yes",
+       "no"
+      ],
+      "Keep as plain text": [
+       "Y",
+       "N"
+      ],
+      "Convert to categories": [
+       "Y",
+       "N"
+      ]
+     }
+    }
+   },
+   {
+    "question_id": "q005_7068fd",
+    "decision_id": "dec_infer_outcome_7068fdc6",
+    "category": "ambiguous_structure_or_task",
+    "column": "outcome",
+    "text": "What type of prediction should be made for target 'outcome'?",
+    "explanation": "Target column 'outcome' has 2 distinct values. These could represent discrete groups or a numerical scale.",
+    "evidence_summary": "The target column has 2 distinct values.",
+    "options": [
+     "Predict categories (classification)",
+     "Predict numerical values (regression)",
+     "No prediction goal (data inspection only)"
+    ],
+    "option_actions": {
+     "Predict categories (classification)": "classification",
+     "Predict numerical values (regression)": "regression",
+     "No prediction goal (data inspection only)": "none"
+    },
+    "recommended_default": "Predict categories (classification)",
+    "preview": {
+     "before": [
+      "sick",
+      "healthy"
+     ],
+     "after": {
+      "Predict categories (classification)": [
+       "sick (a category)",
+       "healthy (a category)"
+      ],
+      "Predict numerical values (regression)": [
+       "sick (a number)",
+       "healthy (a number)"
+      ],
+      "No prediction goal (data inspection only)": [
+       "sick (not used)",
+       "healthy (not used)"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ "result": {
+  "task": null,
+  "raw_table": {
+   "columns": [
+    "patient_id",
+    "weight",
+    "temp",
+    "smoker",
+    "outcome"
+   ],
+   "dtypes": [
+    "str",
+    "str",
+    "str",
+    "str",
+    "str"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     "P0000",
+     "69 kg",
+     "39.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0001",
+     "88 kg",
+     "-999",
+     "?",
+     "sick"
+    ],
+    [
+     "P0002",
+     "61 kg",
+     "36.9",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0003",
+     "81 kg",
+     "38.5",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0004",
+     "84 kg",
+     "37.8",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0005",
+     "67 kg",
+     "39.4",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0006",
+     "78 kg",
+     "39.4",
+     "N",
+     "sick"
+    ],
+    [
+     "P0007",
+     "60 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0008",
+     "57 kg",
+     "38.1",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0009",
+     "67 kg",
+     "37.3",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0010",
+     "83 kg",
+     "38.0",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0011",
+     "103 kg",
+     "36.7",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0012",
+     "67 kg",
+     "38.1",
+     "?",
+     "sick"
+    ],
+    [
+     "P0013",
+     "100 kg",
+     "37.9",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0014",
+     "99 kg",
+     "38.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0015",
+     "101 kg",
+     "39.2",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0016",
+     "84 kg",
+     "39.4",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0017",
+     "86 kg",
+     "37.5",
+     "?",
+     "sick"
+    ],
+    [
+     "P0018",
+     "50 kg",
+     "37.5",
+     "N",
+     "sick"
+    ],
+    [
+     "P0019",
+     "84 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0020",
+     "91 kg",
+     "37.3",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0021",
+     "N/A",
+     "38.5",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0022",
+     "88 kg",
+     "37.4",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0023",
+     "N/A",
+     "38.3",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0024",
+     "93 kg",
+     "38.0",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0025",
+     "81 kg",
+     "38.2",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0026",
+     "76 kg",
+     "38.2",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0027",
+     "99 kg",
+     "-999",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0028",
+     "108 kg",
+     "38.8",
+     "?",
+     "sick"
+    ],
+    [
+     "P0029",
+     "59 kg",
+     "38.9",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0030",
+     "82 kg",
+     "36.9",
+     "?",
+     "sick"
+    ],
+    [
+     "P0031",
+     "54 kg",
+     "36.2",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0032",
+     "82 kg",
+     "38.4",
+     "?",
+     "sick"
+    ],
+    [
+     "P0033",
+     "88 kg",
+     "36.7",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0034",
+     "67 kg",
+     "36.3",
+     "?",
+     "sick"
+    ],
+    [
+     "P0035",
+     "79 kg",
+     "38.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0036",
+     "91 kg",
+     "-999",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0037",
+     "75 kg",
+     "37.4",
+     "N",
+     "sick"
+    ],
+    [
+     "P0038",
+     "95 kg",
+     "-999",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0039",
+     "104 kg",
+     "-999",
+     "N",
+     "sick"
+    ],
+    [
+     "P0040",
+     "109 kg",
+     "39.3",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0041",
+     "54 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0042",
+     "88 kg",
+     "37.6",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0043",
+     "107 kg",
+     "37.3",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0044",
+     "95 kg",
+     "38.5",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0045",
+     "64 kg",
+     "37.1",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0046",
+     "N/A",
+     "36.1",
+     "?",
+     "healthy"
+    ],
+    [
+     "P0047",
+     "81 kg",
+     "-999",
+     "N",
+     "sick"
+    ],
+    [
+     "P0048",
+     "92 kg",
+     "36.4",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0049",
+     "75 kg",
+     "37.7",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0050",
+     "65 kg",
+     "-999",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0051",
+     "78 kg",
+     "-999",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0052",
+     "55 kg",
+     "36.1",
+     "N",
+     "sick"
+    ],
+    [
+     "P0053",
+     "106 kg",
+     "39.0",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0054",
+     "60 kg",
+     "38.8",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0055",
+     "59 kg",
+     "36.2",
+     "N",
+     "healthy"
+    ],
+    [
+     "P0056",
+     "55 kg",
+     "38.3",
+     "Y",
+     "healthy"
+    ],
+    [
+     "P0057",
+     "84 kg",
+     "37.8",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0058",
+     "99 kg",
+     "37.5",
+     "Y",
+     "sick"
+    ],
+    [
+     "P0059",
+     "90 kg",
+     "38.6",
+     "?",
+     "sick"
+    ]
+   ],
+   "shape": [
+    60,
+    5
+   ]
+  },
+  "prepared": {
+   "columns": [
+    "weight",
+    "temp",
+    "smoker",
+    "outcome"
+   ],
+   "dtypes": [
+    "float64",
+    "float64",
+    "object",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     69.0,
+     39.0,
+     true,
+     "sick"
+    ],
+    [
+     88.0,
+     null,
+     null,
+     "sick"
+    ],
+    [
+     61.0,
+     36.9,
+     null,
+     "healthy"
+    ],
+    [
+     81.0,
+     38.5,
+     false,
+     "healthy"
+    ],
+    [
+     84.0,
+     37.8,
+     false,
+     "healthy"
+    ],
+    [
+     67.0,
+     39.4,
+     null,
+     "healthy"
+    ],
+    [
+     78.0,
+     39.4,
+     false,
+     "sick"
+    ],
+    [
+     60.0,
+     null,
+     false,
+     "healthy"
+    ],
+    [
+     57.0,
+     38.1,
+     true,
+     "sick"
+    ],
+    [
+     67.0,
+     37.3,
+     true,
+     "healthy"
+    ],
+    [
+     83.0,
+     38.0,
+     null,
+     "healthy"
+    ],
+    [
+     103.0,
+     36.7,
+     true,
+     "healthy"
+    ],
+    [
+     67.0,
+     38.1,
+     null,
+     "sick"
+    ],
+    [
+     100.0,
+     37.9,
+     false,
+     "healthy"
+    ],
+    [
+     99.0,
+     38.0,
+     true,
+     "sick"
+    ],
+    [
+     101.0,
+     39.2,
+     true,
+     "healthy"
+    ],
+    [
+     84.0,
+     39.4,
+     true,
+     "sick"
+    ],
+    [
+     86.0,
+     37.5,
+     null,
+     "sick"
+    ],
+    [
+     50.0,
+     37.5,
+     false,
+     "sick"
+    ],
+    [
+     84.0,
+     null,
+     false,
+     "healthy"
+    ],
+    [
+     91.0,
+     37.3,
+     true,
+     "sick"
+    ],
+    [
+     null,
+     38.5,
+     true,
+     "sick"
+    ],
+    [
+     88.0,
+     37.4,
+     null,
+     "healthy"
+    ],
+    [
+     null,
+     38.3,
+     false,
+     "healthy"
+    ],
+    [
+     93.0,
+     38.0,
+     false,
+     "healthy"
+    ],
+    [
+     81.0,
+     38.2,
+     null,
+     "healthy"
+    ],
+    [
+     76.0,
+     38.2,
+     false,
+     "healthy"
+    ],
+    [
+     99.0,
+     null,
+     true,
+     "sick"
+    ],
+    [
+     108.0,
+     38.8,
+     null,
+     "sick"
+    ],
+    [
+     59.0,
+     38.9,
+     true,
+     "sick"
+    ],
+    [
+     82.0,
+     36.9,
+     null,
+     "sick"
+    ],
+    [
+     54.0,
+     36.2,
+     true,
+     "healthy"
+    ],
+    [
+     82.0,
+     38.4,
+     null,
+     "sick"
+    ],
+    [
+     88.0,
+     36.7,
+     true,
+     "sick"
+    ],
+    [
+     67.0,
+     36.3,
+     null,
+     "sick"
+    ],
+    [
+     79.0,
+     38.0,
+     true,
+     "sick"
+    ],
+    [
+     91.0,
+     null,
+     null,
+     "healthy"
+    ],
+    [
+     75.0,
+     37.4,
+     false,
+     "sick"
+    ],
+    [
+     95.0,
+     null,
+     null,
+     "healthy"
+    ],
+    [
+     104.0,
+     null,
+     false,
+     "sick"
+    ],
+    [
+     109.0,
+     39.3,
+     false,
+     "healthy"
+    ],
+    [
+     54.0,
+     null,
+     false,
+     "healthy"
+    ],
+    [
+     88.0,
+     37.6,
+     true,
+     "healthy"
+    ],
+    [
+     107.0,
+     37.3,
+     true,
+     "healthy"
+    ],
+    [
+     95.0,
+     38.5,
+     true,
+     "healthy"
+    ],
+    [
+     64.0,
+     37.1,
+     true,
+     "healthy"
+    ],
+    [
+     null,
+     36.1,
+     null,
+     "healthy"
+    ],
+    [
+     81.0,
+     null,
+     false,
+     "sick"
+    ],
+    [
+     92.0,
+     36.4,
+     true,
+     "healthy"
+    ],
+    [
+     75.0,
+     37.7,
+     true,
+     "healthy"
+    ],
+    [
+     65.0,
+     null,
+     false,
+     "healthy"
+    ],
+    [
+     78.0,
+     null,
+     true,
+     "healthy"
+    ],
+    [
+     55.0,
+     36.1,
+     false,
+     "sick"
+    ],
+    [
+     106.0,
+     39.0,
+     true,
+     "sick"
+    ],
+    [
+     60.0,
+     38.8,
+     true,
+     "sick"
+    ],
+    [
+     59.0,
+     36.2,
+     false,
+     "healthy"
+    ],
+    [
+     55.0,
+     38.3,
+     true,
+     "healthy"
+    ],
+    [
+     84.0,
+     37.8,
+     true,
+     "sick"
+    ],
+    [
+     99.0,
+     37.5,
+     true,
+     "sick"
+    ],
+    [
+     90.0,
+     38.6,
+     null,
+     "sick"
+    ]
+   ],
+   "shape": [
+    60,
+    4
+   ]
+  },
+  "model_ready": {
+   "columns": [
+    "weight",
+    "temp",
+    "smoker",
+    "weight_missing",
+    "temp_missing"
+   ],
+   "dtypes": [
+    "float64",
+    "float64",
+    "object",
+    "bool",
+    "bool"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     69.0,
+     39.0,
+     true,
+     false,
+     false
+    ],
+    [
+     88.0,
+     38.0,
+     null,
+     false,
+     true
+    ],
+    [
+     61.0,
+     36.9,
+     null,
+     false,
+     false
+    ],
+    [
+     81.0,
+     38.5,
+     false,
+     false,
+     false
+    ],
+    [
+     84.0,
+     37.8,
+     false,
+     false,
+     false
+    ],
+    [
+     67.0,
+     39.4,
+     null,
+     false,
+     false
+    ],
+    [
+     78.0,
+     39.4,
+     false,
+     false,
+     false
+    ],
+    [
+     60.0,
+     38.0,
+     false,
+     false,
+     true
+    ],
+    [
+     57.0,
+     38.1,
+     true,
+     false,
+     false
+    ],
+    [
+     67.0,
+     37.3,
+     true,
+     false,
+     false
+    ],
+    [
+     83.0,
+     38.0,
+     null,
+     false,
+     false
+    ],
+    [
+     103.0,
+     36.7,
+     true,
+     false,
+     false
+    ],
+    [
+     67.0,
+     38.1,
+     null,
+     false,
+     false
+    ],
+    [
+     100.0,
+     37.9,
+     false,
+     false,
+     false
+    ],
+    [
+     99.0,
+     38.0,
+     true,
+     false,
+     false
+    ],
+    [
+     101.0,
+     39.2,
+     true,
+     false,
+     false
+    ],
+    [
+     84.0,
+     39.4,
+     true,
+     false,
+     false
+    ],
+    [
+     86.0,
+     37.5,
+     null,
+     false,
+     false
+    ],
+    [
+     50.0,
+     37.5,
+     false,
+     false,
+     false
+    ],
+    [
+     84.0,
+     38.0,
+     false,
+     false,
+     true
+    ],
+    [
+     91.0,
+     37.3,
+     true,
+     false,
+     false
+    ],
+    [
+     82.0,
+     38.5,
+     true,
+     true,
+     false
+    ],
+    [
+     88.0,
+     37.4,
+     null,
+     false,
+     false
+    ],
+    [
+     82.0,
+     38.3,
+     false,
+     true,
+     false
+    ],
+    [
+     93.0,
+     38.0,
+     false,
+     false,
+     false
+    ],
+    [
+     81.0,
+     38.2,
+     null,
+     false,
+     false
+    ],
+    [
+     76.0,
+     38.2,
+     false,
+     false,
+     false
+    ],
+    [
+     99.0,
+     38.0,
+     true,
+     false,
+     true
+    ],
+    [
+     108.0,
+     38.8,
+     null,
+     false,
+     false
+    ],
+    [
+     59.0,
+     38.9,
+     true,
+     false,
+     false
+    ],
+    [
+     82.0,
+     36.9,
+     null,
+     false,
+     false
+    ],
+    [
+     54.0,
+     36.2,
+     true,
+     false,
+     false
+    ],
+    [
+     82.0,
+     38.4,
+     null,
+     false,
+     false
+    ],
+    [
+     88.0,
+     36.7,
+     true,
+     false,
+     false
+    ],
+    [
+     67.0,
+     36.3,
+     null,
+     false,
+     false
+    ],
+    [
+     79.0,
+     38.0,
+     true,
+     false,
+     false
+    ],
+    [
+     91.0,
+     38.0,
+     null,
+     false,
+     true
+    ],
+    [
+     75.0,
+     37.4,
+     false,
+     false,
+     false
+    ],
+    [
+     95.0,
+     38.0,
+     null,
+     false,
+     true
+    ],
+    [
+     104.0,
+     38.0,
+     false,
+     false,
+     true
+    ],
+    [
+     109.0,
+     39.3,
+     false,
+     false,
+     false
+    ],
+    [
+     54.0,
+     38.0,
+     false,
+     false,
+     true
+    ],
+    [
+     88.0,
+     37.6,
+     true,
+     false,
+     false
+    ],
+    [
+     107.0,
+     37.3,
+     true,
+     false,
+     false
+    ],
+    [
+     95.0,
+     38.5,
+     true,
+     false,
+     false
+    ],
+    [
+     64.0,
+     37.1,
+     true,
+     false,
+     false
+    ],
+    [
+     82.0,
+     36.1,
+     null,
+     true,
+     false
+    ],
+    [
+     81.0,
+     38.0,
+     false,
+     false,
+     true
+    ],
+    [
+     92.0,
+     36.4,
+     true,
+     false,
+     false
+    ],
+    [
+     75.0,
+     37.7,
+     true,
+     false,
+     false
+    ],
+    [
+     65.0,
+     38.0,
+     false,
+     false,
+     true
+    ],
+    [
+     78.0,
+     38.0,
+     true,
+     false,
+     true
+    ],
+    [
+     55.0,
+     36.1,
+     false,
+     false,
+     false
+    ],
+    [
+     106.0,
+     39.0,
+     true,
+     false,
+     false
+    ],
+    [
+     60.0,
+     38.8,
+     true,
+     false,
+     false
+    ],
+    [
+     59.0,
+     36.2,
+     false,
+     false,
+     false
+    ],
+    [
+     55.0,
+     38.3,
+     true,
+     false,
+     false
+    ],
+    [
+     84.0,
+     37.8,
+     true,
+     false,
+     false
+    ],
+    [
+     99.0,
+     37.5,
+     true,
+     false,
+     false
+    ],
+    [
+     90.0,
+     38.6,
+     null,
+     false,
+     false
+    ]
+   ],
+   "shape": [
+    60,
+    5
+   ]
+  },
+  "changes": {
+   "available": true,
+   "dropped_columns": [
+    "patient_id"
+   ],
+   "added_columns": [],
+   "dropped_rows": [],
+   "dropped_rows_total": 0,
+   "changed": {
+    "weight": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     22,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59
+    ],
+    "temp": [
+     0,
+     10,
+     14,
+     24,
+     35,
+     53
+    ],
+    "smoker": [
+     0,
+     3,
+     4,
+     6,
+     7,
+     8,
+     9,
+     11,
+     13,
+     14,
+     15,
+     16,
+     18,
+     19,
+     20,
+     21,
+     23,
+     24,
+     26,
+     27,
+     29,
+     31,
+     33,
+     35,
+     37,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58
+    ]
+   },
+   "blanked": {
+    "weight": [
+     21,
+     23,
+     46
+    ],
+    "temp": [
+     1,
+     7,
+     19,
+     27,
+     36,
+     38,
+     39,
+     41,
+     47,
+     50,
+     51
+    ],
+    "smoker": [
+     1,
+     2,
+     5,
+     10,
+     12,
+     17,
+     22,
+     25,
+     28,
+     30,
+     32,
+     34,
+     36,
+     38,
+     46,
+     59
+    ]
+   },
+   "raw_rows": 60
+  },
+  "pipeline": [
+   {
+    "name": "cleaner",
+    "class": "FoldCleaner",
+    "module": "preflight.assemble"
+   },
+   {
+    "name": "engineer",
+    "class": "EngineerTransformer",
+    "module": "preflight.assemble"
+   }
+  ],
+  "decisions": [
+   {
+    "id": "dec_reading_table_3b308e77",
+    "stage": "reading",
+    "kind": "encoding",
+    "columns": [],
+    "action": "use_encoding_utf-8",
+    "default": "use_encoding_utf-8",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Read the file using standard text format.",
+    "evidence": {
+     "encoding": "utf-8",
+     "confidence": 1.0,
+     "has_bom": false,
+     "low_confidence": false,
+     "detected_as": "ascii",
+     "alternatives": []
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_ba0679ea",
+    "stage": "reading",
+    "kind": "dialect",
+    "columns": [],
+    "action": "separate_by_,",
+    "default": "separate_by_,",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Separate columns using comma separators.",
+    "evidence": {
+     "delimiter": ",",
+     "quotechar": "\"",
+     "confidence": 0.95,
+     "margin": 0.95,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_4a3c0670",
+    "stage": "reading",
+    "kind": "header",
+    "columns": [],
+    "action": "use_header_row_0",
+    "default": "use_header_row_0",
+    "confidence": 0.85,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Use row 1 as column names.",
+    "evidence": {
+     "header_row_index": 0,
+     "confidence": 0.85,
+     "title_rows": [],
+     "ragged_rows": [],
+     "is_ragged": false,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_patient_id_1e3f2400",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "patient_id"
+    ],
+    "action": "keep_as_string",
+    "default": "keep_as_string",
+    "confidence": 0.98,
+    "needs_attention": false,
+    "status": "changed",
+    "plain_language": "Read column 'patient_id' as plain text.",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.98,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.98,
+     "runner_score": 0.95,
+     "margin": 0.03,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": [
+     {
+      "status": "changed",
+      "timestamp": "2026-11-16T10:52:30.322675+00:00",
+      "action": "keep_as_string",
+      "source": "ask: callback channel",
+      "answer": "Keep as plain text"
+     }
+    ]
+   },
+   {
+    "id": "dec_infer_weight_b4b5b4ac",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "weight"
+    ],
+    "action": "cast_to_int",
+    "default": "cast_to_int",
+    "confidence": 0.9,
+    "needs_attention": false,
+    "status": "confirmed",
+    "plain_language": "Read column 'weight' as whole numbers.",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.95,
+     "runner_score": 0.0,
+     "margin": 0.95,
+     "non_missing_count": 57,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": "kg",
+     "unresolved_trap": "embedded_unit: kg",
+     "unit_column": true,
+     "lossy_coercion": true
+    },
+    "history": [
+     {
+      "status": "confirmed",
+      "timestamp": "2026-11-16T10:52:30.322702+00:00",
+      "action": "cast_to_int",
+      "source": "ask: callback channel",
+      "answer": "Convert to whole numbers"
+     }
+    ]
+   },
+   {
+    "id": "dec_infer_temp_31623d10",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "temp"
+    ],
+    "action": "cast_to_float",
+    "default": "cast_to_float",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "confirmed",
+    "plain_language": "Read column 'temp' as decimal numbers.",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 49,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": [
+     {
+      "status": "confirmed",
+      "timestamp": "2026-11-16T10:52:30.322716+00:00",
+      "action": "cast_to_float",
+      "source": "ask: callback channel",
+      "answer": "Convert to decimal numbers"
+     }
+    ]
+   },
+   {
+    "id": "dec_infer_smoker_8b2696ec",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "smoker"
+    ],
+    "action": "cast_to_boolean",
+    "default": "cast_to_boolean",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "confirmed",
+    "plain_language": "Read column 'smoker' as yes/no values.",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 1.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 44,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": [
+     {
+      "status": "confirmed",
+      "timestamp": "2026-11-16T10:52:30.322726+00:00",
+      "action": "cast_to_boolean",
+      "source": "ask: callback channel",
+      "answer": "Convert to yes/no values"
+     }
+    ]
+   },
+   {
+    "id": "dec_infer_outcome_0a6325dc",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "outcome"
+    ],
+    "action": "keep_as_categorical",
+    "default": "keep_as_string",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'outcome' as categorical with confidence 0.95 (margin: 0.95 over constant).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.95,
+     "runner_score": 0.0,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_outcome_7068fdc6",
+    "stage": "infer",
+    "kind": "ambiguous_task",
+    "columns": [
+     "outcome"
+    ],
+    "action": "classification",
+    "default": "classification",
+    "confidence": 0.5,
+    "needs_attention": false,
+    "status": "confirmed",
+    "plain_language": "Predict categories for target column 'outcome'.",
+    "evidence": {
+     "target": "outcome",
+     "num_unique": 2,
+     "unique_samples": [
+      "sick",
+      "healthy"
+     ],
+     "inferred_type": "categorical",
+     "ambiguous": true
+    },
+    "history": [
+     {
+      "status": "confirmed",
+      "timestamp": "2026-11-16T10:52:30.322735+00:00",
+      "action": "classification",
+      "source": "ask: callback channel",
+      "answer": "Predict categories (classification)"
+     }
+    ]
+   },
+   {
+    "id": "dec_clean_patient_id_92050c01",
+    "stage": "clean",
+    "kind": "drop_id",
+    "columns": [
+     "patient_id"
+    ],
+    "action": "drop_column",
+    "default": "drop_column",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Remove identifier column 'patient_id' (a unique label for each row, not useful for learning).",
+    "evidence": {
+     "reason": "row_label",
+     "total_columns": 5,
+     "columns_dropped_count": 1,
+     "column_impact_fraction": 0.2,
+     "impact_threshold": 0.25,
+     "cardinality": 60,
+     "unique_ratio": 1.0
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_weight_ed9de881",
+    "stage": "clean",
+    "kind": "add_missing_indicator",
+    "columns": [
+     "weight"
+    ],
+    "action": "add_missing_indicator",
+    "default": "add_missing_indicator",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Add a yes/no column 'weight_missing' marking where 'weight' was blank (5.0% blank).",
+    "evidence": {
+     "missing_rate": 0.05,
+     "indicator_column": "weight_missing"
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_weight_7de9c811",
+    "stage": "clean",
+    "kind": "fill_median",
+    "columns": [
+     "weight"
+    ],
+    "action": "fill_median",
+    "default": "fill_median",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Fill blanks in 'weight' with the middle value (82).",
+    "evidence": {
+     "missing_rate": 0.05,
+     "fill_value": 82.0,
+     "threshold": 0.3
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_temp_bc0e6311",
+    "stage": "clean",
+    "kind": "add_missing_indicator",
+    "columns": [
+     "temp"
+    ],
+    "action": "add_missing_indicator",
+    "default": "add_missing_indicator",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Add a yes/no column 'temp_missing' marking where 'temp' was blank (18.3% blank).",
+    "evidence": {
+     "missing_rate": 0.18333333333333332,
+     "indicator_column": "temp_missing"
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_temp_8cbe05fb",
+    "stage": "clean",
+    "kind": "fill_median",
+    "columns": [
+     "temp"
+    ],
+    "action": "fill_median",
+    "default": "fill_median",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Fill blanks in 'temp' with the middle value (38).",
+    "evidence": {
+     "missing_rate": 0.18333333333333332,
+     "fill_value": 38.0,
+     "threshold": 0.3
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_weight_6e1310a3",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "weight"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [30.62, 127.6] for 'weight' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 30.625,
+     "upper_bound": 127.625,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_temp_af422a9d",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "temp"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [36.01, 39.71] for 'temp' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 36.0125,
+     "upper_bound": 39.71249999999999,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   }
+  ],
+  "anomalies": [],
+  "code": "import preflight\n\nplan = preflight.plan('disguised_missing_units.csv', target='outcome')\n\nout = preflight.prepare('disguised_missing_units.csv', target='outcome', mode=\"defaults\")\n\nprepared = out[\"apply_result\"].prepared   # cleaned table\npipeline = out[\"pipeline\"]                 # unfitted: fit it inside each CV fold"
+ }
+}

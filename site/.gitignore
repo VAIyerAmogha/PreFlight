@@ -1,0 +1,8 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# The demo serves the v2 wheel itself until 2.0.0 is on PyPI (DEMO_DEV.md Q-03).
+!public/wheels/

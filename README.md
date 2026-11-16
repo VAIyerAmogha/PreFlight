@@ -42,6 +42,11 @@ leaves the data as text and asks a person. It does not guess, and it never modif
 > but details may change before 2.0.0. Please [open an issue](https://github.com/VAIyerAmogha/PreFlight/issues)
 > if something surprises you.
 
+> [!WARNING]
+> **PreFlight can make mistakes.** It infers types, file formats and cleaning steps from the data,
+> and inference can be wrong. Review the Plan PDF and `decisions.json` before you rely on the output,
+> especially for high-stakes work. See [Known limitations](#known-limitations).
+
 ## Why PreFlight
 
 `pandas.read_csv(path)` assumes UTF-8, commas and a header on the first line. Real files break
@@ -342,6 +347,23 @@ development, so it is not a fully independent test. Most remaining type misses a
 columns read as integers, and nearly all of those are flagged for review.
 
 ## Known limitations
+
+**PreFlight can make mistakes.** Every type, format and cleaning choice is inferred from the data
+by heuristics, not known for certain, and some of them will be wrong for your file:
+
+- On the benchmark corpus, about **1 column in 11** gets the wrong type (most are flagged for review,
+  but **0.46% are wrong with no flag**), and the file format is misread for about **1 file in 12**.
+- Your data may look nothing like the corpus, so your error rate may be higher.
+- A confident decision is not a guaranteed one. Confidence scores measure how clearly the evidence
+  points one way, not whether the answer is right.
+- Recommended answers to questions are a safe default, not domain knowledge. Only you know what a
+  column means.
+
+Treat the output as a well-documented first draft. Read the Plan PDF before running `prepare()`,
+check the Report PDF and the cleaned data afterwards, and override any decision you disagree with.
+PreFlight is provided as is, without warranty (see the [license](https://github.com/VAIyerAmogha/PreFlight/blob/main/LICENSE)).
+
+Specific known gaps:
 
 - **CSV-like files only.** No Excel, JSON or Parquet, and no DataFrame input in 2.0.
 - **No command-line interface yet.** Use the Python API.
