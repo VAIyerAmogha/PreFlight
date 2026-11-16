@@ -2,14 +2,14 @@
 Row deduplication planning and execution for PreFlight v2.0.
 """
 
-from typing import List, Tuple
+
 import pandas as pd
 
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
 
 
-def remove_duplicate_rows(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+def remove_duplicate_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """
     Returns (deduplicated df, count of rows removed).
     Uses standard full-row duplicate definition without mutating input.
@@ -23,7 +23,7 @@ def remove_duplicate_rows(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
 def plan_dedupe(
     df: pd.DataFrame,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-) -> List[Decision]:
+) -> list[Decision]:
     """
     Plan row deduplication. Emits a Decision if duplicate rows are present.
     If the fraction of rows removed exceeds config.dedupe_impact_threshold,
@@ -39,13 +39,13 @@ def plan_dedupe(
         return []
 
     impact = dup_count / total_rows
-    needs_att = impact >= config.dedupe_impact_threshold
+    needs_att = impact > config.dedupe_impact_threshold
 
     row_word = "row" if dup_count == 1 else "rows"
     plain_lang = (
-        f"Remove {dup_count} duplicate {row_word} ({impact:.1%} of table)."
+        f"Remove {dup_count} repeated {row_word} ({impact:.1%} of the table)."
         if not needs_att
-        else f"Review removal of {dup_count} duplicate {row_word} ({impact:.1%} of table)."
+        else f"Remove {dup_count} repeated {row_word} ({impact:.1%} of the table)? This is a large share, so please confirm."
     )
 
     decision = Decision(
@@ -61,7 +61,7 @@ def plan_dedupe(
             "threshold": config.dedupe_impact_threshold,
         },
         confidence=1.0,
-        default="remove_duplicates",
+        default="keep_rows" if needs_att else "remove_duplicates",
         needs_attention=needs_att,
         plain_language=plain_lang,
         status="automatic",
@@ -71,8 +71,8 @@ def plan_dedupe(
 
 def apply_dedupe(
     df: pd.DataFrame,
-    decisions: List[Decision],
-) -> Tuple[pd.DataFrame, int]:
+    decisions: list[Decision],
+) -> tuple[pd.DataFrame, int]:
     """
     Apply deduplication decision if confirmed or automatic with action 'remove_duplicates'.
     """

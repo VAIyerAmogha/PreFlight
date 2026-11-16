@@ -9,15 +9,13 @@ Validates:
 5. Task inference: automatic task detection and ambiguous task needs_attention emission.
 """
 
-from datetime import datetime, timezone
 import hashlib
-import json
 from pathlib import Path
+
 import pytest
 
 from preflight.decisions import Decision
-from preflight.plan import Plan, apply, plan
-from preflight.schema import TableSchema
+from preflight.plan import Plan, plan
 
 
 @pytest.fixture
@@ -141,3 +139,30 @@ def test_plan_task_inference_ambiguous(tmp_path: Path):
     assert t_dec.needs_attention is True
     assert t_dec.columns == ["target"]
     assert "classification" in t_dec.options if hasattr(t_dec, "options") else True
+
+
+def test_cleaning_and_engineering_are_planned_once_per_run(tmp_path: Path, monkeypatch) -> None:
+    import sys
+
+    plan_mod = sys.modules["preflight.plan"]  # the package re-exports a function named plan
+
+    calls = {"clean": 0, "engineer": 0}
+    real_clean, real_eng = plan_mod.plan_clean_full, plan_mod.plan_engineer
+
+    def count_clean(*a, **k):
+        calls["clean"] += 1
+        return real_clean(*a, **k)
+
+    def count_eng(*a, **k):
+        calls["engineer"] += 1
+        return real_eng(*a, **k)
+
+    monkeypatch.setattr(plan_mod, "plan_clean_full", count_clean)
+    monkeypatch.setattr(plan_mod, "plan_engineer", count_eng)
+    p = tmp_path / "d.csv"
+    p.write_text("a,b,y\n" + "".join(f"{i},{i % 3},{i % 2}\n" for i in range(40)))
+    result = plan(p, target="y")
+    prep_stages = [s for s in plan_mod.build_default_registry().get_stages() if isinstance(s, plan_mod.PrepStage)]
+    assert len(prep_stages) > 1  # several steps read the same cached prep plan
+    assert calls == {"clean": 1, "engineer": 1}
+    assert any(d.stage in ("clean", "engineer") for d in result.decisions)

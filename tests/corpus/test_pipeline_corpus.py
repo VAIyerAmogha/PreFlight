@@ -15,14 +15,18 @@ that have an unambiguous target column, and verifies:
    fully-typed data with no unhandled exception.
 """
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import pandas as pd
 import pypdf
 import pytest
+from corpus_support import raw_params, record, run_worker
 
 from preflight.plan import apply, dry_run
+
+SUITE = "pipeline"
+pytestmark = pytest.mark.corpus
 
 CORPUS_ROOT = Path(__file__).resolve().parent.parent.parent / "corpus"
 RAW_DIR = CORPUS_ROOT / "raw"
@@ -54,7 +58,7 @@ class TestPipelineCorpusValidation:
 
         with tempfile.TemporaryDirectory() as td:
             out_dir = Path(td)
-            plan_obj, pdf_path = dry_run(raw_path, target=target, task=task, out_dir=out_dir)
+            plan_obj, pdf_path = dry_run(raw_path, target=target, task=task, out_dir=out_dir, mode=None)
 
             assert pdf_path.exists()
             assert pdf_path.stat().st_size > 0
@@ -100,15 +104,41 @@ class TestPipelineCorpusValidation:
                 f"{filename}: every clean/engineer PDF subsection is an empty placeholder"
             )
 
-    def test_apply_defaults_executes_full_pipeline(self, filename, target, task):
+    def test_apply_defaults_executes_full_pipeline(self, filename, target, task, tmp_path):
         raw_path = RAW_DIR / filename
-        plan_obj = None
-        with tempfile.TemporaryDirectory() as td:
-            plan_obj, _pdf_path = dry_run(raw_path, target=target, task=task, out_dir=Path(td))
+        plan_obj, _pdf_path = dry_run(raw_path, target=target, task=task, out_dir=tmp_path / "plan", mode=None)
 
-        result = apply(plan_obj, mode="defaults")
+        # out_dir keeps the resolved plan out of the working directory (Phase 7b fix: this
+        # call used to write ./preflight_out in the repository root).
+        result = apply(plan_obj, mode="defaults", out_dir=tmp_path / "out")
 
         assert isinstance(result.data, pd.DataFrame)
         assert len(result.data) > 0
         assert len(result.data.columns) > 0
         assert isinstance(result.anomalies, list)
+
+
+
+# ---------------------------------------------------------------------------
+# Every corpus file with a usable target (see prep_worker.py for the rule)
+# ---------------------------------------------------------------------------
+
+WORKER = Path(__file__).with_name("prep_worker.py")
+PER_FILE_TIMEOUT = 1500  # seconds; the largest file needs three type-inference passes
+
+
+@pytest.mark.timeout(PER_FILE_TIMEOUT + 60)
+@pytest.mark.skipif(not RAW_DIR.is_dir(), reason="corpus/raw not present")
+@pytest.mark.parametrize("corpus_file", raw_params())
+def test_full_pipeline_on_file_with_a_target(corpus_file: Path):
+    """Phase 7b: one test per file (was one loop over the corpus). A file without a usable
+    target is recorded as not eligible and passes. The corpus-wide summary (eligible files,
+    needs_attention, slowest files) comes from scripts/corpus_summary.py and replaces
+    .pytest_cache/prep_corpus_results.json."""
+    r = run_worker(WORKER, corpus_file, PER_FILE_TIMEOUT, "@@RESULT@@")
+    r.setdefault("eligible", True)  # a hang or a crash before the eligibility check counts
+    record(SUITE, corpus_file.name, r)
+    if not r["eligible"]:
+        return
+    assert r.get("ok"), f"unhandled exception or hang: stage={r.get('stage')} hang={r.get('hang')} error={r.get('error')}"
+    assert r["plan_run_agree"], f"plan and run disagree on {corpus_file.name}"

@@ -11,14 +11,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from conftest import recommended
 
-from conftest import pick, recommended
 from preflight import resolve
 from preflight.interact.channels import (
     CallbackChannel,
     NonInteractiveError,
     NotebookChannel,
-    ReviewFileChannel,
     ReviewPending,
     TerminalChannel,
 )
@@ -26,7 +25,6 @@ from preflight.interact.channels import notebook as nb_mod
 from preflight.interact.channels.review_file import ReviewFileError, load_review_file
 from preflight.interact.channels.terminal import format_screen
 from preflight.interact.question import InvalidAnswerError, MissingAnswerError
-
 
 # --- terminal ----------------------------------------------------------------
 
@@ -139,7 +137,6 @@ def test_review_file_round_trip_with_edited_answers(messy_csv, tmp_path):
     plan_obj, pdf = resolve(str(rf))  # resolve(path) reads and validates
     assert pdf.exists()
     assert not [d for d in plan_obj.decisions if d.needs_attention]
-    by_id = {d.id: d for d in plan_obj.decisions}
     for item in data["questions"]:
         assert any(h["answer"] == item["answer"] for d in plan_obj.decisions for h in d.history)
     assert json.loads((out / "answers.json").read_text())["answers"]

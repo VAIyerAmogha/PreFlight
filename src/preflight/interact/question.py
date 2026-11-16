@@ -13,9 +13,10 @@ Nothing here repairs bad input silently: a Question that breaks its own rules
 (option count, default not among options) raises instead of being quietly fixed.
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 
@@ -89,10 +90,10 @@ class Question:
     text: str
     explanation: str
     evidence_summary: str
-    options: List[str]
-    option_actions: Dict[str, str]
+    options: list[str]
+    option_actions: dict[str, str]
     recommended_default: str
-    preview: Optional[Dict[str, Any]] = None
+    preview: Optional[dict[str, Any]] = None
     selected_option: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -125,11 +126,11 @@ class Question:
             raise InvalidAnswerError(self, answer)
         return answer
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Question":
+    def from_dict(cls, data: dict[str, Any]) -> "Question":
         return cls(**data)
 
 
@@ -139,7 +140,7 @@ class Question:
 
 # A builder returns the candidate ACTIONS in priority order. The Decision's
 # default and proposed action are always put first by `_assemble_options`.
-OptionBuilder = Callable[[Decision], List[str]]
+OptionBuilder = Callable[[Decision], list[str]]
 
 _TEXT_ACTIONS = ("keep_as_string", "keep_as_text")
 
@@ -170,7 +171,7 @@ def option_label(action: str) -> str:
     return friendly_action_name(action)
 
 
-def _type_actions(d: Decision) -> List[str]:
+def _type_actions(d: Decision) -> list[str]:
     scores = (d.evidence or {}).get("candidate_scores") or {}
     ranked = sorted(
         ((str(k).lower(), v) for k, v in scores.items() if isinstance(v, (int, float)) and v > 0),
@@ -180,23 +181,43 @@ def _type_actions(d: Decision) -> List[str]:
     return [_TYPE_TO_ACTION[k] for k, _ in ranked if k in _TYPE_TO_ACTION]
 
 
-def _encoding_actions(d: Decision) -> List[str]:
-    return ["use_encoding_iso-8859-1"]
+def _encoding_actions(d: Decision) -> list[str]:
+    """Rival encodings found at detection time first, then the long-standing fallbacks."""
+    rivals = [str(e) for e in (d.evidence or {}).get("alternatives") or []]
+    return [f"use_encoding_{e}" for e in [*rivals, "iso-8859-1", "utf-8"]]
 
 
-def _dialect_actions(d: Decision) -> List[str]:
+def _dialect_actions(d: Decision) -> list[str]:
     return [f"separate_by_{c}" for c in (";", "\t", "|", ",")]
 
 
-def _header_actions(d: Decision) -> List[str]:
+def _header_actions(d: Decision) -> list[str]:
     return ["no_header"]
 
 
-def _task_actions(d: Decision) -> List[str]:
+def _task_actions(d: Decision) -> list[str]:
     return ["classification", "regression", "none"]
 
 
-_BUILDERS: Dict[str, OptionBuilder] = {
+def _keep_or_remove_actions(d: Decision) -> list[str]:
+    return {
+        "drop_column": ["keep_column"],
+        "remove_duplicates": ["keep_rows"],
+        "clip_outliers": ["keep_outliers"],
+    }.get(d.action, [])
+
+
+def _leakage_actions(d: Decision) -> list[str]:
+    return ["keep_feature", "drop_leaky_feature"]
+
+
+_BUILDERS: dict[str, OptionBuilder] = {
+    "remove_duplicates": _keep_or_remove_actions,
+    "drop_high_missingness": _keep_or_remove_actions,
+    "drop_id": _keep_or_remove_actions,
+    "drop_constant": _keep_or_remove_actions,
+    "clip_outliers": _keep_or_remove_actions,
+    "suspected_leakage": _leakage_actions,
     "type_inference": _type_actions,
     "type_abstain": _type_actions,
     "encoding": _encoding_actions,
@@ -212,12 +233,12 @@ def register_question_builder(kind: str, builder: OptionBuilder) -> None:
     _BUILDERS[kind] = builder
 
 
-def _assemble_options(d: Decision, candidates: Sequence[str]) -> Tuple[List[str], Dict[str, str]]:
+def _assemble_options(d: Decision, candidates: Sequence[str]) -> tuple[list[str], dict[str, str]]:
     """
     Order: safe default, proposed action, then candidates. Distinct by meaning and by
     label, capped at MAX_OPTIONS without ever dropping the default or the proposal.
     """
-    ordered: List[str] = []
+    ordered: list[str] = []
     seen_canon = set()
     seen_labels = set()
     for action in [d.default, d.action, *candidates]:
@@ -285,7 +306,7 @@ def build_question_from_decision(
     candidates = builder(decision) if builder is not None else []
     options, option_actions = _assemble_options(decision, candidates)
 
-    preview: Optional[Dict[str, Any]] = None
+    preview: Optional[dict[str, Any]] = None
     if col is not None:
         is_task = decision.kind in ("ambiguous_task", "task_inference", "task")
         preview = build_column_preview(
@@ -323,16 +344,16 @@ class ReviewSession:
     """All questions for one run, asked together."""
 
     source_path: str
-    questions: List[Question] = field(default_factory=list)
+    questions: list[Question] = field(default_factory=list)
 
-    def by_id(self) -> Dict[str, Question]:
+    def by_id(self) -> dict[str, Question]:
         return {q.question_id: q for q in self.questions}
 
 
 def validate_answers(
     session_or_questions: Union[ReviewSession, Sequence[Question]],
     answers: Mapping[str, Any],
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Check an answer for EVERY question, keyed by question_id.
 
@@ -349,7 +370,7 @@ def validate_answers(
     unknown = sorted(set(answers) - known)
     if unknown:
         raise ValueError(f"Answers given for unknown question id(s): {unknown}. Known: {sorted(known)}")
-    clean: Dict[str, str] = {}
+    clean: dict[str, str] = {}
     for q in questions:
         clean[q.question_id] = q.check_answer(answers.get(q.question_id))
     return clean

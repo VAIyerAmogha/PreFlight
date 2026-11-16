@@ -16,13 +16,12 @@ Design Rules:
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Optional, Union
 from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     HRFlowable,
@@ -37,10 +36,8 @@ from reportlab.platypus import (
 from preflight.decisions import Decision
 from preflight.report.templates import (
     friendly_action_name,
-    friendly_separator_name,
-    friendly_text_format,
-    friendly_type_name,
     render_decision_text,
+    section_for_decision,
 )
 
 
@@ -49,7 +46,7 @@ class NumberedCanvas(canvas.Canvas):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._saved_page_states: List[Any] = []
+        self._saved_page_states: list[Any] = []
 
     def showPage(self) -> None:
         self._saved_page_states.append(dict(self.__dict__))
@@ -93,7 +90,7 @@ class NumberedCanvas(canvas.Canvas):
         self.restoreState()
 
 
-def _build_styles() -> Dict[str, ParagraphStyle]:
+def _build_styles() -> dict[str, ParagraphStyle]:
     """Build typography and element styling without jargon."""
     base = getSampleStyleSheet()
 
@@ -269,7 +266,7 @@ def render_plan_pdf(
     out_p.parent.mkdir(parents=True, exist_ok=True)
 
     styles = _build_styles()
-    story: List[Any] = []
+    story: list[Any] = []
 
     # 1. Document Title Banner
     story.append(Paragraph("PreFlight Plan", styles["DocTitle"]))
@@ -282,13 +279,14 @@ def render_plan_pdf(
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#2563EB"), spaceAfter=10))
 
     # 2. Summary Box
-    decisions: List[Decision] = getattr(plan, "decisions", [])
+    decisions: list[Decision] = getattr(plan, "decisions", [])
     attention_decisions = [d for d in decisions if getattr(d, "needs_attention", False)]
 
     filename = Path(getattr(plan, "source_path", "data.csv")).name
     row_count = getattr(plan, "row_count", None)
     rows_text = f"{row_count:,}" if row_count is not None else "Unknown"
-    cols_text = str(getattr(plan, "column_count", len(getattr(plan, "schema", None).columns if getattr(plan, "schema", None) else [])))
+    plan_schema = getattr(plan, "schema", None)
+    cols_text = str(getattr(plan, "column_count", len(plan_schema.columns) if plan_schema is not None else 0))
     target_text = getattr(plan, "target_column", None) or "None specified"
     task_text = getattr(plan, "task_type", None) or "Not specified"
 
@@ -372,7 +370,7 @@ def render_plan_pdf(
             text_bundle = render_decision_text(dec)
             q_title = text_bundle.question or f"Review column '{dec.columns[0] if dec.columns else 'data'}'"
 
-            q_flowables: List[Any] = [
+            q_flowables: list[Any] = [
                 Paragraph(f"Item {idx}: {q_title}", styles["QuestionText"]),
             ]
             if text_bundle.explanation:
@@ -427,9 +425,7 @@ def render_plan_pdf(
 
     # Group 2: Fixing
     story.append(Paragraph("Fixing", styles["SubSectionHeading"]))
-    fixing_decisions = [
-        d for d in decisions if getattr(d, "stage", "") == "clean" and getattr(d, "kind", "") == "fixing"
-    ]
+    fixing_decisions = [d for d in decisions if section_for_decision(d) == "fixing"]
     if fixing_decisions:
         for dec in fixing_decisions:
             text_bundle = render_decision_text(dec)
@@ -439,9 +435,7 @@ def render_plan_pdf(
 
     # Group 3: Filling gaps
     story.append(Paragraph("Filling gaps", styles["SubSectionHeading"]))
-    gaps_decisions = [
-        d for d in decisions if getattr(d, "stage", "") == "clean" and "gap" in getattr(d, "kind", "")
-    ]
+    gaps_decisions = [d for d in decisions if section_for_decision(d) == "filling gaps"]
     if gaps_decisions:
         for dec in gaps_decisions:
             text_bundle = render_decision_text(dec)
@@ -451,9 +445,7 @@ def render_plan_pdf(
 
     # Group 4: Removing
     story.append(Paragraph("Removing", styles["SubSectionHeading"]))
-    removing_decisions = [
-        d for d in decisions if getattr(d, "stage", "") == "clean" and "remove" in getattr(d, "kind", "")
-    ]
+    removing_decisions = [d for d in decisions if section_for_decision(d) == "removing"]
     if removing_decisions:
         for dec in removing_decisions:
             text_bundle = render_decision_text(dec)
@@ -463,9 +455,7 @@ def render_plan_pdf(
 
     # Group 5: Creating
     story.append(Paragraph("Creating", styles["SubSectionHeading"]))
-    creating_decisions = [
-        d for d in decisions if getattr(d, "stage", "") in ("engineer", "create")
-    ]
+    creating_decisions = [d for d in decisions if section_for_decision(d) == "creating"]
     if creating_decisions:
         for dec in creating_decisions:
             text_bundle = render_decision_text(dec)
@@ -494,7 +484,7 @@ def render_plan_pdf(
     story.append(Spacer(1, 10))
 
     # 6. Section: Sign-off checklist
-    checklist_flowables: List[Any] = [
+    checklist_flowables: list[Any] = [
         Paragraph("Sign-off checklist", styles["SectionHeading"]),
         HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CBD5E1"), spaceAfter=6),
         Paragraph("- [ ] I have reviewed the file reading settings and column titles.", styles["Body"]),

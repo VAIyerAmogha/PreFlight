@@ -2,17 +2,22 @@
 Variance Inflation Factor (VIF) and Target Leakage Detection using NumPy.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
+
 import numpy as np
 import pandas as pd
 
 from preflight.decisions import Decision
+from preflight.engineer.config import DEFAULT_ENGINEER_CONFIG, EngineerConfig
+
+if TYPE_CHECKING:
+    from preflight.signals import ColumnSignals
 
 
 def compute_vif_scores(
     df: pd.DataFrame,
-    numeric_columns: Optional[List[str]] = None,
-) -> Tuple[Dict[str, Optional[float]], bool]:
+    numeric_columns: Optional[list[str]] = None,
+) -> tuple[dict[str, Optional[float]], bool]:
     """
     Compute Variance Inflation Factor across numeric columns using NumPy.
     Uses inverse of correlation matrix without statsmodels.
@@ -21,7 +26,7 @@ def compute_vif_scores(
     """
     if numeric_columns is None:
         numeric_columns = [c for c in df.select_dtypes(include=[np.number]).columns]
-    result = {col: None for col in numeric_columns}
+    result: dict[str, Optional[float]] = {col: None for col in numeric_columns}
     if not numeric_columns:
         return result, False
 
@@ -43,7 +48,7 @@ def compute_vif_scores(
         for i, col in enumerate(cols_to_compute):
             vif = inv_corr[i, i]
             result[col] = float(vif) if vif > 0 else 0.0
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError:  # Swallowed: a singular correlation matrix leaves every score None ("not computed"), as in v1
         pass
 
     return result, capped
@@ -78,81 +83,71 @@ def flag_leakage_suspect(
 
 def plan_vif_and_leakage(
     df: pd.DataFrame,
-    numeric_columns: Optional[List[str]] = None,
+    signals: dict[str, "ColumnSignals"],
     target: Optional[str] = None,
-    leakage_threshold: float = 0.95,
-) -> List[Decision]:
+    config: EngineerConfig = DEFAULT_ENGINEER_CONFIG,
+) -> list[Decision]:
     """
-    Plan multicollinearity diagnostics (VIF) and suspected leakage flags.
-    Emits suspected_leakage Decisions when correlation with target exceeds threshold.
+    Turn the leakage flag and VIF score of each numeric feature into Decisions.
+
+    - Suspected leakage (|correlation with target| above config.leakage_threshold):
+      v1 only raised a critical report entry and kept the column. The proposed
+      action therefore stays "keep_feature"; the person may choose
+      "drop_leaky_feature". Always needs_attention.
+    - High overlap (VIF above config.vif_note_threshold): note only, never asks.
     """
-    if numeric_columns is None:
-        numeric_columns = [c for c in df.select_dtypes(include=[np.number]).columns if c != target]
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
 
-    target_series = None
-    if target and target in df.columns:
-        s = df[target]
-        if pd.api.types.is_numeric_dtype(s):
-            target_series = s
-        else:
-            # Map categorical target to codes for correlation check
-            unique_vals = sorted([x for x in s.dropna().unique()])
-            code_map = {v: i for i, v in enumerate(unique_vals)}
-            target_series = s.map(code_map)
-
-    # 1. Leakage check on candidate features
-    if target_series is not None:
-        for col in numeric_columns:
-            if col == target or col not in df.columns:
-                continue
-            corr = compute_correlation_with_target(df[col], target_series)
-            if corr is not None and flag_leakage_suspect(corr, threshold=leakage_threshold):
-                leak_dec = Decision(
+    for col, sig in signals.items():
+        if col == target or col not in df.columns:
+            continue
+        corr = sig.correlation_with_target
+        if corr is not None and abs(corr) > config.leakage_threshold:
+            decisions.append(
+                Decision(
                     id="",
                     stage="engineer",
                     kind="suspected_leakage",
                     columns=[col],
-                    action="drop_leaky_feature",
+                    action="keep_feature",
                     evidence={
-                        "correlation_with_target": round(corr, 4),
-                        "threshold": leakage_threshold,
+                        "correlation_with_target": corr,
+                        "threshold": config.leakage_threshold,
                         "target": target,
-                        "is_leakage_suspect": True,
                     },
                     confidence=0.99,
-                    default="drop_leaky_feature",
+                    default="keep_feature",
                     needs_attention=True,
                     plain_language=(
-                        f"Exclude feature '{col}' due to very high correlation with target "
-                        f"({abs(corr):.2f} > {leakage_threshold:.2f}, potential data leakage)."
+                        f"Column '{col}' tracks the value to be predicted almost exactly "
+                        f"(match {abs(corr):.2f}). It may give away the answer. Keep it, or leave it out?"
                     ),
                     status="automatic",
                 )
-                decisions.append(leak_dec)
+            )
 
-    # 2. VIF check for extreme multicollinearity
-    feature_cols = [c for c in numeric_columns if c != target and c in df.columns]
-    if len(feature_cols) >= 2:
-        vif_scores, capped = compute_vif_scores(df, feature_cols)
-        for col, score in vif_scores.items():
-            if score is not None and score > 20.0:
-                vif_dec = Decision(
+    for col, sig in signals.items():
+        score = sig.vif_score
+        if col == target or col not in df.columns or score is None:
+            continue
+        if score > config.vif_note_threshold:
+            decisions.append(
+                Decision(
                     id="",
                     stage="engineer",
                     kind="feature_overlap",
                     columns=[col],
-                    action="keep_collinear_feature",
-                    evidence={
-                        "redundancy_score": round(score, 2),
-                        "capped": capped,
-                    },
+                    action="keep_feature",
+                    evidence={"redundancy_score": score, "threshold": config.vif_note_threshold},
                     confidence=0.85,
-                    default="keep_collinear_feature",
+                    default="keep_feature",
                     needs_attention=False,
-                    plain_language=f"Note feature '{col}' has high overlap with other numerical measurements (score {score:.1f}).",
+                    plain_language=(
+                        f"Note: column '{col}' largely repeats what other numeric columns already say "
+                        f"(overlap score {score:.1f}). It is kept."
+                    ),
                     status="automatic",
                 )
-                decisions.append(vif_dec)
+            )
 
     return decisions

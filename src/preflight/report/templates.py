@@ -12,12 +12,13 @@ Design Rules:
   never raw unvetted free text from internal diagnostic dumps.
 """
 
-from dataclasses import dataclass, field
+import codecs
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from preflight.decisions import Decision
-
 
 # Banned jargon terms that must never appear in user-facing sentences or PDFs
 BANNED_JARGON = [
@@ -49,7 +50,56 @@ BANNED_JARGON = [
     "latin-1",
     "windows-1252",
     "iso-8859-1",
+    # Cleaning and engineering: plain equivalents are required
+    "interaction",
+    "interactions",
+    "target encoding",
+    "target-encode",
+    "cross-fit",
+    "one-hot",
+    "ordinal",
+    "tf-idf",
+    "tfidf",
+    "vif",
+    "variance inflation",
+    "multicollinearity",
+    "kmeans",
+    "k-means",
+    "centroid",
+    "outlier",
+    "outliers",
+    "median",
+    "log1p",
+    "z-score",
+    "leakage",
 ]
+
+
+def find_jargon_violations(text: str) -> list[str]:
+    """
+    Return every banned jargon term that appears in `text` (case-insensitive,
+    whole-word match). Empty list means the text is plain language.
+
+    Shared by the Plan PDF and the Report PDF so both documents are checked
+    against the same banned-term list.
+    """
+    if not text:
+        return []
+    lower = text.lower()
+    found: list[str] = []
+    for term in BANNED_JARGON:
+        pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
+        if re.search(pattern, lower):
+            found.append(term)
+    return found
+
+
+def assert_plain_language(text: str, context: str = "") -> None:
+    """Raise ValueError naming the offending term(s) if `text` contains banned jargon."""
+    violations = find_jargon_violations(text)
+    if violations:
+        where = f" in {context}" if context else ""
+        raise ValueError(f"Banned jargon term(s) {violations} found{where}: {text!r}")
 
 
 @dataclass(frozen=True)
@@ -57,7 +107,7 @@ class RenderedDecisionText:
     """Structured plain-language rendered text for a pipeline Decision."""
     summary: str
     question: Optional[str] = None
-    options: List[str] = field(default_factory=list)
+    options: list[str] = field(default_factory=list)
     recommended_default: Optional[str] = None
     explanation: Optional[str] = None
 
@@ -66,20 +116,44 @@ class RenderedDecisionText:
 # Friendly Term Mappings (Plain Equivalents)
 # ---------------------------------------------------------------------------
 
+# Plain names for encoding families, keyed by codecs.lookup() names. Each family gets its own
+# name so that rival encodings offered in a question never share a label.
+_TEXT_FORMAT_FAMILIES: dict[str, tuple[str, ...]] = {
+    "standard text format": ("utf-8", "utf-8-sig"),
+    "basic text format": ("ascii",),
+    "wide character text format": ("utf-16", "utf-16-le", "utf-16-be", "utf-32"),
+    "Western European text format": ("cp1252", "iso8859-1", "iso8859-15"),
+    "older Western European text format": ("cp437", "cp850", "cp858", "mac-roman"),
+    "Central European text format": ("cp1250", "iso8859-2", "cp852", "mac-latin2"),
+    "Baltic text format": ("cp1257", "cp775", "iso8859-4", "iso8859-13"),
+    "Cyrillic text format": ("cp1251", "koi8-r", "koi8-u", "cp866", "cp855", "iso8859-5", "mac-cyrillic"),
+    "Greek text format": ("cp1253", "iso8859-7", "mac-greek", "cp737", "cp869"),
+    "Turkish text format": ("cp1254", "iso8859-9", "cp857", "mac-turkish"),
+    "Hebrew text format": ("cp1255", "iso8859-8", "cp862"),
+    "Arabic text format": ("cp1256", "iso8859-6", "cp864", "cp720"),
+    "Vietnamese text format": ("cp1258",),
+    "Thai text format": ("tis-620", "cp874", "iso8859-11"),
+    "Japanese text format": ("cp932", "shift_jis", "euc_jp", "iso2022_jp", "shift_jis_2004", "euc_jis_2004"),
+    "Simplified Chinese text format": ("gb2312", "gbk", "gb18030", "hz"),
+    "Traditional Chinese text format": ("big5", "cp950", "big5hkscs"),
+    "Korean text format": ("euc_kr", "cp949", "johab", "iso2022_kr"),
+}
+_TEXT_FORMAT_BY_CODEC = {c: name for name, codecs_ in _TEXT_FORMAT_FAMILIES.items() for c in codecs_}
+
+
 def friendly_text_format(enc_name: Optional[str]) -> str:
     """Map character encoding identifiers to user-friendly plain descriptions."""
     if not enc_name:
         return "standard text format"
-    norm = enc_name.lower().replace("_", "-").strip()
-    if norm in ("utf-8", "utf8", "utf-8-sig"):
-        return "standard text format"
-    if norm in ("windows-1252", "cp1252", "iso-8859-1", "latin-1", "iso8859-1"):
-        return "Western European text format"
-    if norm == "ascii":
-        return "basic text format"
-    if norm in ("utf-16", "utf-16-le", "utf-16-be"):
-        return "wide character text format"
-    return "standard text format"
+    raw = enc_name.strip()
+    try:
+        norm = codecs.lookup(raw).name
+    except LookupError:
+        norm = raw.lower()
+    if norm in _TEXT_FORMAT_BY_CODEC:
+        return _TEXT_FORMAT_BY_CODEC[norm]
+    # Unknown to the table: name it, so it is never mistaken for the standard format.
+    return f"regional text format ({raw})"
 
 
 def friendly_separator_name(sep_char: Optional[str]) -> str:
@@ -123,11 +197,43 @@ def friendly_type_name(inferred_type: Optional[str]) -> str:
     return "plain text"
 
 
+_PREP_ACTION_NAMES = {
+    "drop_column": "Remove this column",
+    "keep_column": "Keep this column",
+    "remove_duplicates": "Remove the repeated rows",
+    "keep_rows": "Keep all rows, including repeats",
+    "clip_outliers": "Pull extreme values back into range",
+    "keep_outliers": "Keep extreme values as they are",
+    "keep_feature": "Keep this column as an input",
+    "drop_leaky_feature": "Leave this column out",
+    "convert_missing_markers": "Treat placeholder entries as blank",
+    "coerce_numeric": "Read as numbers",
+    "normalize_categories": "Tidy the text",
+    "group_rare_categories": "Combine very uncommon values",
+    "add_missing_indicator": "Add a blank-marker column",
+    "fill_median": "Fill blanks with the middle value",
+    "fill_mode": "Fill blanks with the most common value",
+    "constant_fill": "Fill blanks with a label",
+    "expand_datetime": "Split dates into parts",
+    "ordinal_encode": "Turn categories into numbers",
+    "one_hot_encode": "One yes/no column per category",
+    "target_encode_cross_fit": "Use the typical outcome per category",
+    "log1p_transform": "Compress the long tail",
+    "standard_scale": "Rescale to a common scale",
+    "create_interactions": "Create combined columns",
+    "create_datetime_features": "Create extra date columns",
+    "create_cluster_features": "Create group columns",
+    "create_text_features": "Create text size columns",
+}
+
+
 def friendly_action_name(action: str) -> str:
     """Map raw code actions to human-friendly descriptions."""
     if not action:
         return "Preserve plain text"
     act = action.lower()
+    if act in _PREP_ACTION_NAMES:
+        return _PREP_ACTION_NAMES[act]
     if act == "keep_as_string":
         return "Keep original plain text"
     if act == "keep_as_constant":
@@ -419,6 +525,91 @@ def template_ambiguous_task(
 
 
 # ---------------------------------------------------------------------------
+# Cleaning and engineering Decisions
+# ---------------------------------------------------------------------------
+
+_SECTION_BY_KIND = {
+    "convert_missing_markers": "fixing",
+    "coerce_numeric": "fixing",
+    "normalize_categories": "fixing",
+    "group_rare_categories": "fixing",
+    "clip_outliers": "fixing",
+    "add_missing_indicator": "filling gaps",
+    "fill_median": "filling gaps",
+    "fill_mode": "filling gaps",
+    "constant_fill": "filling gaps",
+    "remove_duplicates": "removing",
+    "drop_high_missingness": "removing",
+    "drop_id": "removing",
+    "drop_constant": "removing",
+    "suspected_leakage": "removing",
+    "feature_overlap": "removing",
+}
+
+
+def section_for_decision(decision: Decision) -> str:
+    """Plan PDF heading a Decision is listed under."""
+    if decision.stage in ("reading", "ingest", "infer"):
+        return "reading"
+    if decision.stage == "clean":
+        return _SECTION_BY_KIND.get(decision.kind, "fixing")
+    if decision.stage == "engineer":
+        return _SECTION_BY_KIND.get(decision.kind, "creating")
+    return "reading"
+
+
+_PREP_QUESTIONS = {
+    "remove_duplicates": (
+        "Remove the repeated rows?",
+        "Many rows appear more than once. Removing them keeps one copy of each.",
+    ),
+    "drop_high_missingness": (
+        "Remove this column?",
+        "Most of its entries are blank, so it may not help.",
+    ),
+    "drop_id": (
+        "Remove this identifier column?",
+        "Each row has its own unique value here, so it labels rows rather than describing them.",
+    ),
+    "drop_constant": (
+        "Remove this column?",
+        "Every row has the same value, so it cannot help tell rows apart.",
+    ),
+    "clip_outliers": (
+        "Pull extreme values back into range?",
+        "A noticeable share of entries lie far from the rest. Pulling them back changes their values.",
+    ),
+    "suspected_leakage": (
+        "Keep this column as an input, or leave it out?",
+        "A column that matches the value to be predicted almost exactly can make results look better than they will be in real use.",
+    ),
+}
+
+
+def template_prep_step(decision: Decision) -> RenderedDecisionText:
+    """Plain-language text for cleaning and engineering Decisions."""
+    summary = decision.plain_language or friendly_action_name(decision.action)
+    if not decision.needs_attention:
+        return RenderedDecisionText(summary=summary)
+    title, why = _PREP_QUESTIONS.get(
+        decision.kind, ("How should this be handled?", "This step changes your data noticeably.")
+    )
+    col = decision.columns[0] if decision.columns else None
+    if col and decision.kind != "remove_duplicates":
+        title = f"{title[:-1]} (column '{col}')?"
+    options = [friendly_action_name(decision.action)]
+    if decision.default != decision.action:
+        options.append(friendly_action_name(decision.default))
+    return RenderedDecisionText(
+        summary=summary,
+        question=title,
+        options=options,
+        recommended_default=friendly_action_name(decision.default),
+        explanation=why,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher for Arbitrary Decision Records
 # ---------------------------------------------------------------------------
 
@@ -432,6 +623,9 @@ def render_decision_text(decision: Decision) -> RenderedDecisionText:
     kind = decision.kind.lower().replace("-", "_")
     col_name = decision.columns[0] if decision.columns else "table"
     ev = decision.evidence or {}
+
+    if decision.stage in ("clean", "engineer"):
+        return template_prep_step(decision)
 
     if kind in ("encoding", "text_format"):
         enc_name = (
@@ -549,7 +743,7 @@ def _pct(value: Any) -> str:
         return "an unknown share"
 
 
-def describe_type_scores(evidence: Dict[str, Any]) -> str:
+def describe_type_scores(evidence: dict[str, Any]) -> str:
     """Plain-language summary of how well each reading fits a column's values."""
     scores = evidence.get("candidate_scores") or {}
     ranked = sorted(
@@ -566,12 +760,12 @@ def describe_type_scores(evidence: Dict[str, Any]) -> str:
 def template_type_question(
     column_name: str,
     action: str,
-    evidence: Dict[str, Any],
+    evidence: dict[str, Any],
 ) -> RenderedDecisionText:
     """Plain-language question for an uncertain column type decision."""
     ev = evidence or {}
     trap = str(ev.get("unresolved_trap") or "")
-    reasons: List[str] = []
+    reasons: list[str] = []
     if trap == "ambiguous_date_format":
         reasons.append(
             "Some dates could be read day-first or month-first, so they cannot be "
@@ -582,6 +776,11 @@ def template_type_question(
         unit_txt = f" ({unit})" if unit else ""
         reasons.append(
             f"Values include units{unit_txt}; turning them into numbers would lose the units."
+        )
+    if ev.get("plus_sign_code_detected"):
+        reasons.append(
+            "Some values are a plus sign followed by many digits (like +447911123456), such as "
+            "phone numbers; turning them into numbers would drop the plus sign."
         )
     if ev.get("leading_zero_detected") and action in ("cast_to_int", "cast_to_float"):
         reasons.append(

@@ -2,13 +2,17 @@
 Category normalization and rare-category grouping for PreFlight v2.0.
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
+from preflight.clean._common import need_signals
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
+from preflight.signals import CATEGORICAL_HIGH, CATEGORICAL_KINDS, ColumnSignals
 
 
 def normalize_category_values(series: pd.Series) -> pd.Series:
@@ -24,7 +28,7 @@ def normalize_category_values(series: pd.Series) -> pd.Series:
     return series.copy()
 
 
-def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> List[str]:
+def identify_rare_categories(series: pd.Series, threshold: float = 0.01) -> list[str]:
     """
     Identify categories occurring below the threshold frequency of non-null values.
     """
@@ -53,89 +57,90 @@ def plan_normalization(
     df: pd.DataFrame,
     schema: Optional[TableSchema] = None,
     target: Optional[str] = None,
-    cardinality_threshold: int = 20,
+    cardinality_threshold: Optional[int] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+) -> list[Decision]:
     """
-    Plan category normalization and rare category grouping for categorical columns.
-    """
-    type_map = {}
-    if schema and schema.columns:
-        for c in schema.columns:
-            eff_type = c.effective_type() or "text"
-            type_map[c.name] = eff_type.lower()
+    Plan text tidying for categorical columns (v1: CATEGORICAL_LOW and HIGH) and
+    rare-value grouping for high-variety columns (CATEGORICAL_HIGH only).
 
-    decisions: List[Decision] = []
+    Rare values come from the column signals, i.e. they are found on the
+    values as they were before tidying (as in v1).
+    """
+    card = cardinality_threshold if cardinality_threshold is not None else config.cardinality_threshold
+    sigs = need_signals(df, signals, schema, target, card)
+    decisions: list[Decision] = []
 
     for col in df.columns:
-        if col == target:
+        if col == target or col not in sigs:
+            continue
+        sig = sigs[col]
+        if sig.kind not in CATEGORICAL_KINDS:
             continue
 
         series = df[col]
-        col_type = type_map.get(col, "")
-        n_unique = int(series.dropna().nunique())
-
-        is_categorical = col_type == "categorical" or isinstance(series.dtype, pd.CategoricalDtype)
-        if not is_categorical:
-            # Check if text column has low/high cardinality categorical behavior
-            if col_type == "text" and n_unique > 0 and n_unique < len(series) * 0.5:
-                is_categorical = True
-
-        if not is_categorical:
-            continue
-
-        # 1. Normalization Decision (strip whitespace and lowercase)
-        norm_dec = Decision(
-            id="",
-            stage="clean",
-            kind="normalize_categories",
-            columns=[col],
-            action="normalize_categories",
-            evidence={
-                "unique_count": n_unique,
-            },
-            confidence=1.0,
-            default="normalize_categories",
-            needs_attention=False,
-            plain_language=f"Standardize text in column '{col}' by stripping extra spaces and converting to lowercase.",
-            status="automatic",
+        normalized = normalize_category_values(series)
+        # Compare plain values: two Categoricals with different category sets
+        # (e.g. 'Male' -> 'male') cannot be compared directly and pandas raises.
+        changed = (
+            int(((normalized.astype(object) != series.astype(object)) & series.notna()).sum())
+            if len(series)
+            else 0
         )
-        decisions.append(norm_dec)
+        if changed > 0:
+            decisions.append(
+                Decision(
+                    id="",
+                    stage="clean",
+                    kind="normalize_categories",
+                    columns=[col],
+                    action="normalize_categories",
+                    evidence={"unique_count": sig.cardinality, "entries_changed": changed},
+                    confidence=1.0,
+                    default="normalize_categories",
+                    needs_attention=False,
+                    plain_language=(
+                        f"Tidy the text in column '{col}': trim extra spaces and use lowercase "
+                        f"({changed} {'entry' if changed == 1 else 'entries'} change)."
+                    ),
+                    status="automatic",
+                )
+            )
 
-        # 2. Rare Category Grouping (for high-cardinality categoricals)
-        if n_unique >= cardinality_threshold:
-            normalized_series = normalize_category_values(series)
-            rare_cats = identify_rare_categories(normalized_series, threshold=config.rare_category_threshold)
-            if rare_cats:
-                rare_dec = Decision(
+        if sig.kind == CATEGORICAL_HIGH and sig.rare_categories:
+            rare = list(sig.rare_categories)
+            decisions.append(
+                Decision(
                     id="",
                     stage="clean",
                     kind="group_rare_categories",
                     columns=[col],
                     action="group_rare_categories",
                     evidence={
-                        "rare_categories": rare_cats[:10],
-                        "rare_count": len(rare_cats),
+                        "rare_categories": rare,
+                        "rare_count": len(rare),
                         "threshold": config.rare_category_threshold,
                     },
                     confidence=0.95,
                     default="group_rare_categories",
                     needs_attention=False,
-                    plain_language=f"Group {len(rare_cats)} infrequent category values in column '{col}' into a single group.",
+                    plain_language=(
+                        f"Combine {len(rare)} very uncommon values in column '{col}' "
+                        f"(each under {config.rare_category_threshold:.0%} of entries) into one group called '__rare__'."
+                    ),
                     status="automatic",
                 )
-                decisions.append(rare_dec)
+            )
 
     return decisions
 
 
 def apply_normalization(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
 ) -> pd.DataFrame:
-    """
-    Apply category normalization and rare category grouping from decisions.
-    """
+    """Apply text tidying and rare-value grouping from decisions."""
     df_out = df.copy()
 
     for d in decisions:

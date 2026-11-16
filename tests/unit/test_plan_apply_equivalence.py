@@ -9,9 +9,11 @@ Validates:
    with their row, column, and raw value, never silently discarded or dropped.
 """
 
+from dataclasses import fields
 from pathlib import Path
-import pytest
+
 import pandas as pd
+import pytest
 
 from preflight.plan import apply, dry_run, plan
 
@@ -37,7 +39,7 @@ def test_dry_run_apply_decision_equivalence(clean_numeric_csv: Path, tmp_path: P
     (same ids, kinds, columns, actions, fingerprints).
     """
     out_dir = tmp_path / "equiv_out"
-    plan_obj, _ = dry_run(clean_numeric_csv, out_dir=out_dir)
+    plan_obj, _ = dry_run(clean_numeric_csv, out_dir=out_dir, mode=None)
 
     apply_result = apply(plan_obj)
 
@@ -112,7 +114,6 @@ def test_apply_lossless_anomaly_capture(messy_anomalies_csv: Path):
 # Phase 5 (M4): equivalence still holds once questions are resolved
 # ---------------------------------------------------------------------------
 
-from dataclasses import fields
 
 
 def _comparable(d):
@@ -150,7 +151,7 @@ def test_dry_run_without_mode_leaves_questions_open_as_in_phase_4(tmp_path: Path
     src.mkdir()
     csv = src / "units.csv"
     csv.write_text("car,mileage,cost\nA,15 kmpl,$12000\nB,18 kmpl,$15500\n", encoding="utf-8")
-    plan_obj, _ = dry_run(csv, out_dir=tmp_path / "out")
+    plan_obj, _ = dry_run(csv, out_dir=tmp_path / "out", mode=None)
     assert any(d.needs_attention for d in plan_obj.decisions)
     assert not any(d.history for d in plan_obj.decisions)
     assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["plan.json", "plan.pdf"]

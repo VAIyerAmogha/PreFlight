@@ -12,7 +12,10 @@ Verifies:
 import csv
 import json
 from pathlib import Path
+
 import pytest
+
+pytestmark = pytest.mark.corpus
 
 CORPUS_ROOT = Path(__file__).resolve().parent.parent.parent / "corpus"
 RAW_DIR = CORPUS_ROOT / "raw"
@@ -31,14 +34,18 @@ VALID_SEMANTIC_TYPES = {
 
 
 def get_label_files():
-    """Retrieve all label json files."""
-    return sorted(list(LABELS_DIR.glob("*.json")))
+    """Retrieve all label json files.
+
+    Excludes split.json: the frozen tuning/held-out split manifest, not a
+    per-file label record (it maps file_id -> split name, not a schema).
+    """
+    return sorted(f for f in LABELS_DIR.glob("*.json") if f.name != "split.json")
 
 
 def test_no_duplicate_file_ids():
     """Ensure no duplicate file_ids exist across label files or sources manifest."""
     assert SOURCES_CSV.exists(), f"Missing {SOURCES_CSV}"
-    with open(SOURCES_CSV, "r", encoding="utf-8") as f:
+    with open(SOURCES_CSV, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         sources = list(reader)
 
@@ -61,7 +68,7 @@ def test_every_raw_file_has_matching_label():
     label_files = get_label_files()
     labeled_raw_filenames = set()
     for lf in label_files:
-        with open(lf, "r", encoding="utf-8") as f:
+        with open(lf, encoding="utf-8") as f:
             data = json.load(f)
             labeled_raw_filenames.add(data["filename"])
 
@@ -75,7 +82,7 @@ def test_every_label_has_matching_raw_file():
     assert len(label_files) >= 200, f"Expected at least 200 label files, found {len(label_files)}"
 
     for lf in label_files:
-        with open(lf, "r", encoding="utf-8") as f:
+        with open(lf, encoding="utf-8") as f:
             data = json.load(f)
         fn = data.get("filename")
         assert fn is not None, f"Label {lf.name} missing 'filename' field"
@@ -87,7 +94,7 @@ def test_every_label_has_matching_raw_file():
 @pytest.mark.parametrize("label_path", get_label_files(), ids=lambda p: p.stem)
 def test_label_schema_validity(label_path: Path):
     """Validate each label record against documented schema."""
-    with open(label_path, "r", encoding="utf-8") as f:
+    with open(label_path, encoding="utf-8") as f:
         data = json.load(f)
 
     assert "file_id" in data and isinstance(data["file_id"], str) and data["file_id"]
@@ -129,7 +136,7 @@ def test_column_counts_match_raw_file(label_path: Path):
     Verify that parsing the raw file with the labeled dialect yields
     the exact same number of columns as defined in the label record.
     """
-    with open(label_path, "r", encoding="utf-8") as f:
+    with open(label_path, encoding="utf-8") as f:
         data = json.load(f)
 
     raw_path = RAW_DIR / data["filename"]
@@ -164,7 +171,7 @@ def test_column_counts_match_raw_file(label_path: Path):
 
 def test_sources_manifest_licensing():
     """Verify all files recorded in sources.csv have clear permissive licenses."""
-    with open(SOURCES_CSV, "r", encoding="utf-8") as f:
+    with open(SOURCES_CSV, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         sources = list(reader)
 

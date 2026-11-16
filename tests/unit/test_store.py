@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 import pytest
-
 from conftest import pick, recommended, session_of
+
 from preflight import resolve
 from preflight.interact.modes import StrictResolutionError
 from preflight.interact.store import STORE_VERSION, AnswerStore
@@ -173,6 +173,11 @@ def test_status_changes_are_recorded_with_timestamps_on_the_decision(messy_plan,
 
 def test_fingerprint_survives_resolution(messy_csv, tmp_path):
     p = plan(messy_csv, target="target")
-    before = {d.id: d.fingerprint for d in p.decisions}
+    # Cleaning/engineering Decisions are planned again from the answers given to the
+    # reading and typing questions, so only the Decisions that were answered must keep identity.
+    def keep(ds):
+        return {d.id: d.fingerprint for d in ds if d.stage not in ("clean", "engineer")}
+
+    before = keep(p.decisions)
     resolve(p, mode="ask", channel=pick(2), out_dir=tmp_path / "out")
-    assert before == {d.id: d.fingerprint for d in p.decisions}
+    assert before == keep(p.decisions)

@@ -10,10 +10,11 @@ Steps:
 """
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 
+from preflight.decisions import Decision
 from preflight.interact.channels.base import BaseChannel, ReviewPending
 from preflight.interact.channels.callback import CallbackChannel
 from preflight.interact.channels.notebook import NotebookChannel
@@ -30,9 +31,19 @@ from preflight.interact.modes import (
     in_notebook_kernel,
     resolve_mode,
 )
-from preflight.interact.question import ReviewSession, create_review_session
+from preflight.interact.question import Question, ReviewSession, create_review_session
 from preflight.interact.store import AnswerStore
-from preflight.plan import ApplyContext, Plan, ReadingStage, plan as make_plan, write_plan_artifacts
+from preflight.plan import (
+    ApplyContext,
+    Plan,
+    ReadingStage,
+    default_out_dir,
+    replan_prep,
+    write_plan_artifacts,
+)
+from preflight.plan import (
+    plan as make_plan,
+)
 
 ChannelArg = Union[str, BaseChannel, Callable[..., Any], None]
 
@@ -43,15 +54,13 @@ def _load_raw(plan_obj: Plan) -> Optional[pd.DataFrame]:
         return ReadingStage().apply(
             ApplyContext(source_path=Path(plan_obj.source_path)), plan_obj.decisions
         )
-    except Exception:
+    except Exception:  # Swallowed: previews are optional; with None every preview says the values are unavailable
         return None
 
 
-def _default_out_dir(source: Path) -> Path:
-    return source.parent / "preflight_plan"
 
 
-def _pick_channel(channel: ChannelArg, out_dir: Path, meta: Dict[str, Any]) -> BaseChannel:
+def _pick_channel(channel: ChannelArg, out_dir: Path, meta: dict[str, Any]) -> BaseChannel:
     if isinstance(channel, BaseChannel):
         return channel
     if channel is None:
@@ -60,8 +69,8 @@ def _pick_channel(channel: ChannelArg, out_dir: Path, meta: Dict[str, Any]) -> B
                 import ipywidgets  # noqa: F401
 
                 return NotebookChannel()
-            except ImportError:
-                pass  # no widgets installed: fall back to the terminal prompt
+            except ImportError:  # Swallowed: no widgets installed, so fall back to the terminal prompt
+                pass
         return TerminalChannel()
     if callable(channel):
         return CallbackChannel(channel)
@@ -84,24 +93,24 @@ def resolve(
     out_dir: Optional[Union[str, Path]] = None,
     target: Optional[str] = None,
     task: Optional[str] = None,
-) -> Tuple[Plan, Path]:
+) -> tuple[Plan, Path]:
     """
     Resolve every question in a Plan and write the final plan.json and Plan PDF.
 
     source_or_plan: a Plan (resolved in place), a data file, or the path of a review.json
         whose answers are filled in (mode is then 'ask' through the review file).
-    mode: 'ask', 'defaults' or 'strict'. None selects strict in a non-interactive
-        context (no TTY, no notebook kernel) and ask otherwise.
+    mode: 'auto', 'ask', 'defaults' or 'strict'. 'auto' (or None) is ask in an
+        interactive session (terminal or notebook kernel) and strict otherwise.
     channel: 'terminal', 'notebook', 'review_file', a Channel object, or a callable
         taking the list of Questions and returning {question_id: option}.
-    out_dir: where plan.json, plan.pdf, answers.json and review.json go. Never the
-        source file's own folder.
+    out_dir: where plan.json, plan.pdf, answers.json and review.json go. Defaults to
+        preflight_out/ in the current working directory; never the source file's own folder.
 
     Returns (Plan, path of the Plan PDF).
     Raises StrictResolutionError (strict), ReviewPending (answers not given yet; nothing
     is waited for), or ValueError subclasses naming the question for bad answers.
     """
-    meta: Dict[str, Any] = {}
+    meta: dict[str, Any] = {}
     review_path: Optional[Path] = None
 
     if isinstance(source_or_plan, Plan):
@@ -125,7 +134,7 @@ def resolve(
             raise FileNotFoundError(f"Source file not found: {source}")
         plan_obj = make_plan(source, target=target, task=task)
 
-    out_d = Path(out_dir).resolve() if out_dir is not None else _default_out_dir(source)
+    out_d = Path(out_dir).resolve() if out_dir is not None else default_out_dir()
     if out_d == source.parent:
         raise ValueError(
             f"out_dir must not be the source file's own folder ({out_d}); "
@@ -137,43 +146,84 @@ def resolve(
     if len(ids) != len(set(ids)):
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         raise ValueError(f"Plan has duplicate decision ids, cannot resolve unambiguously: {dupes}")
-    index = {d.id: d for d in plan_obj.decisions}
 
     active_mode = resolve_mode(mode)
     meta = {"out_dir": str(out_d), "target": plan_obj.target_column, "task": plan_obj.task_type}
-
-    session = create_review_session(
-        plan_obj.decisions,
-        plan_obj.source_path,
-        raw_df=_load_raw(plan_obj) if any(d.needs_attention for d in plan_obj.decisions) else None,
-        schema=plan_obj.schema,
-    )
-
-    # Stored answers first, in every mode.
     store = AnswerStore(out_d)
-    remaining = []
-    for q in session.questions:
-        rec = store.lookup(q)
-        if rec is None:
-            remaining.append(q)
-        else:
-            apply_answer(index[q.decision_id], q, rec.answer, source="stored answer (same fingerprint)", reuse=True)
-    session = ReviewSession(source_path=session.source_path, questions=remaining)
+
+    def _is_prep(d: Any) -> bool:
+        return d.stage in ("clean", "engineer")
+
+    def _pass(subset: list[Decision]) -> None:
+        """Resolve the open questions among `subset` (stored answers first, in every mode)."""
+        index = {d.id: d for d in plan_obj.decisions}
+        session = create_review_session(
+            subset,
+            plan_obj.source_path,
+            raw_df=_load_raw(plan_obj) if any(d.needs_attention for d in subset) else None,
+            schema=plan_obj.schema,
+        )
+        remaining = []
+        for q in session.questions:
+            rec = store.lookup(q)
+            if rec is None:
+                remaining.append(q)
+            else:
+                apply_answer(index[q.decision_id], q, rec.answer, source="stored answer (same fingerprint)", reuse=True)
+        session = ReviewSession(source_path=session.source_path, questions=remaining)
+
+        if active_mode == "strict":
+            apply_strict_mode(session)
+        elif active_mode == "defaults":
+            apply_defaults_mode(session, plan_obj.decisions)
+        else:  # ask
+            if session.questions:
+                chan = _pick_channel(channel, out_d, meta)
+                if review_path is not None and isinstance(chan, ReviewFileChannel):
+                    chan.path = review_path
+                answers = chan.review(session)  # validated: every question has one of its options
+                statuses = apply_ask_mode(session, plan_obj.decisions, answers, source=f"ask: {chan.name} channel")
+                for q in session.questions:
+                    store.record(q, answers[q.question_id], statuses[q.question_id])
+                store.save()
 
     if active_mode == "strict":
-        apply_strict_mode(session)
-    elif active_mode == "defaults":
-        apply_defaults_mode(session, plan_obj.decisions)
-    else:  # ask
-        if session.questions:
-            chan = _pick_channel(channel, out_d, meta)
-            if review_path is not None and isinstance(chan, ReviewFileChannel):
-                chan.path = review_path
-            answers = chan.review(session)  # validated: every question has one of its options
-            statuses = apply_ask_mode(session, plan_obj.decisions, answers, source=f"ask: {chan.name} channel")
+        # Strict resolves nothing new: it only reuses stored answers, in the same two passes
+        # as the other modes (stored reading/typing answers can change what cleaning and
+        # engineering propose), then lists every item still open.
+        def _stored(subset: list[Decision]) -> list[Question]:
+            index = {d.id: d for d in plan_obj.decisions}
+            session = create_review_session(
+                subset,
+                plan_obj.source_path,
+                raw_df=_load_raw(plan_obj) if any(d.needs_attention for d in subset) else None,
+                schema=plan_obj.schema,
+            )
+            remaining = []
             for q in session.questions:
-                store.record(q, answers[q.question_id], statuses[q.question_id])
-            store.save()
+                rec = store.lookup(q)
+                if rec is None:
+                    remaining.append(q)
+                else:
+                    apply_answer(index[q.decision_id], q, rec.answer, source="stored answer (same fingerprint)", reuse=True)
+            return remaining
+
+        before_s = {d.id: d.action for d in plan_obj.decisions if not _is_prep(d)}
+        open_items = _stored([d for d in plan_obj.decisions if not _is_prep(d)])
+        if any(d.action != before_s[d.id] for d in plan_obj.decisions if not _is_prep(d)):
+            replan_prep(plan_obj)
+        open_items += _stored([d for d in plan_obj.decisions if _is_prep(d)])
+        apply_strict_mode(ReviewSession(source_path=plan_obj.source_path, questions=open_items))
+        plan_json, plan_pdf = write_plan_artifacts(plan_obj, out_d)
+        return plan_obj, plan_pdf
+
+    # Pass 1: reading and typing. Their answers decide what cleaning and engineering
+    # propose, so those Decisions are planned again before they are asked about (pass 2).
+    before = {d.id: d.action for d in plan_obj.decisions if not _is_prep(d)}
+    _pass([d for d in plan_obj.decisions if not _is_prep(d)])
+    if any(d.action != before[d.id] for d in plan_obj.decisions if not _is_prep(d)):
+        replan_prep(plan_obj)
+    _pass([d for d in plan_obj.decisions if _is_prep(d)])
 
     plan_json, plan_pdf = write_plan_artifacts(plan_obj, out_d)
     return plan_obj, plan_pdf

@@ -9,16 +9,16 @@ resolve() again with the same channel (or channel="notebook") reads them.
 Nothing is preselected: a question left unanswered raises, it is never defaulted.
 """
 
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional, cast
 
 from preflight.interact.channels.base import BaseChannel, ReviewPending
-from preflight.interact.question import Question, ReviewSession, validate_answers
+from preflight.interact.question import ReviewSession, validate_answers
 
 # Submitted-but-not-yet-collected answers, keyed by the question set they belong to.
-_SUBMITTED: Dict[Tuple[str, ...], Dict[str, Any]] = {}
+_SUBMITTED: dict[tuple[str, ...], dict[str, Any]] = {}
 
 
-def _session_key(session: ReviewSession) -> Tuple[str, ...]:
+def _session_key(session: ReviewSession) -> tuple[str, ...]:
     return (session.source_path,) + tuple(sorted(q.fingerprint for q in session.questions))
 
 
@@ -35,7 +35,8 @@ def _import_widgets() -> Any:
 def _default_display(obj: Any) -> None:
     from IPython.display import display
 
-    display(obj)
+    show = cast(Callable[[Any], None], display)  # IPython ships no type information
+    show(obj)
 
 
 class NotebookChannel(BaseChannel):
@@ -44,7 +45,7 @@ class NotebookChannel(BaseChannel):
     def __init__(self, widgets: Any = None, display_fn: Optional[Callable[[Any], None]] = None) -> None:
         self._widgets = widgets
         self._display = display_fn
-        self.controls: Dict[str, Any] = {}
+        self.controls: dict[str, Any] = {}
 
     def build(self, session: ReviewSession) -> Any:
         """Build the form. Returns the container widget."""
@@ -88,7 +89,7 @@ class NotebookChannel(BaseChannel):
         boxes.extend([submit, status])
         return w.VBox(boxes)
 
-    def review(self, session: ReviewSession) -> Dict[str, str]:
+    def review(self, session: ReviewSession) -> dict[str, str]:
         if not session.questions:
             return {}
         key = _session_key(session)

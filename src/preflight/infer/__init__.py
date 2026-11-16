@@ -12,6 +12,7 @@ Exposes:
 """
 
 from preflight.decisions import Decision
+
 from .missing import MissingMarker, detect_missing_markers
 from .types import (
     TypeInferenceResult,

@@ -9,7 +9,7 @@ An answer is a number from the list, the exact option text, or the word "default
 """
 
 import sys
-from typing import Any, Callable, Dict, List, Optional, TextIO
+from typing import Optional, TextIO
 
 from preflight.interact.channels.base import BaseChannel
 from preflight.interact.question import (
@@ -28,16 +28,16 @@ class NonInteractiveError(RuntimeError):
 def rich_available() -> bool:
     try:
         import rich  # noqa: F401
-    except Exception:
+    except ImportError:
         return False
     return True
 
 
-def _preview_lines(q: Question) -> List[str]:
+def _preview_lines(q: Question) -> list[str]:
     if not q.preview:
         return []
     pv = q.preview
-    lines: List[str] = []
+    lines: list[str] = []
     if not pv.get("before"):
         return [f"   Preview: {pv.get('note', 'no values to show')}"]
     lines.append("   Preview, real values from your file:")
@@ -157,7 +157,7 @@ class TerminalChannel(BaseChannel):
             raise EOFError
         return line
 
-    def review(self, session: ReviewSession) -> Dict[str, str]:
+    def review(self, session: ReviewSession) -> dict[str, str]:
         if not session.questions:
             return {}
         if self.stdin is None and self.require_tty:
@@ -175,7 +175,7 @@ class TerminalChannel(BaseChannel):
             _print_rich(session, out)
         else:
             out.write(format_screen(session) + "\n")
-        answers: Dict[str, str] = {}
+        answers: dict[str, str] = {}
         for i, q in enumerate(session.questions, start=1):
             try:
                 raw = self._read(f"Item {i} of {len(session.questions)} (1-{len(q.options)}): ", out)

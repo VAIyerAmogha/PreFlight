@@ -7,7 +7,6 @@ must be exactly one of the question's listed options, and a missing or invalid a
 raises an error naming the question. A channel never substitutes a default.
 """
 
-from typing import Dict
 
 from preflight.interact.question import ReviewSession, validate_answers
 
@@ -28,7 +27,7 @@ class BaseChannel:
 
     name: str = "base"
 
-    def review(self, session: ReviewSession) -> Dict[str, str]:
+    def review(self, session: ReviewSession) -> dict[str, str]:
         """Return validated answers {question_id: option label} for every question."""
         raise NotImplementedError
 

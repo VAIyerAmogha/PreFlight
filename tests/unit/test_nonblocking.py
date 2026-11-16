@@ -8,10 +8,8 @@ never delivers data) under a hard timeout. A hang fails the test.
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
 
 import pytest
-
 from conftest import make_messy_csv
 
 HARD_TIMEOUT = 120  # seconds; planning a tiny file takes a few seconds

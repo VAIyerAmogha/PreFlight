@@ -4,24 +4,31 @@ Corpus-wide validation suite for PreFlight v2.0 ingest pipeline (Phase 2 / M1).
 Runs encoding, dialect, and header detection against all 254 messy-CSV files in corpus/raw/,
 compares detected structural parameters against ground-truth labels in corpus/labels/,
 and validates accuracy, schema round-tripping, and zero unhandled crash rate.
+
+Phase 7b: one test per file. Each file's match results are saved, and the corpus-wide
+thresholds (delimiter >= 99%, encoding >= 98%, header == 100%, dialect >= 98%, no
+unhandled exceptions) are checked over all 254 records by scripts/corpus_summary.py
+at the end of the session (see tests/corpus/conftest.py).
 """
 
-import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
-import pytest
 
-from preflight.ingest import detect_encoding, detect_dialect, detect_header, load_raw, ingest
+import pytest
+from corpus_support import (
+    EXPECTED_FILES,
+    RAW_DIR,
+    cached_ingest,
+    label_files,
+    label_params,
+    load_label,
+    record,
+)
+
+from preflight.ingest import detect_dialect, detect_encoding, detect_header, load_raw
 from preflight.schema import TableSchema
 
-CORPUS_ROOT = Path(__file__).resolve().parent.parent.parent / "corpus"
-RAW_DIR = CORPUS_ROOT / "raw"
-LABELS_DIR = CORPUS_ROOT / "labels"
-
-
-def get_all_label_files() -> List[Path]:
-    """Retrieve all ground-truth label JSON files."""
-    return sorted(list(LABELS_DIR.glob("*.json")))
+SUITE = "ingest"
+pytestmark = [pytest.mark.corpus, pytest.mark.timeout(300)]
 
 
 def normalize_encoding_name(enc: str) -> str:
@@ -34,151 +41,87 @@ def normalize_encoding_name(enc: str) -> str:
     return norm
 
 
-class TestCorpusIngestValidation:
-    """Corpus-scale validation of PreFlight v2.0 ingestion."""
+def test_corpus_has_expected_file_count():
+    assert len(label_files()) == EXPECTED_FILES, f"Expected {EXPECTED_FILES} corpus files"
 
-    def test_corpus_ingestion_accuracy_and_metrics(self):
-        """
-        Evaluate encoding, delimiter, and header detection across all corpus files
-        using the exact comparison criteria established in docs/v1_baseline_report.md.
-        """
-        label_files = get_all_label_files()
-        assert len(label_files) == 254, f"Expected 254 corpus files, found {len(label_files)}"
 
-        total_files = len(label_files)
-        encoding_matches = 0
-        delimiter_matches = 0
-        header_matches = 0
-        dialect_matches = 0
-        exceptions: List[Tuple[str, str, str]] = []
+@pytest.mark.parametrize("corpus_file", label_params())
+def test_ingestion_matches_label(corpus_file: Path):
+    """Encoding, delimiter and header detection for one file, compared with its label using
+    the criteria in docs/v1_baseline_report.md."""
+    label_data = load_label(corpus_file)
+    fn = label_data["filename"]
+    raw_path = RAW_DIR / fn
+    true_d = label_data["dialect"]
+    assert raw_path.exists(), f"Raw file {fn} missing from {RAW_DIR}"
 
-        for lf in label_files:
-            with open(lf, "r", encoding="utf-8") as f:
-                label_data = json.load(f)
+    try:
+        enc_res = detect_encoding(raw_path)
+        enc_ok = normalize_encoding_name(true_d["encoding"]) == normalize_encoding_name(enc_res.encoding)
 
-            fid = label_data["file_id"]
-            fn = label_data["filename"]
-            raw_path = RAW_DIR / fn
-            true_d = label_data["dialect"]
+        dia_res = detect_dialect(raw_path, encoding=enc_res.encoding)
+        delim_ok = dia_res.delimiter == true_d["delimiter"]
 
-            assert raw_path.exists(), f"Raw file {fn} missing from {RAW_DIR}"
+        hdr_res = detect_header(
+            raw_path,
+            delimiter=dia_res.delimiter,
+            quotechar=dia_res.quotechar,
+            escapechar=dia_res.escapechar,
+            doublequote=dia_res.doublequote,
+            encoding=enc_res.encoding,
+        )
+        header_ok = hdr_res.header_row_index == true_d["header_row_index"]
 
-            try:
-                # 1. Encoding detection
-                enc_res = detect_encoding(raw_path)
-                norm_true_enc = normalize_encoding_name(true_d["encoding"])
-                norm_det_enc = normalize_encoding_name(enc_res.encoding)
-                enc_ok = (norm_true_enc == norm_det_enc)
+        load_res = load_raw(raw_path, encoding=enc_res.encoding, dialect=dia_res, header_result=hdr_res)
+        assert load_res.column_count > 0
+    except Exception as e:
+        record(SUITE, fn, {"file": fn, "exception": f"{type(e).__name__}: {e}"})
+        raise
 
-                # 2. Dialect detection
-                dia_res = detect_dialect(raw_path, encoding=enc_res.encoding)
-                delim_ok = (dia_res.delimiter == true_d["delimiter"])
+    record(SUITE, fn, {
+        "file": fn, "enc_ok": enc_ok, "delim_ok": delim_ok, "header_ok": header_ok,
+        "got": {"encoding": enc_res.encoding, "delimiter": dia_res.delimiter,
+                "header_row_index": hdr_res.header_row_index},
+    })
 
-                # 3. Header detection
-                hdr_res = detect_header(
-                    raw_path,
-                    delimiter=dia_res.delimiter,
-                    quotechar=dia_res.quotechar,
-                    escapechar=dia_res.escapechar,
-                    doublequote=dia_res.doublequote,
-                    encoding=enc_res.encoding,
-                )
-                header_ok = (hdr_res.header_row_index == true_d["header_row_index"])
 
-                # 4. Raw load
-                load_res = load_raw(
-                    raw_path,
-                    encoding=enc_res.encoding,
-                    dialect=dia_res,
-                    header_result=hdr_res,
-                )
-                assert load_res.column_count > 0
+@pytest.mark.parametrize("corpus_file", label_params())
+def test_schema_generation_and_round_trip(corpus_file: Path):
+    """ingest() gives a valid TableSchema for the file, and it round-trips through JSON."""
+    raw_path = RAW_DIR / load_label(corpus_file)["filename"]
+    _, schema = cached_ingest(raw_path)
 
-                if enc_ok:
-                    encoding_matches += 1
-                if delim_ok:
-                    delimiter_matches += 1
-                if header_ok:
-                    header_matches += 1
-                if enc_ok and delim_ok and header_ok:
-                    dialect_matches += 1
+    assert isinstance(schema, TableSchema)
+    assert schema.schema_version == "2.0.0"
+    assert schema.encoding.detected != ""
+    assert schema.dialect.delimiter in (",", ";", "\t", "|")
+    assert len(schema.columns) > 0
 
-            except Exception as e:
-                exceptions.append((fid, type(e).__name__, str(e)))
+    restored = TableSchema.from_json(schema.to_json())
+    assert restored.schema_version == "2.0.0"
+    assert restored.source_path == schema.source_path
+    assert restored.encoding.detected == schema.encoding.detected
+    assert restored.dialect.delimiter == schema.dialect.delimiter
+    assert restored.header.header_row_index == schema.header.header_row_index
+    assert len(restored.columns) == len(schema.columns)
 
-        # Unhandled exceptions check: v2 must not crash on any corpus file
-        assert len(exceptions) == 0, f"Encountered unhandled exceptions on corpus: {exceptions}"
 
-        encoding_acc = (encoding_matches / total_files) * 100
-        delimiter_acc = (delimiter_matches / total_files) * 100
-        header_acc = (header_matches / total_files) * 100
-        dialect_acc = (dialect_matches / total_files) * 100
+@pytest.mark.parametrize("fn", ["classic-rock-raw-data.csv", "avengers.csv", "police_killings.csv"])
+def test_large_file_streaming_chunks(fn: str):
+    """Chunked streaming preserves row counts and column counts, including bare-CR files."""
+    raw_path = RAW_DIR / fn
+    if not raw_path.exists():
+        pytest.skip(f"{fn} not in corpus/raw")
 
-        # Assert performance thresholds against baseline
-        assert delimiter_acc >= 99.0, f"Delimiter accuracy {delimiter_acc:.2f}% below 99.0%"
-        assert encoding_acc >= 98.0, f"Encoding accuracy {encoding_acc:.2f}% below 98.0%"
-        assert header_acc == 100.0, f"Header accuracy {header_acc:.2f}% below 100.0%"
-        assert dialect_acc >= 98.0, f"Dialect accuracy {dialect_acc:.2f}% below 98.0%"
+    full_res = load_raw(raw_path)
+    full_rows = full_res.row_count
+    assert full_rows is not None and full_rows > 0
 
-    def test_all_corpus_files_end_to_end_schema_generation(self):
-        """
-        Verify that ingest() successfully processes every corpus file, generates a
-        valid TableSchema dataclass, and round-trips via JSON serialization.
-        """
-        label_files = get_all_label_files()
-        for lf in label_files:
-            with open(lf, "r", encoding="utf-8") as f:
-                label_data = json.load(f)
+    chunk_res = load_raw(raw_path, chunksize=500)
+    assert chunk_res.is_chunked is True
 
-            fn = label_data["filename"]
-            raw_path = RAW_DIR / fn
-
-            raw_data, schema = ingest(raw_path)
-
-            assert isinstance(schema, TableSchema)
-            assert schema.schema_version == "2.0.0"
-            assert schema.encoding.detected != ""
-            assert schema.dialect.delimiter in (",", ";", "\t", "|")
-            assert len(schema.columns) > 0
-
-            # Verify JSON serialization round-trip
-            json_str = schema.to_json()
-            restored = TableSchema.from_json(json_str)
-            assert restored.schema_version == "2.0.0"
-            assert restored.source_path == schema.source_path
-            assert restored.encoding.detected == schema.encoding.detected
-            assert restored.dialect.delimiter == schema.dialect.delimiter
-            assert restored.header.header_row_index == schema.header.header_row_index
-            assert len(restored.columns) == len(schema.columns)
-
-    def test_large_file_streaming_chunks(self):
-        """
-        Verify chunked streaming on large corpus files to ensure chunksize does not
-        load full files into memory, preserves row counts, and handles bare CR lines.
-        """
-        target_files = [
-            "classic-rock-raw-data.csv",
-            "avengers.csv",
-            "police_killings.csv",
-        ]
-        for fn in target_files:
-            raw_path = RAW_DIR / fn
-            if not raw_path.exists():
-                continue
-
-            # Load full
-            full_res = load_raw(raw_path)
-            full_rows = full_res.row_count
-            assert full_rows is not None and full_rows > 0
-
-            # Load chunked
-            chunk_size = 500
-            chunk_res = load_raw(raw_path, chunksize=chunk_size)
-            assert chunk_res.is_chunked is True
-
-            total_chunked_rows = 0
-            for chunk_df in chunk_res.data:
-                assert len(chunk_df.columns) == full_res.column_count
-                total_chunked_rows += len(chunk_df)
-
-            assert total_chunked_rows == full_rows
+    total_chunked_rows = 0
+    for chunk_df in chunk_res.data:
+        assert len(chunk_df.columns) == full_res.column_count
+        total_chunked_rows += len(chunk_df)
+    assert total_chunked_rows == full_rows

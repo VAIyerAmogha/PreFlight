@@ -3,7 +3,9 @@ Advanced feature generation for PreFlight v2.0 (interactions, clustering, text f
 """
 
 import itertools
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
+from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
@@ -13,7 +15,6 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import OrdinalEncoder
 
 from preflight.engineer.config import FeatureConfig
-from preflight.engineer.vif import compute_correlation_with_target
 
 
 def compute_mutual_info_with_target(
@@ -40,74 +41,74 @@ def compute_mutual_info_with_target(
         if task == "regression":
             if not pd.api.types.is_numeric_dtype(target):
                 return None
-            mi = mutual_info_regression(X, y)
+            mi = mutual_info_regression(X, y, random_state=0)
         elif task == "classification":
-            mi = mutual_info_classif(X, y)
+            mi = mutual_info_classif(X, y, random_state=0)
         else:
             return None
         return float(mi[0])
-    except Exception:
+    except Exception:  # Swallowed: mutual information is an optional signal; None means "not available" and callers treat it as such
         return None
+
+
+def rank_interaction_columns(
+    signals: dict[str, Any],
+    df_columns: Sequence[str],
+    config: FeatureConfig,
+) -> list[str]:
+    """
+    Top-k numeric feature columns by max(|correlation|, |mutual information|)
+    with the target, read from the column signals (as v1 read its profiles).
+    """
+    scored = []
+    for name, sig in signals.items():
+        if sig.kind != "NUMERIC_FEATURE":
+            continue
+        score = 0.0
+        if sig.correlation_with_target is not None and not pd.isna(sig.correlation_with_target):
+            score = max(score, abs(sig.correlation_with_target))
+        if sig.mutual_info_with_target is not None and not pd.isna(sig.mutual_info_with_target):
+            score = max(score, abs(sig.mutual_info_with_target))
+        scored.append((name, score))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [x[0] for x in scored[:config.interaction_top_k] if x[0] in df_columns]
 
 
 def generate_interaction_features(
     df: pd.DataFrame,
-    numeric_columns: Sequence[str],
-    target: Optional[str],
+    top_columns: Sequence[str],
     config: FeatureConfig,
-    task: str = "regression",
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
     """
-    Generate ratio, product, and difference interactions across top-k scored numeric features.
+    Generate ratio, product, and difference interactions across the given
+    (already ranked) numeric columns. Never overwrites an existing column.
     """
     df_out = df.copy()
-    reports = []
+    reports: list[dict[str, Any]] = []
+    top_cols = [c for c in top_columns if c in df_out.columns]
 
-    target_series = df_out[target] if target and target in df_out.columns else None
-
-    # Score numeric features by correlation or mutual info with target
-    scored = []
-    for col in numeric_columns:
-        if col == target or col not in df_out.columns:
-            continue
-        score = 0.0
-        if target_series is not None:
-            corr = compute_correlation_with_target(df_out[col], target_series)
-            if corr is not None:
-                score = max(score, abs(corr))
-            mi = compute_mutual_info_with_target(df_out[col], target_series, task=task)
-            if mi is not None:
-                score = max(score, abs(mi))
-        scored.append((col, score))
-
-    scored.sort(key=lambda x: x[1], reverse=True)
-    top_cols = [x[0] for x in scored[:config.interaction_top_k] if x[0] in df_out.columns]
+    def _add(col_name: str, values: pd.Series, what: str, a: str, b: str) -> None:
+        if col_name in df.columns:
+            reports.append({
+                "column": col_name,
+                "action": "skipped_duplicate_feature",
+                "summary": f"Skipped generated interaction feature '{col_name}' due to name collision.",
+            })
+            return
+        df_out[col_name] = values
+        reports.append({
+            "column": col_name,
+            "action": "created_interaction",
+            "summary": f"Generated {what} of '{a}' and '{b}'.",
+        })
 
     for a, b in itertools.combinations(top_cols, 2):
         if "ratio" in config.interaction_types:
-            col_name = f"{a}_div_{b}"
-            df_out[col_name] = df_out[a] / df_out[b].replace(0, np.nan)
-            reports.append({
-                "column": col_name,
-                "action": "created_interaction",
-                "summary": f"Generated ratio of '{a}' and '{b}'.",
-            })
+            _add(f"{a}_div_{b}", df_out[a] / df_out[b].replace(0, np.nan), "ratio", a, b)
         if "product" in config.interaction_types:
-            col_name = f"{a}_times_{b}"
-            df_out[col_name] = df_out[a] * df_out[b]
-            reports.append({
-                "column": col_name,
-                "action": "created_interaction",
-                "summary": f"Generated product of '{a}' and '{b}'.",
-            })
+            _add(f"{a}_times_{b}", df_out[a] * df_out[b], "product", a, b)
         if "difference" in config.interaction_types:
-            col_name = f"{a}_minus_{b}"
-            df_out[col_name] = df_out[a] - df_out[b]
-            reports.append({
-                "column": col_name,
-                "action": "created_interaction",
-                "summary": f"Generated difference of '{a}' and '{b}'.",
-            })
+            _add(f"{a}_minus_{b}", df_out[a] - df_out[b], "difference", a, b)
 
     return df_out, reports
 
@@ -116,12 +117,12 @@ def generate_cluster_features(
     df: pd.DataFrame,
     numeric_columns: Sequence[str],
     config: FeatureConfig,
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]], Dict[str, Any]]:
+) -> tuple[pd.DataFrame, list[dict[str, Any]], dict[str, Any]]:
     """
     Generate KMeans cluster assignments and distance-to-centroid features.
     """
     df_out = df.copy()
-    reports = []
+    reports: list[dict[str, Any]] = []
 
     if config.cluster_features == "numeric_only":
         features = [col for col in numeric_columns if col in df_out.columns]
@@ -181,15 +182,15 @@ def generate_text_features(
     df: pd.DataFrame,
     text_columns: Sequence[str],
     config: FeatureConfig,
-    original_cols: Optional[Set[str]] = None,
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]], Dict[str, Any]]:
+    original_cols: Optional[set[str]] = None,
+) -> tuple[pd.DataFrame, list[dict[str, Any]], dict[str, Any]]:
     """
     Generate basic text statistics (char_length, word_count, has_text) and optional TF-IDF features.
     Resolves column name collisions using original_cols.
     """
     df_out = df.copy()
-    reports = []
-    vectorizers = {}
+    reports: list[dict[str, Any]] = []
+    vectorizers: dict[str, Any] = {}
 
     collision_cols = original_cols if original_cols is not None else set(df.columns)
     valid_text_cols = [c for c in text_columns if c in df_out.columns]

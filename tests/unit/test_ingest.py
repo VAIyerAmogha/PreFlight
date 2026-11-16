@@ -16,24 +16,23 @@ Tests hand-built edge cases:
 """
 
 import json
-from pathlib import Path
 import tempfile
-import pytest
+from pathlib import Path
+
 import pandas as pd
 
-from preflight.ingest.encoding import detect_encoding, EncodingResult
-from preflight.ingest.dialect import detect_dialect, DialectResult
-from preflight.ingest.header import detect_header, HeaderResult
-from preflight.ingest.loader import load_raw, RawLoadResult
 from preflight.ingest import ingest
+from preflight.ingest.dialect import DialectResult, detect_dialect
+from preflight.ingest.encoding import EncodingResult, detect_encoding
+from preflight.ingest.header import HeaderResult, detect_header
+from preflight.ingest.loader import RawLoadResult, load_raw
 from preflight.schema import (
-    TableSchema,
-    EncodingSchema,
-    DialectSchema,
-    HeaderSchema,
     ColumnRawMetadata,
+    DialectSchema,
+    EncodingSchema,
+    HeaderSchema,
+    TableSchema,
 )
-
 
 # =====================================================================
 # 1. Encoding Detection Unit Tests
@@ -73,10 +72,16 @@ def test_encoding_bom_absent_ascii():
 def test_encoding_non_utf8_latin1():
     """Verify Latin-1 byte stream is identified and decoded without crash."""
     # Byte 0xe9 is 'é' and 0xa9 is '©' in ISO-8859-1 (invalid UTF-8)
-    content = "id,name\n1,Caf\xe9\n2,Copyright \xa9\n".encode("iso-8859-1")
+    text = "id,name\n1,Caf\xe9\n2,Copyright \xa9\n"
+    content = text.encode("iso-8859-1")
     res = detect_encoding(content)
     assert res.has_bom is False
-    assert res.encoding in ("iso-8859-1", "cp1252")
+    # Phase 7b: the detected encoding is no longer swapped for ISO-8859-1 on a check that
+    # cannot fail. What matters is the text: it decodes right, or the result is flagged
+    # with a Western encoding offered (docs/port_regressions.md, Phase 7b).
+    assert content.decode(res.encoding) == text or (
+        res.low_confidence and {"iso-8859-1", "cp1252"} & set(res.alternatives)
+    )
 
 
 def test_encoding_low_confidence_flagged():

@@ -126,3 +126,75 @@ PreFlight v1.0.1 uses an internal enum with 9 values in `preflight.types.Semanti
 - **Column-Type Accuracy**: Evaluates whether the mapped v1.0.1 inferred type matches the ground-truth semantic type for each column. If v1.0.1 crashed on the file, all columns in that file are scored as incorrect.
 - **Wrong-Type-With-No-Flag**: Evaluates cases where v1.0.1 misclassified a column without generating any diagnostic report entry or warning flag (e.g. treating an ID with leading zeroes as numeric, or collapsing semicolon-separated rows into a single text column).
 - **Unhandled Exceptions**: Evaluates the proportion of corpus files on which v1.0.1 raised an uncaught runtime exception (e.g. `UnicodeDecodeError`, `ParserError`, `EmptyDataError`).
+
+---
+
+## Frozen Tuning / Held-Out Split (`corpus/labels/split.json`)
+
+Before any accuracy numbers are computed against this corpus, the corpus is partitioned
+into a **tuning** set (used for iterating on PreFlight v2 behavior) and a **held_out** set
+(used only for final, un-iterated accuracy reporting). This split is written once by a
+one-off script and is **frozen**: it must never be regenerated or rebalanced after the
+fact to improve a reported number. Re-running the same procedure must always reproduce
+byte-identical results, since the assignment is a pure function of `file_id`.
+
+### `file_id` scheme
+
+`file_id` is the stem of the label JSON filename, i.e. for `corpus/labels/<file_id>.json`
+the `file_id` is `<file_id>` with `.json` stripped. This is exactly the identifier already
+enforced by `tests/corpus/test_label_integrity.py` (`label_path.stem == data["file_id"]`),
+and the same per-record `"file_id"` field inside each label JSON, so other code (including
+`tests/corpus/prep_worker.py` and friends, which work from the raw filename / label stem)
+can join against `split.json` without any renaming.
+
+### Hash rule
+
+For each `file_id`:
+
+```python
+bucket = int(hashlib.sha256(file_id.encode("utf-8")).hexdigest(), 16) % 100
+group = "tuning" if bucket < 60 else "held_out"
+```
+
+This is a deterministic function of the string `file_id` alone — not `random.Random`,
+not dependent on directory iteration order, not seeded per-run. Re-running the script
+against the same set of label files always yields the identical mapping. There is no
+rebalancing step: strata that end up skewed are reported as-is (see below), not corrected,
+because preserving the pure-hash property matters more than achieving perfectly even
+strata.
+
+### Resulting counts (254 corpus files, computed 2026-10-23)
+
+| Split | Count | Share |
+| :--- | :--- | :--- |
+| `tuning` | 153 | 60.2% |
+| `held_out` | 101 | 39.8% |
+
+Dialect (`delimiter`) distribution, read from each file's existing label JSON
+(`dialect.delimiter`):
+
+| Delimiter | tuning | held_out |
+| :--- | :--- | :--- |
+| `,` (comma) | 149 | 98 |
+| `;` (semicolon) | 4 | 2 |
+| `\t` (tab) | 0 | 1 |
+
+Encoding distribution, read from each file's existing label JSON (`dialect.encoding`):
+
+| Encoding | tuning | held_out |
+| :--- | :--- | :--- |
+| `utf-8` | 146 | 98 |
+| `iso-8859-1` | 6 | 3 |
+| `utf-8-sig` (BOM) | 1 | 0 |
+
+**Honest imbalance note**: the hash-based split leaves the `\t` (tab-delimited) stratum
+entirely in `held_out` (0 tuning examples; the sole tab file is `fl_tsv`) and the
+`utf-8-sig` (BOM) stratum entirely in `tuning` (0 held_out examples; the sole BOM file is
+`fl_bom`). Both are single-file strata in the corpus overall (one TSV file, one BOM file),
+so any 60/40 hash split necessarily sends that single file entirely to one side — there is
+no way to split one file across both sets. Per the method above, this is reported rather
+than fixed by special-casing those files, to keep the split a pure function of `file_id`.
+All other strata (comma, semicolon, utf-8, iso-8859-1) are represented on both sides.
+
+This section documents the split as generated; the resulting `corpus/labels/split.json`
+is not to be edited or regenerated to change these numbers.

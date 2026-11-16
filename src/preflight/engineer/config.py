@@ -3,7 +3,7 @@ FeatureConfig dataclass and preset definitions for PreFlight v2.0 Engineering.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 
 @dataclass
@@ -13,13 +13,13 @@ class FeatureConfig:
     """
     interactions: bool = False
     interaction_top_k: int = 5
-    interaction_types: List[str] = field(default_factory=lambda: ["ratio", "product"])
+    interaction_types: list[str] = field(default_factory=lambda: ["ratio", "product"])
     datetime_cyclical: bool = False
     datetime_deltas: bool = False
     datetime_reference_col: Optional[str] = None
     clustering: bool = False
     cluster_k: Union[int, str] = "auto"
-    cluster_features: Union[str, List[str]] = "numeric_only"
+    cluster_features: Union[str, list[str]] = "numeric_only"
     text_features: bool = False
     text_tfidf: bool = False
     text_tfidf_top_k: int = 20
@@ -39,7 +39,28 @@ class FeatureConfig:
             raise ValueError("The number of text features to generate (text_tfidf_top_k) must be at least 1.")
 
 
-PRESETS: Dict[str, Dict[str, Any]] = {
+@dataclass
+class EngineerConfig:
+    """
+    Thresholds for the engineering stage.
+
+    Attributes:
+        leakage_threshold: Absolute correlation with the target above which a
+            numeric feature is flagged as a suspected leak (v1 constant 0.95).
+        vif_note_threshold: Overlap score (VIF) above which a note is added to
+            the plan. NEW in v2: v1 only recorded the score. Never tuned.
+        skew_threshold: Skewness above which a log transform is used for
+            linear models (v1 default 1.0).
+    """
+    leakage_threshold: float = 0.95
+    vif_note_threshold: float = 10.0
+    skew_threshold: float = 1.0
+
+
+DEFAULT_ENGINEER_CONFIG = EngineerConfig()
+
+
+PRESETS: dict[str, dict[str, Any]] = {
     "fast": {
         "drop_threshold": 0.8,
         "outlier_method": "zscore",

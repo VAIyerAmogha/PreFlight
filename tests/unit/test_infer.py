@@ -14,21 +14,18 @@ Tests hand-built edge cases and trap scenarios:
 - TableSchema versioned serialization and lossless JSON roundtrip
 """
 
-import json
 import time
-import pytest
+
 import pandas as pd
 
-from preflight.decisions import Decision, compute_decision_fingerprint
-from preflight.schema import TableSchema, ColumnRawMetadata
-from preflight.infer.missing import detect_missing_markers, MissingMarker
+from preflight.decisions import Decision
+from preflight.infer.missing import detect_missing_markers
 from preflight.infer.types import (
     infer_column_type,
     infer_table_types,
     to_canonical_type,
-    TypeInferenceResult,
 )
-
+from preflight.schema import TableSchema
 
 # =====================================================================
 # 1. Missing-Value Marker Detection Tests
@@ -134,9 +131,21 @@ def test_resolved_dates_does_not_abstain():
 
 
 def test_trap_embedded_units_abstains():
-    """Verify embedded units (e.g. '15 kmpl', '$12.50') flag lossy-if-coerced and abstain."""
+    """
+    Embedded units are a lossy conversion and are always flagged. Phase 7b: when every
+    value is a number with the SAME unit, the column is read as numbers with the unit
+    kept in the Decision (still flagged); mixed or partial units still abstain to text.
+    """
     unit_values = ["15 kmpl", "18 kmpl", "22 kmpl", "14 kmpl"]
     res = infer_column_type(unit_values, "fuel_efficiency")
+    assert res.needs_attention is True
+    assert any("embedded_unit" in a for a in res.anomalies)
+    assert res.evidence["embedded_unit_detected"] == "kmpl"
+    assert res.evidence["lossy_coercion"] is True
+    assert res.decision.action == res.decision.default == "cast_to_int"
+
+    partial = ["15 kmpl", "18 kmpl", "22 kmpl", "about twenty", "14 kmpl"]
+    res = infer_column_type(partial, "fuel_efficiency")
     assert res.abstained is True
     assert res.needs_attention is True
     assert res.inferred_type == "text"
@@ -250,7 +259,8 @@ def test_schema_extension_and_json_roundtrip():
     assert col_map["age"].inferred_type == "int"
     assert col_map["zip"].inferred_type == "ID"
     assert col_map["price"].inferred_type == "float"
-    assert col_map["unit"].abstained is True
+    assert col_map["unit"].inferred_type == "int"  # Phase 7b: one unit on every value
+    assert col_map["unit"].evidence["embedded_unit_detected"] == "kmpl"
 
     # Exact dictionary match
     assert reconstructed.to_dict() == schema.to_dict()

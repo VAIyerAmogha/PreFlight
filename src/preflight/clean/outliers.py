@@ -2,12 +2,15 @@
 Outlier handling and winsorization planning and execution for PreFlight v2.0.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional
+
 import pandas as pd
 
+from preflight.clean._common import need_signals
+from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.clean.config import CleanerConfig, DEFAULT_CLEANER_CONFIG
+from preflight.signals import NUMERIC_FEATURE, ColumnSignals
 
 
 def winsorize_outliers(series: pd.Series, method: str = "iqr") -> pd.Series:
@@ -46,105 +49,108 @@ def plan_outliers(
     schema: Optional[TableSchema] = None,
     target: Optional[str] = None,
     config: CleanerConfig = DEFAULT_CLEANER_CONFIG,
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+) -> list[Decision]:
     """
-    Plan outlier clipping for numeric columns.
-    Destructive check: if fraction of column rows clipped exceeds
-    config.outlier_impact_threshold, needs_attention is set to True.
-    """
-    type_map = {}
-    if schema and schema.columns:
-        for c in schema.columns:
-            eff_type = c.effective_type() or "text"
-            type_map[c.name] = eff_type.lower()
+    Plan outlier clipping (winsorization) for numeric feature columns.
 
-    decisions: List[Decision] = []
+    As in v1, a column is skipped when its (original) missing rate is above
+    config.winsorize_missing_limit or when the spread is zero. A Decision is
+    emitted even when no value currently lies outside the limits, because the
+    limits are also applied to new data. `df` is expected to be the table
+    after gap filling (v1 clipped after filling). needs_attention is set when
+    the fraction of entries clipped exceeds config.outlier_impact_threshold,
+    and the safe default is then to keep the values.
+    """
+    sigs = need_signals(df, signals, schema, target, config.cardinality_threshold)
+    decisions: list[Decision] = []
 
     for col in df.columns:
-        if col == target:
+        if col == target or col not in sigs:
             continue
-
+        sig = sigs[col]
+        if sig.kind != NUMERIC_FEATURE:
+            continue
         series = df[col]
-        col_type = type_map.get(col, "")
-        is_numeric = col_type in ("int", "float", "numeric") or pd.api.types.is_numeric_dtype(series)
-        if not is_numeric or pd.api.types.is_bool_dtype(series):
+        if not pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
             continue
-
-        missing_rate = float(series.isna().mean())
-        if missing_rate > config.winsorize_missing_limit:
-            continue
-
-        non_null = series.dropna()
-        if len(non_null) == 0:
+        if sig.missing_rate > config.winsorize_missing_limit:
             continue
 
         method = config.outlier_method
         if method == "iqr":
-            q1 = non_null.quantile(0.25)
-            q3 = non_null.quantile(0.75)
+            q1 = series.quantile(0.25)
+            q3 = series.quantile(0.75)
             iqr = q3 - q1
-            if iqr == 0:
+            if iqr == 0 or pd.isna(iqr):
                 continue
             lower_bound = float(q1 - 1.5 * iqr)
             upper_bound = float(q3 + 1.5 * iqr)
         elif method == "zscore":
-            mean = non_null.mean()
-            std = non_null.std()
-            if std == 0:
+            mean = series.mean()
+            std = series.std()
+            if std == 0 or pd.isna(std):
                 continue
             lower_bound = float(mean - 3 * std)
             upper_bound = float(mean + 3 * std)
         else:
-            continue
+            raise ValueError(f"Outlier clipping method '{method}' is not supported. Use 'iqr' or 'zscore'.")
 
-        outliers = non_null[(non_null < lower_bound) | (non_null > upper_bound)]
-        outlier_count = len(outliers)
-        if outlier_count == 0:
-            continue
-
-        impact = outlier_count / len(non_null)
-        needs_att = impact >= config.outlier_impact_threshold
-
+        non_null = series.dropna()
+        outlier_count = int(((non_null < lower_bound) | (non_null > upper_bound)).sum())
+        total = len(non_null)
+        impact = outlier_count / total if total else 0.0
+        needs_att = impact > config.outlier_impact_threshold
         entry_word = "entry" if outlier_count == 1 else "entries"
-        plain_lang = (
-            f"Limit {outlier_count} extreme {entry_word} in column '{col}' to range [{lower_bound:.2f}, {upper_bound:.2f}]."
-            if not needs_att
-            else f"Review limiting {outlier_count} extreme {entry_word} in column '{col}' ({impact:.1%} of entries)."
-        )
 
-        dec = Decision(
-            id="",
-            stage="clean",
-            kind="clip_outliers",
-            columns=[col],
-            action="clip_outliers",
-            evidence={
-                "method": method,
-                "lower_bound": round(lower_bound, 4),
-                "upper_bound": round(upper_bound, 4),
-                "outlier_count": outlier_count,
-                "total_entries": len(non_null),
-                "impact_fraction": round(impact, 4),
-                "threshold": config.outlier_impact_threshold,
-            },
-            confidence=0.95,
-            default="keep_outliers",
-            needs_attention=needs_att,
-            plain_language=plain_lang,
-            status="automatic",
+        if outlier_count == 0:
+            plain = (
+                f"Set limits [{lower_bound:.4g}, {upper_bound:.4g}] for '{col}' "
+                f"(no current entry is outside them; they apply to new data)."
+            )
+        elif needs_att:
+            plain = (
+                f"Pull {outlier_count} extreme {entry_word} in '{col}' ({impact:.1%} of entries) "
+                f"back to the range [{lower_bound:.4g}, {upper_bound:.4g}]? This is a large share, so please confirm."
+            )
+        else:
+            plain = (
+                f"Pull {outlier_count} extreme {entry_word} in '{col}' back to the range "
+                f"[{lower_bound:.4g}, {upper_bound:.4g}]."
+            )
+
+        decisions.append(
+            Decision(
+                id="",
+                stage="clean",
+                kind="clip_outliers",
+                columns=[col],
+                action="clip_outliers",
+                evidence={
+                    "method": method,
+                    "lower_bound": lower_bound,
+                    "upper_bound": upper_bound,
+                    "outlier_count": outlier_count,
+                    "total_entries": total,
+                    "impact_fraction": impact,
+                    "threshold": config.outlier_impact_threshold,
+                },
+                confidence=0.95,
+                default="keep_outliers" if needs_att else "clip_outliers",
+                needs_attention=needs_att,
+                plain_language=plain,
+                status="automatic",
+            )
         )
-        decisions.append(dec)
 
     return decisions
 
 
 def apply_outliers(
     df: pd.DataFrame,
-    decisions: List[Decision],
+    decisions: list[Decision],
 ) -> pd.DataFrame:
-    """
-    Apply outlier clipping specified by decisions.
-    """
+    """Apply outlier clipping specified by decisions."""
     df_out = df.copy()
 
     for d in decisions:
@@ -154,11 +160,11 @@ def apply_outliers(
                 lower = d.evidence.get("lower_bound")
                 upper = d.evidence.get("upper_bound")
                 if lower is not None and upper is not None:
-                    # Integer dtypes (including pandas nullable Int64) cannot hold
-                    # fractional IQR bounds; widen to a float dtype before clipping.
-                    if pd.api.types.is_integer_dtype(df_out[col].dtype):
-                        is_nullable = pd.api.types.is_extension_array_dtype(df_out[col].dtype)
-                        df_out[col] = df_out[col].astype("Float64" if is_nullable else "float64")
+                    # Nullable integer dtypes cannot hold fractional limits; widen first.
+                    if pd.api.types.is_integer_dtype(df_out[col].dtype) and pd.api.types.is_extension_array_dtype(
+                        df_out[col].dtype
+                    ):
+                        df_out[col] = df_out[col].astype("Float64")
                     df_out[col] = df_out[col].clip(lower=lower, upper=upper)
 
     return df_out

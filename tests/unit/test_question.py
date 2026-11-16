@@ -1,8 +1,8 @@
 """Question model, option bounds, previews, and trigger registry (Phase 5 / M4)."""
 
 import pytest
-
 from conftest import session_of
+
 from preflight.decisions import Decision
 from preflight.interact.question import (
     MAX_OPTIONS,
@@ -10,7 +10,6 @@ from preflight.interact.question import (
     Question,
     QuestionError,
     build_question_from_decision,
-    register_question_builder,
 )
 from preflight.interact.triggers import (
     TriggerCategory,
@@ -70,8 +69,9 @@ def test_preview_shows_what_would_go_wrong(messy_session):
 
 
 def test_preview_blank_marker_is_explained():
-    from preflight.interact.preview import BLANK, build_column_preview
     import pandas as pd
+
+    from preflight.interact.preview import BLANK, build_column_preview
 
     pv = build_column_preview(
         pd.Series(["1", "2", "oops"]),
@@ -165,28 +165,27 @@ def test_plugin_builder_lets_a_new_kind_ask(monkeypatch):
 
 # --- trigger registry -------------------------------------------------------
 
-def test_eight_categories_registered_two_are_empty_plugin_points():
+def test_all_eight_categories_are_implemented():
     reg = TriggerRegistry()
-    assert sorted(TriggerCategory.ALL_CATEGORIES) == sorted(
-        reg.implemented_categories() + reg.empty_plugin_categories()
-    )
+    assert sorted(TriggerCategory.ALL_CATEGORIES) == sorted(reg.implemented_categories())
     assert len(TriggerCategory.ALL_CATEGORIES) == 8
-    assert sorted(reg.empty_plugin_categories()) == [
-        TriggerCategory.DESTRUCTIVE_ACTION,
-        TriggerCategory.SUSPECTED_LEAKAGE,
-    ]
+    assert reg.empty_plugin_categories() == []
 
 
-def test_empty_plugin_points_never_match_and_can_be_filled():
-    reg = TriggerRegistry()
-    dec = Decision(
-        id="", stage="clean", kind="drop_column", columns=["x"], action="drop", evidence={},
-        confidence=0.5, default="keep", needs_attention=True, plain_language="x",
+def _prep(stage, kind, action, needs_attention=True):
+    return Decision(
+        id="", stage=stage, kind=kind, columns=["x"], action=action, evidence={},
+        confidence=0.9, default="keep", needs_attention=needs_attention, plain_language="x",
     )
-    assert reg.classify(dec) is None
-    reg.register(TriggerRule(TriggerCategory.DESTRUCTIVE_ACTION, "drops", lambda d, c: d.kind == "drop_column"))
-    assert reg.classify(dec) == TriggerCategory.DESTRUCTIVE_ACTION
-    assert TriggerCategory.DESTRUCTIVE_ACTION not in reg.empty_plugin_categories()
+
+
+def test_destructive_and_leakage_triggers_classify_cleaning_and_engineering_decisions():
+    reg = TriggerRegistry()
+    for kind in ("remove_duplicates", "drop_high_missingness", "drop_id", "drop_constant", "clip_outliers"):
+        assert reg.classify(_prep("clean", kind, "drop_column")) == TriggerCategory.DESTRUCTIVE_ACTION
+    assert reg.classify(_prep("engineer", "suspected_leakage", "keep_feature")) == TriggerCategory.SUSPECTED_LEAKAGE
+    # below the impact threshold nothing asks, so nothing is classified as destructive
+    assert reg.classify(_prep("clean", "drop_id", "drop_column", needs_attention=False)) is None
 
 
 def test_unrecognised_decision_raises_rather_than_misfiling():
@@ -199,7 +198,11 @@ def test_unrecognised_decision_raises_rather_than_misfiling():
 
 
 def test_implemented_triggers_classify_real_decisions(messy_session):
-    cats = {q.column: q.category for q in messy_session.questions if q.column}
+    cats = {
+        q.column: q.category
+        for q in messy_session.questions
+        if q.column and not q.decision_id.startswith(("dec_clean", "dec_engineer"))
+    }
     assert cats["mileage"] == TriggerCategory.LOSSY_COERCION
     assert cats["when"] == TriggerCategory.LOSSY_COERCION
     assert cats["id"] == TriggerCategory.AMBIGUOUS_TYPE
@@ -207,6 +210,7 @@ def test_implemented_triggers_classify_real_decisions(messy_session):
 
 def test_disguised_missing_and_high_anomaly_use_column_evidence():
     import pandas as pd
+
     from preflight.interact.triggers import TriggerContext, anomaly_rate
     from preflight.schema import ColumnRawMetadata
 

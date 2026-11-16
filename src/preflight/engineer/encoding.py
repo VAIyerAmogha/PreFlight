@@ -2,13 +2,13 @@
 Categorical encoding algorithms for PreFlight v2.0 (ordinal, one-hot, cross-fit target).
 """
 
-from typing import Any, Dict, Tuple
-import numpy as np
+from typing import Any
+
 import pandas as pd
 from sklearn.model_selection import KFold
 
 
-def ordinal_encode(series: pd.Series) -> Tuple[pd.Series, Dict[str, int]]:
+def ordinal_encode(series: pd.Series) -> tuple[pd.Series, dict[str, int]]:
     """
     Maps each unique category to an integer via a deterministic sorted mapping.
     Returns (encoded series, mapping dict) for reuse at inference time.
@@ -35,7 +35,7 @@ def target_encode_cross_fit(
     target: pd.Series,
     n_folds: int = 5,
     smoothing: float = 10.0,
-) -> Tuple[pd.Series, Dict[Any, float]]:
+) -> tuple[pd.Series, dict[Any, float]]:
     """
     Implements 5-fold cross-fit target encoding to protect against data leakage.
 

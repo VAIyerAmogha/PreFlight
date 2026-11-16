@@ -8,8 +8,6 @@ and so that task/target mismatch is detected *before* any pipeline stage runs.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import pandas as pd
 
 from preflight.types import SemanticType
@@ -29,7 +27,7 @@ _UNIQUE_FRACTION_THRESHOLD: float = 0.05
 def _validate_task_target_match(
     target_series: pd.Series,
     task: str,
-) -> Optional[str]:
+) -> str | None:
     """Detect a probable task/target mismatch and either raise or warn.
 
     Heuristic rules
@@ -109,9 +107,9 @@ def _validate_inputs(
     df: pd.DataFrame,
     target: str,
     task: str,
-    model_hint: Optional[str] = None,
-    column_types: Optional[dict[str, SemanticType]] = None,
-) -> Optional[str]:
+    model_hint: str | None = None,
+    column_types: dict[str, SemanticType] | None = None,
+) -> str | None:
     """Run all standard API boundary checks for the four public functions.
 
     Checks performed (in order)

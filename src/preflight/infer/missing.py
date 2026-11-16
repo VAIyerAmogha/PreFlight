@@ -12,10 +12,11 @@ Flags detected markers with confidence scores without auto-applying or mutating
 the underlying raw data (mutation belongs to the Clean phase).
 """
 
-from collections import Counter
-from dataclasses import asdict, dataclass
 import re
-from typing import Any, Dict, List, Optional, Sequence, Set, Union
+from collections import Counter
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -38,13 +39,13 @@ class MissingMarker:
     count: int
     frequency: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert marker to dictionary."""
         return asdict(self)
 
 
 # Standard literal string sentinels (case-insensitive)
-STANDARD_SENTINELS: Dict[str, float] = {
+STANDARD_SENTINELS: dict[str, float] = {
     "": 1.0,
     "na": 1.0,
     "n/a": 1.0,
@@ -85,7 +86,7 @@ def _safe_float(val: str) -> Optional[float]:
 def detect_missing_markers(
     values: Union[pd.Series, Sequence[Any]],
     column_name: str = "",
-) -> List[MissingMarker]:
+) -> list[MissingMarker]:
     """
     Detect missing value markers for a single column.
 
@@ -109,7 +110,7 @@ def detect_missing_markers(
         return []
 
     val_counts = Counter(raw_list)
-    detected: Dict[str, MissingMarker] = {}
+    detected: dict[str, MissingMarker] = {}
 
     # 1. Standard literal string sentinels
     for raw_val, count in val_counts.items():
@@ -140,27 +141,28 @@ def detect_missing_markers(
 
     # 2. Contextually suspicious numeric sentinels
     # Parse non-sentinel values to observe the valid distribution
-    remaining_vals = [v for v in raw_list if v not in detected]
-    parsed_nums: List[float] = []
-    num_strings: List[str] = []
+    # Each distinct value is parsed once and weighted by how often it occurs
+    # (first-appearance order, so min/max match a pass over every row).
+    remaining_count = sum(c for v, c in val_counts.items() if v not in detected)
+    parsed_counts: list[tuple[float, int]] = []
+    for v, c in val_counts.items():
+        if v not in detected:
+            f = _safe_float(v)
+            if f is not None:
+                parsed_counts.append((f, c))
+    parsed_total = sum(c for _, c in parsed_counts)
 
-    for v in remaining_vals:
-        f = _safe_float(v)
-        if f is not None:
-            parsed_nums.append(f)
-            num_strings.append(v.strip())
-
-    if len(parsed_nums) >= 3:
+    if parsed_total >= 3:
         # Check for candidates like "-1", "999", "-999", "9999", "-99"
         for cand in NUMERIC_SENTINEL_CANDIDATES:
             if cand in val_counts and cand not in detected:
                 cand_float = float(cand)
                 cand_count = val_counts[cand]
-                other_nums = [x for x in parsed_nums if x != cand_float]
+                other = [(x, c) for x, c in parsed_counts if x != cand_float]
 
-                if len(other_nums) >= 3:
-                    min_other = min(other_nums)
-                    max_other = max(other_nums)
+                if sum(c for _, c in other) >= 3:
+                    min_other = min(x for x, _ in other)
+                    max_other = max(x for x, _ in other)
 
                     # Context 1: "-1" when all other values are strictly non-negative
                     if cand == "-1" and min_other >= 0:
@@ -194,8 +196,8 @@ def detect_missing_markers(
 
     # 3. Column-specific outlier detection (implausibly high frequency or isolated non-numeric in numeric column)
     # If a column is predominantly numeric (>80% numeric), any isolated non-numeric string is suspicious
-    numeric_ratio = len(parsed_nums) / len(remaining_vals) if remaining_vals else 0.0
-    if numeric_ratio >= 0.80 and len(remaining_vals) >= 10:
+    numeric_ratio = parsed_total / remaining_count if remaining_count else 0.0
+    if numeric_ratio >= 0.80 and remaining_count >= 10:
         for raw_val, count in val_counts.items():
             if raw_val not in detected:
                 v_str = raw_val.strip()

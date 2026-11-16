@@ -4,12 +4,15 @@ Type definitions, SemanticType enum, and result containers for PreFlight v2.0.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Optional
+
 import pandas as pd
+
+from preflight.engineer.config import PRESETS, FeatureConfig
 
 if TYPE_CHECKING:
     from sklearn.pipeline import Pipeline
-    from preflight.report import Report
+
 
 
 class SemanticType(Enum):
@@ -34,7 +37,7 @@ class ColumnProfile:
     dtype: Any = "object"
     outlier_rate: Optional[float] = None
     cardinality: Optional[int] = None
-    rare_categories: Optional[List[Any]] = None
+    rare_categories: Optional[list[Any]] = None
     vif_score: Optional[float] = None
     correlation_with_target: Optional[float] = None
     mutual_info_with_target: Optional[float] = None
@@ -52,10 +55,10 @@ class ReportEntry:
     action: str
     rationale: str
     severity: str = "info"
-    before_stats: Dict[str, Any] = field(default_factory=dict)
-    after_stats: Dict[str, Any] = field(default_factory=dict)
+    before_stats: dict[str, Any] = field(default_factory=dict)
+    after_stats: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         valid_stages = {"profiler", "cleaner", "clean", "engineer"}
         valid_severities = {"info", "warning", "critical"}
         if self.stage not in valid_stages:
@@ -74,7 +77,6 @@ class PrepResult:
 
 _UNSET = object()
 
-from preflight.engineer.config import PRESETS, FeatureConfig
 
 __all__ = [
     "ColumnProfile",

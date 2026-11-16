@@ -8,11 +8,10 @@ Returns a typed HeaderResult.
 """
 
 import csv
-from dataclasses import dataclass, field
-import io
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional, Union
 
 YEAR_PATTERN = re.compile(r"^(?:1[89]|20)\d{2}$")
 DATE_PATTERNS = [
@@ -33,13 +32,13 @@ COMMENT_PREFIXES = ("#", "//", "/*", "--", "%", "rem ")
 class HeaderResult:
     """Typed result object for header and table boundary detection."""
     header_row_index: Optional[int]
-    column_names: List[str]
+    column_names: list[str]
     confidence: float
-    title_rows: List[int] = field(default_factory=list)
-    footer_rows: List[int] = field(default_factory=list)
-    blank_rows: List[int] = field(default_factory=list)
-    total_rows: List[int] = field(default_factory=list)
-    ragged_rows: List[int] = field(default_factory=list)
+    title_rows: list[int] = field(default_factory=list)
+    footer_rows: list[int] = field(default_factory=list)
+    blank_rows: list[int] = field(default_factory=list)
+    total_rows: list[int] = field(default_factory=list)
+    ragged_rows: list[int] = field(default_factory=list)
     is_ragged: bool = False
     flagged: bool = False
 
@@ -85,7 +84,7 @@ def _classify_token_type(token: str) -> str:
 
 
 def detect_header(
-    source: Union[str, Path, bytes, List[str]],
+    source: Union[str, Path, bytes, list[str]],
     delimiter: str = ",",
     quotechar: str = '"',
     escapechar: Optional[str] = None,
@@ -113,7 +112,7 @@ def detect_header(
         HeaderResult object.
     """
     # 1. Read and parse lines
-    lines: List[str]
+    lines: list[str]
     if isinstance(source, list):
         lines = source
     elif isinstance(source, bytes):
@@ -122,9 +121,9 @@ def detect_header(
         p = Path(source)
         if not p.exists():
             raise FileNotFoundError(f"Input file not found: {p}")
-        with open(p, "r", encoding=encoding, errors="replace") as f:
+        with open(p, encoding=encoding, errors="replace") as f:
             lines = [f.readline().rstrip("\r\n") for _ in range(sample_rows_count + 50)]
-            lines = [l for l in lines if l]
+            lines = [ln for ln in lines if ln]
     else:
         raise TypeError(f"Unsupported source type for header detection: {type(source)}")
 
@@ -156,7 +155,7 @@ def detect_header(
 
     # 2. Track blank rows
     blank_rows = []
-    non_blank_rows: List[Tuple[int, List[str]]] = []
+    non_blank_rows: list[tuple[int, list[str]]] = []
     for idx, row in enumerate(raw_rows):
         if not row or not any(cell.strip() for cell in row):
             blank_rows.append(idx)
@@ -287,8 +286,8 @@ def detect_header(
         detected_header_idx = candidate_orig_idx
         # Deduplicate and sanitize empty column names
         raw_names = candidate_row
-        seen_names: Set[str] = set()
-        clean_names = []
+        seen_names: set[str] = set()
+        clean_names: list[str] = []
         for i, name in enumerate(raw_names):
             n_clean = name.strip() if name.strip() else f"unnamed_{i}"
             if n_clean in seen_names:

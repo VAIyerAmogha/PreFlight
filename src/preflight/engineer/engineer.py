@@ -1,127 +1,191 @@
 """
-Feature engineering orchestration and backwards-compatible API for PreFlight v2.0.
+Feature engineering for PreFlight v2.0: plan() builds Decisions, apply() runs them.
+
+Ported from v1 `engineer.run_engineer` and the FeatureConfig generators. Column
+kinds come from the column signals (schema type plus the numbers v1's Profiler
+supplied). `plan_engineer` never changes its input: like the cleaner, it
+simulates the steps on a private copy so each step sees what the previous one
+left behind (v1 behaviour), and `apply_engineer` replays the same Decisions.
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
-import numpy as np
+from typing import Any, Callable, Optional
+
 import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
 
 from preflight.decisions import Decision
-from preflight.schema import TableSchema
-from preflight.types import ReportEntry
-from preflight.engineer.config import FeatureConfig
+from preflight.engineer.config import DEFAULT_ENGINEER_CONFIG, EngineerConfig, FeatureConfig
 from preflight.engineer.datetime import expand_datetime, generate_datetime_cyclical_features
 from preflight.engineer.encoding import one_hot_encode, ordinal_encode, target_encode_cross_fit
 from preflight.engineer.features import (
+    compute_mutual_info_with_target,
     generate_cluster_features,
     generate_interaction_features,
     generate_text_features,
+    rank_interaction_columns,
 )
 from preflight.engineer.numeric import log1p_transform, needs_log_transform, standard_scale
 from preflight.engineer.vif import plan_vif_and_leakage
+from preflight.schema import TableSchema
+from preflight.signals import (
+    CATEGORICAL_HIGH,
+    CATEGORICAL_LOW,
+    DATETIME_KINDS,
+    DATETIME_NATIVE,
+    NUMERIC_FEATURE,
+    TEXT,
+    ColumnSignals,
+    compute_signals,
+)
 
 
-class FeatureAugmenterTransformer(BaseEstimator, TransformerMixin):
-    """
-    Scikit-learn compatible transformer for feature config augmentations
-    (interactions, cyclical datetimes, clustering, text statistics, TF-IDF).
-    """
+def _target_numeric(df: pd.DataFrame, target: Optional[str]) -> Optional[pd.Series]:
+    """Target as numbers; text targets get v1's sorted-label codes."""
+    if not target or target not in df.columns:
+        return None
+    s = df[target]
+    if pd.api.types.is_numeric_dtype(s):
+        return s
+    mapping = {val: idx for idx, val in enumerate(sorted(s.dropna().unique()))}
+    return s.map(mapping)
 
-    def __init__(
-        self,
-        config: FeatureConfig,
-        profiles: Any,
-        target: str,
-        cluster_info: dict,
-        text_info: dict,
-        skipped_cols: list[str],
-    ):
-        self.config = config
-        self.profiles = profiles
-        self.target = target
-        self.cluster_info = cluster_info
-        self.text_info = text_info
-        self.skipped_cols = skipped_cols
 
-    def fit(self, X: pd.DataFrame, y=None):
-        self.is_fitted_ = True
-        return self
+def _cfg_from_evidence(ev: dict[str, Any]) -> FeatureConfig:
+    return FeatureConfig(
+        interaction_types=list(ev.get("interaction_types", ["ratio", "product"])),
+        datetime_cyclical=bool(ev.get("cyclical", False)),
+        datetime_deltas=bool(ev.get("deltas", False)),
+        datetime_reference_col=ev.get("reference_col"),
+        cluster_k=ev.get("cluster_k", "auto"),
+        cluster_features=list(ev["features"]) if "features" in ev else "numeric_only",
+        text_features=True,
+        text_tfidf=bool(ev.get("tfidf", False)),
+        text_tfidf_top_k=int(ev.get("tfidf_top_k", 20)),
+    )
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        X_out = X.copy()
-        numeric_cols = [
-            p.name for p in self.profiles
-            if getattr(p, "semantic_type", None) == "NUMERIC_FEATURE"
-            or getattr(getattr(p, "semantic_type", None), "name", "") == "NUMERIC_FEATURE"
-            or (isinstance(p, str) and p in X_out.columns and pd.api.types.is_numeric_dtype(X_out[p]))
-        ]
 
-        if self.config.interactions:
-            X_int, _ = generate_interaction_features(X_out, numeric_cols, self.target, self.config)
-            for col in X_int.columns.difference(X_out.columns):
-                if col not in self.skipped_cols:
-                    X_out[col] = X_int[col]
+def _apply_one(
+    work: pd.DataFrame,
+    d: Decision,
+    specs: dict[str, Any],
+    target: Optional[str],
+    target_numeric: Optional[pd.Series],
+    df_in: pd.DataFrame,
+) -> pd.DataFrame:
+    """Apply a single Decision to `work` (the shared core of plan simulation and apply)."""
+    if not d.columns:
+        return work
+    col = d.columns[0]
+    act = d.action
+    if act in ("keep_feature",):
+        return work
 
-        dt_cols = [
-            p.name for p in self.profiles
-            if getattr(p, "semantic_type", None) in ("DATETIME_NATIVE", "DATETIME_STRING")
-            or getattr(getattr(p, "semantic_type", None), "name", "") in ("DATETIME_NATIVE", "DATETIME_STRING")
-            or (isinstance(p, str) and p in X_out.columns and pd.api.types.is_datetime64_any_dtype(X_out[p]))
-        ]
-        if self.config.datetime_cyclical or self.config.datetime_deltas or self.config.datetime_reference_col:
-            X_dt, _ = generate_datetime_cyclical_features(X_out, dt_cols, self.config)
-            for col in X_dt.columns.difference(X_out.columns):
-                if col not in self.skipped_cols:
-                    X_out[col] = X_dt[col]
+    # --- column-level transforms -------------------------------------------
+    if d.kind in ("expand_datetime", "ordinal_encode", "one_hot_encode", "target_encode",
+                  "log_transform", "scale_numeric", "suspected_leakage"):
+        if col not in work.columns or col == target:
+            return work
+        if act == "expand_datetime":
+            expanded = expand_datetime(work[col])
+            work = work.drop(columns=[col]).join(expanded)
+            specs[col] = {"transform": "expand_datetime"}
+        elif act == "ordinal_encode":
+            encoded, mapping = ordinal_encode(work[col])
+            work[col] = encoded
+            specs[col] = {"transform": "ordinal_encode", "mapping": mapping}
+        elif act == "one_hot_encode":
+            dummies = one_hot_encode(work[col])
+            work = work.drop(columns=[col]).join(dummies)
+            specs[col] = {"transform": "one_hot_encode", "columns": list(dummies.columns)}
+        elif act == "target_encode_cross_fit":
+            if target_numeric is not None:
+                encoded, te_mapping = target_encode_cross_fit(work[col], target_numeric)
+                work[col] = encoded
+                specs[col] = {"transform": "target_encode_cross_fit", "mapping": te_mapping}
+        elif act == "log1p_transform":
+            work[col] = log1p_transform(work[col])
+            specs[col] = {"transform": "linear_numeric", "log1p": True,
+                          "scale_params": {"mean": 0.0, "std": 1.0}}
+        elif act == "standard_scale":
+            scaled, params = standard_scale(work[col])
+            work[col] = scaled
+            spec = specs.get(col, {"transform": "linear_numeric", "log1p": False})
+            spec["scale_params"] = params
+            specs[col] = spec
+        elif act == "drop_leaky_feature":
+            work = work.drop(columns=[col])
+            specs[col] = {"transform": "drop_leaky"}
+        return work
 
-        if self.config.clustering and self.cluster_info and "model" in self.cluster_info:
-            model = self.cluster_info["model"]
-            features = self.cluster_info["features"]
-            X_clust = X_out[features].fillna(0)
-            if "cluster_label" not in self.skipped_cols:
-                X_out["cluster_label"] = model.predict(X_clust)
-            if "cluster_dist_to_centroid" not in self.skipped_cols:
-                dists = model.transform(X_clust)
-                X_out["cluster_dist_to_centroid"] = dists.min(axis=1)
+    # --- generated features (FeatureConfig) --------------------------------
+    ev = d.evidence
+    if d.kind == "create_interactions" and act == "create_interactions":
+        cfg = _cfg_from_evidence(ev)
+        out, _ = generate_interaction_features(work, ev.get("top_columns", []), cfg)
+        new = [c for c in out.columns if c not in work.columns]
+        for c in new:
+            work[c] = out[c]
+        specs["_interactions"] = {
+            "top_columns": list(ev.get("top_columns", [])),
+            "interaction_types": list(cfg.interaction_types),
+            "created": new,
+        }
+    elif d.kind == "create_datetime_features" and act == "create_datetime_features":
+        cfg = _cfg_from_evidence(ev)
+        dt_df, _ = generate_datetime_cyclical_features(df_in, ev.get("columns", []), cfg)
+        new = [c for c in dt_df.columns.difference(df_in.columns) if c not in work.columns]
+        work = work.join(dt_df[new])
+        specs["_datetime"] = {
+            "columns": list(ev.get("columns", [])),
+            "cyclical": cfg.datetime_cyclical,
+            "deltas": cfg.datetime_deltas,
+            "reference_col": cfg.datetime_reference_col,
+            "created": new,
+        }
+    elif d.kind == "create_cluster_features" and act == "create_cluster_features":
+        cfg = _cfg_from_evidence(ev)
+        out, _, fitted = generate_cluster_features(work, ev.get("features", []), cfg)
+        created = []
+        for c in ("cluster_label", "cluster_dist_to_centroid"):
+            if c in out.columns and c not in work.columns:
+                work[c] = out[c]
+                created.append(c)
+        if fitted:
+            specs["_clustering"] = {"transform": "cluster_features", "fitted_info": fitted, "created": created}
+    elif d.kind == "create_text_features" and act == "create_text_features":
+        cfg = _cfg_from_evidence(ev)
+        out, reps, info = generate_text_features(
+            work, ev.get("columns", []), cfg, original_cols=set(df_in.columns)
+        )
+        created = [c for c in out.columns if c not in work.columns]
+        for c in created:
+            work[c] = out[c]
+        skipped = [r["column"] for r in reps if r.get("action") == "skipped_duplicate_feature"]
+        specs["_text_features"] = {
+            "transform": "text_features",
+            "columns": list(ev.get("columns", [])),
+            "tfidf": cfg.text_tfidf,
+            "fitted_info": info,
+            "created": created,
+            "skipped": skipped,
+        }
+    return work
 
-        if self.config.text_features:
-            text_cols = [
-                p.name for p in self.profiles
-                if getattr(p, "semantic_type", None) == "TEXT"
-                or getattr(getattr(p, "semantic_type", None), "name", "") == "TEXT"
-                or (isinstance(p, str) and p in X_out.columns and pd.api.types.is_string_dtype(X_out[p]))
-            ]
-            for col in text_cols:
-                if col not in X_out.columns:
-                    continue
-                series = X_out[col].fillna("").astype(str)
-                for feat in ["char_length", "word_count", "has_text"]:
-                    new_col = f"{col}_{feat}"
-                    if new_col not in self.skipped_cols:
-                        if feat == "char_length":
-                            X_out[new_col] = series.str.len()
-                        elif feat == "word_count":
-                            X_out[new_col] = series.str.split().str.len()
-                        elif feat == "has_text":
-                            X_out[new_col] = (series.str.strip().str.len() > 0).astype(int)
 
-                if self.config.text_tfidf and self.text_info and "vectorizers" in self.text_info:
-                    vec = self.text_info["vectorizers"].get(col)
-                    if vec:
-                        tfidf_matrix = vec.transform(series)
-                        feature_names = vec.get_feature_names_out()
-                        tfidf_df = pd.DataFrame(
-                            tfidf_matrix.toarray(),
-                            columns=[f"{col}_tfidf_{term}" for term in feature_names],
-                            index=series.index,
-                        )
-                        for tcol in tfidf_df.columns:
-                            if tcol not in self.skipped_cols:
-                                X_out[tcol] = tfidf_df[tcol]
-
-        return X_out
+def _mk(kind: str, col: list[str], action: str, evidence: dict[str, Any], plain: str,
+        confidence: float = 1.0, default: Optional[str] = None) -> Decision:
+    return Decision(
+        id="",
+        stage="engineer",
+        kind=kind,
+        columns=col,
+        action=action,
+        evidence=evidence,
+        confidence=confidence,
+        default=default or action,
+        needs_attention=False,
+        plain_language=plain,
+        status="automatic",
+    )
 
 
 def plan_engineer(
@@ -132,466 +196,157 @@ def plan_engineer(
     cardinality_threshold: int = 20,
     feature_config: Optional[FeatureConfig] = None,
     task: str = "regression",
-) -> List[Decision]:
+    signals: Optional[dict[str, ColumnSignals]] = None,
+    config: EngineerConfig = DEFAULT_ENGINEER_CONFIG,
+) -> list[Decision]:
     """
-    Plan feature engineering transformations without mutating data.
-    """
-    if model_hint not in ("tree", "linear"):
-        raise ValueError(f"model_hint must be 'tree' or 'linear', got '{model_hint}'.")
+    Plan feature engineering without changing `df`.
 
-    type_map = {}
-    if schema and schema.columns:
-        for c in schema.columns:
-            eff_type = c.effective_type() or "text"
-            type_map[c.name] = eff_type.lower()
-
-    decisions: List[Decision] = []
-
-    # Identify column semantic subsets
-    numeric_cols = []
-    categorical_cols = []
-    datetime_cols = []
-    text_cols = []
-
-    for col in df.columns:
-        if col == target:
-            continue
-        series = df[col]
-        col_type = type_map.get(col, "")
-        if col.endswith("_missing") or col_type == "boolean" or pd.api.types.is_bool_dtype(series):
-            # Passthrough boolean
-            continue
-        if col_type == "constant":
-            continue
-        if col_type in ("datetime", "date") or pd.api.types.is_datetime64_any_dtype(series):
-            datetime_cols.append(col)
-        elif col_type in ("int", "float", "numeric") or pd.api.types.is_numeric_dtype(series):
-            numeric_cols.append(col)
-        elif col_type == "text":
-            text_cols.append(col)
-        else:
-            categorical_cols.append(col)
-
-    # 1. Datetime expansion
-    for col in datetime_cols:
-        dec = Decision(
-            id="",
-            stage="engineer",
-            kind="expand_datetime",
-            columns=[col],
-            action="expand_datetime",
-            evidence={"source_column": col},
-            confidence=1.0,
-            default="expand_datetime",
-            needs_attention=False,
-            plain_language=f"Extract calendar parts (year, month, day, day of week, hour, weekend) from '{col}'.",
-            status="automatic",
-        )
-        decisions.append(dec)
-
-    # 2. Categorical encoding
-    for col in categorical_cols:
-        n_unique = int(df[col].dropna().nunique())
-        if n_unique >= cardinality_threshold:
-            # Target encode cross-fit
-            dec = Decision(
-                id="",
-                stage="engineer",
-                kind="target_encode",
-                columns=[col],
-                action="target_encode_cross_fit",
-                evidence={"unique_count": n_unique, "threshold": cardinality_threshold},
-                confidence=0.95,
-                default="target_encode_cross_fit",
-                needs_attention=False,
-                plain_language=f"Replace categories in '{col}' with target group rates using 5-fold cross-fitting.",
-                status="automatic",
-            )
-            decisions.append(dec)
-        else:
-            if model_hint == "tree":
-                dec = Decision(
-                    id="",
-                    stage="engineer",
-                    kind="ordinal_encode",
-                    columns=[col],
-                    action="ordinal_encode",
-                    evidence={"unique_count": n_unique, "model_hint": model_hint},
-                    confidence=1.0,
-                    default="ordinal_encode",
-                    needs_attention=False,
-                    plain_language=f"Encode categories in '{col}' as ordered integers for tree models.",
-                    status="automatic",
-                )
-                decisions.append(dec)
-            else:
-                dec = Decision(
-                    id="",
-                    stage="engineer",
-                    kind="one_hot_encode",
-                    columns=[col],
-                    action="one_hot_encode",
-                    evidence={"unique_count": n_unique, "model_hint": model_hint},
-                    confidence=1.0,
-                    default="one_hot_encode",
-                    needs_attention=False,
-                    plain_language=f"Expand categories in '{col}' into separate indicator columns for linear models.",
-                    status="automatic",
-                )
-                decisions.append(dec)
-
-    # 3. Numeric transforms (linear model scaling / log1p)
-    if model_hint == "linear":
-        for col in numeric_cols:
-            series = df[col]
-            needs_log = needs_log_transform(series)
-            if needs_log:
-                dec = Decision(
-                    id="",
-                    stage="engineer",
-                    kind="log_transform",
-                    columns=[col],
-                    action="log1p_transform",
-                    evidence={"skewed": True},
-                    confidence=0.95,
-                    default="log1p_transform",
-                    needs_attention=False,
-                    plain_language=f"Apply logarithmic transformation to skewed numerical column '{col}'.",
-                    status="automatic",
-                )
-                decisions.append(dec)
-
-            scale_dec = Decision(
-                id="",
-                stage="engineer",
-                kind="scale_numeric",
-                columns=[col],
-                action="standard_scale",
-                evidence={"model_hint": model_hint},
-                confidence=1.0,
-                default="standard_scale",
-                needs_attention=False,
-                plain_language=f"Standardize numerical column '{col}' to zero mean and unit variance.",
-                status="automatic",
-            )
-            decisions.append(scale_dec)
-
-    # 4. Multicollinearity (VIF) & Leakage Detection
-    vif_leakage_decs = plan_vif_and_leakage(df, numeric_cols, target=target)
-    decisions.extend(vif_leakage_decs)
-
-    return decisions
-
-
-def apply_engineer(
-    df: pd.DataFrame,
-    decisions: List[Decision],
-    target: Optional[str] = None,
-    model_hint: str = "tree",
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """
-    Apply planned engineering transformations to DataFrame.
-    """
-    df_out = df.copy()
-    specs: Dict[str, Any] = {}
-
-    target_numeric = None
-    if target and target in df_out.columns:
-        target_series = df_out[target].copy()
-        if not pd.api.types.is_numeric_dtype(target_series):
-            unique_vals = sorted(target_series.dropna().unique())
-            mapping = {val: idx for idx, val in enumerate(unique_vals)}
-            target_numeric = target_series.map(mapping)
-        else:
-            target_numeric = target_series
-
-    for d in decisions:
-        if not d.columns:
-            continue
-        col = d.columns[0]
-        if col not in df_out.columns or col == target:
-            continue
-
-        act = d.action
-        if act == "expand_datetime":
-            expanded = expand_datetime(df_out[col])
-            df_out = df_out.drop(columns=[col]).join(expanded)
-            specs[col] = {"transform": "expand_datetime"}
-
-        elif act == "ordinal_encode":
-            encoded, mapping = ordinal_encode(df_out[col])
-            df_out[col] = encoded
-            specs[col] = {"transform": "ordinal_encode", "mapping": mapping}
-
-        elif act == "one_hot_encode":
-            dummies = one_hot_encode(df_out[col])
-            df_out = df_out.drop(columns=[col]).join(dummies)
-            specs[col] = {"transform": "one_hot_encode", "columns": list(dummies.columns)}
-
-        elif act == "target_encode_cross_fit":
-            if target_numeric is not None:
-                encoded, mapping = target_encode_cross_fit(df_out[col], target_numeric)
-                df_out[col] = encoded
-                specs[col] = {"transform": "target_encode_cross_fit", "mapping": mapping}
-
-        elif act == "log1p_transform":
-            df_out[col] = log1p_transform(df_out[col])
-            specs[col] = {"log1p": True}
-
-        elif act == "standard_scale":
-            scaled, params = standard_scale(df_out[col])
-            df_out[col] = scaled
-            if col not in specs:
-                specs[col] = {}
-            specs[col].update({"transform": "linear_numeric", "scale_params": params})
-
-        elif act == "drop_leaky_feature":
-            df_out = df_out.drop(columns=[col])
-            specs[col] = {"transform": "drop_leaky"}
-
-    return df_out, specs
-
-
-def run_engineer(
-    df: pd.DataFrame,
-    profiles: Any,
-    target: str,
-    model_hint: str,
-    cardinality_threshold: int = 20,
-    feature_config: Optional[FeatureConfig] = None,
-) -> Tuple[pd.DataFrame, List[Any], Dict[str, Any]]:
-    """
-    Backwards-compatible run_engineer API supporting v1 tests.
+    `signals` are the column signals computed before cleaning (v1 used its
+    Profiler output the same way); when omitted they are computed from `df`.
     """
     if model_hint not in ("tree", "linear"):
         raise ValueError(f"The model_hint must be exactly 'tree' or 'linear', but you provided '{model_hint}'.")
 
-    df_out = df.copy()
-    original_target_series = None
-    if target in df_out.columns:
-        original_target_series = df_out[target].copy()
+    sigs = signals
+    if sigs is None:
+        sigs = compute_signals(
+            df, schema=schema, target=target, task=None, cardinality_threshold=cardinality_threshold
+        )
+    sigs = {c: s for c, s in sigs.items() if c != target}
 
-    # Convert profiles to mock TableSchema
-    from preflight.schema import ColumnRawMetadata, TableSchema
-    cols = []
-    if isinstance(profiles, list):
-        for idx, p in enumerate(profiles):
-            st = getattr(p, "semantic_type", None)
-            st_val = getattr(st, "value", str(st)) if st else "text"
-            col_name = getattr(p, "name", None) or (p.columns[0] if getattr(p, "columns", None) else f"col_{idx}")
-            cols.append(ColumnRawMetadata(name=col_name, position=idx, inferred_type=st_val))
-    schema = TableSchema(columns=cols)
+    decisions: list[Decision] = list(plan_vif_and_leakage(df, sigs, target=target, config=config))
 
-    decisions = plan_engineer(
-        df_out,
-        schema=schema,
-        target=target,
-        model_hint=model_hint,
-        cardinality_threshold=cardinality_threshold,
-        feature_config=feature_config,
-    )
+    work = df.copy()
+    specs: dict[str, Any] = {}
+    target_numeric = _target_numeric(df, target)
 
-    df_out, specs = apply_engineer(df_out, decisions, target=target, model_hint=model_hint)
+    def emit(d: Decision) -> None:
+        nonlocal work
+        decisions.append(d)
+        work = _apply_one(work, d, specs, target, target_numeric, df)
 
-    reports = []
-    for d in decisions:
-        reports.append({
-            "stage": "engineer",
-            "column": d.columns[0] if d.columns else "dataset",
-            "action": d.action,
-            "rationale": d.plain_language,
-            "severity": "info",
-        })
+    for col, sig in sigs.items():
+        if col not in work.columns:
+            continue
+        kind = sig.kind
 
-    # Optional FeatureConfig augmentations
+        if kind == DATETIME_NATIVE:
+            emit(_mk("expand_datetime", [col], "expand_datetime", {"source_column": col},
+                     f"Split date column '{col}' into year, month, day, weekday, hour and weekend parts."))
+
+        elif kind == CATEGORICAL_LOW:
+            n_unique = int(df[col].dropna().nunique())
+            if model_hint == "tree":
+                emit(_mk("ordinal_encode", [col], "ordinal_encode",
+                         {"unique_count": n_unique, "model_hint": model_hint},
+                         f"Turn the categories in '{col}' into whole numbers (one number per category)."))
+            else:
+                emit(_mk("one_hot_encode", [col], "one_hot_encode",
+                         {"unique_count": n_unique, "model_hint": model_hint},
+                         f"Replace '{col}' with one yes/no column per category."))
+
+        elif kind == CATEGORICAL_HIGH:
+            if target_numeric is None:
+                continue
+            n_unique = int(df[col].dropna().nunique())
+            emit(_mk("target_encode", [col], "target_encode_cross_fit",
+                     {"unique_count": n_unique, "threshold": cardinality_threshold, "folds": 5},
+                     f"Replace the many categories in '{col}' with the typical outcome for each category, "
+                     f"worked out on separate parts of the data so the answer does not leak in.",
+                     confidence=0.95))
+
+        elif kind == NUMERIC_FEATURE and model_hint == "linear":
+            if needs_log_transform(work[col], skew_threshold=config.skew_threshold):
+                emit(_mk("log_transform", [col], "log1p_transform", {"skewed": True},
+                         f"Compress the long tail of '{col}' with a logarithm.", confidence=0.95))
+            emit(_mk("scale_numeric", [col], "standard_scale", {"model_hint": model_hint},
+                     f"Rescale '{col}' to a common scale (average 0, spread 1)."))
+
     if feature_config is not None:
-        numeric_cols = [c.name for c in schema.columns if c.inferred_type in ("NUMERIC_FEATURE", "int", "float", "numeric")]
-        dt_cols = [c.name for c in schema.columns if c.inferred_type in ("DATETIME_NATIVE", "DATETIME_STRING", "datetime")]
-        text_cols = [c.name for c in schema.columns if c.inferred_type in ("TEXT", "text")]
+        _plan_generated(df, work, sigs, feature_config, target, task, emit)
 
-        if feature_config.interactions:
-            df_out, rep = generate_interaction_features(df_out, numeric_cols, target, feature_config)
-            reports.extend(rep)
-
-        if feature_config.datetime_cyclical or feature_config.datetime_deltas or feature_config.datetime_reference_col:
-            dt_df, rep = generate_datetime_cyclical_features(df, dt_cols, feature_config)
-            new_cols = dt_df.columns.difference(df.columns).difference(df_out.columns)
-            df_out = df_out.join(dt_df[new_cols])
-            reports.extend(rep)
-
-        if feature_config.clustering:
-            df_out, rep, fitted = generate_cluster_features(df_out, numeric_cols, feature_config)
-            reports.extend(rep)
-            if fitted:
-                specs["_clustering"] = {"transform": "cluster_features", "fitted_info": fitted}
-
-        if feature_config.text_features:
-            df_out, rep, text_info = generate_text_features(df_out, text_cols, feature_config)
-            reports.extend(rep)
-            if text_info and text_info.get("vectorizers"):
-                specs["_text_features"] = {"transform": "text_features", "fitted_info": text_info}
-
-    if original_target_series is not None:
-        df_out[target] = original_target_series
-
-    rep_entries = [
-        ReportEntry(
-            stage="engineer",
-            column=r.get("column", ""),
-            action=r.get("action", ""),
-            rationale=r.get("summary", ""),
-            severity="info",
-        )
-        for r in reports
-    ]
-    return df_out, rep_entries, specs
+    return decisions
 
 
-def add_features(
-    result: Any,
-    feature_config: FeatureConfig,
-    profiles: Optional[Any] = None,
+def _plan_generated(
+    df: pd.DataFrame,
+    work: pd.DataFrame,
+    sigs: dict[str, ColumnSignals],
+    cfg: FeatureConfig,
+    target: Optional[str],
+    task: str,
+    emit: Callable[[Decision], None],
+) -> None:
+    """Plan the opt-in generated features, in v1 order: combinations, dates, clusters, text."""
+    if cfg.interactions:
+        scored = dict(sigs)
+        if target and target in df.columns:
+            for name, s in scored.items():
+                if s.kind == NUMERIC_FEATURE and s.mutual_info_with_target is None and name in df.columns:
+                    s.mutual_info_with_target = compute_mutual_info_with_target(df[name], df[target], task=task)
+        top = rank_interaction_columns(scored, list(work.columns), cfg)
+        if len(top) >= 2:
+            before = set(work.columns)
+            out, _ = generate_interaction_features(work, top, cfg)
+            new = [c for c in out.columns if c not in before]
+            emit(_mk("create_interactions", top, "create_interactions",
+                     {"top_columns": top, "interaction_types": list(cfg.interaction_types), "new_columns": new},
+                     f"Create {len(new)} new columns by combining the {len(top)} most useful number columns "
+                     f"({', '.join(cfg.interaction_types)}).", confidence=0.9))
+
+    if cfg.datetime_cyclical or cfg.datetime_deltas or cfg.datetime_reference_col:
+        dt_cols = [c for c, s in sigs.items() if s.kind in DATETIME_KINDS and c in df.columns]
+        if dt_cols:
+            ev = {"columns": dt_cols, "cyclical": cfg.datetime_cyclical, "deltas": cfg.datetime_deltas,
+                  "reference_col": cfg.datetime_reference_col}
+            dt_df, _ = generate_datetime_cyclical_features(df, dt_cols, cfg)
+            new = [c for c in dt_df.columns.difference(df.columns) if c not in work.columns]
+            if new:
+                ev["new_columns"] = new
+                emit(_mk("create_datetime_features", dt_cols, "create_datetime_features", ev,
+                         f"Create {len(new)} extra date columns (seasonal position, time between dates).",
+                         confidence=0.9))
+
+    if cfg.clustering:
+        if cfg.cluster_features == "numeric_only":
+            feats = [c for c, s in sigs.items() if s.kind == NUMERIC_FEATURE and c in work.columns]
+        else:
+            feats = [f for f in cfg.cluster_features if f in work.columns]
+        if feats and len(work) >= 2:
+            new = [c for c in ("cluster_label", "cluster_dist_to_centroid") if c not in work.columns]
+            if new:
+                emit(_mk("create_cluster_features", feats, "create_cluster_features",
+                         {"features": feats, "cluster_k": cfg.cluster_k, "new_columns": new},
+                         f"Group rows that look alike using {len(feats)} number columns, and add each row's "
+                         f"group and its distance from the group's centre.", confidence=0.85))
+
+    if cfg.text_features:
+        text_cols = [c for c, s in sigs.items() if s.kind == TEXT and c in work.columns]
+        if text_cols:
+            emit(_mk("create_text_features", text_cols, "create_text_features",
+                     {"columns": text_cols, "tfidf": cfg.text_tfidf, "tfidf_top_k": cfg.text_tfidf_top_k},
+                     f"Add simple length and word-count columns for the long-text column(s) "
+                     f"{', '.join(repr(c) for c in text_cols)}"
+                     + (f", plus the {cfg.text_tfidf_top_k} most telling words." if cfg.text_tfidf else "."),
+                     confidence=0.9))
+
+
+def apply_engineer(
+    df: pd.DataFrame,
+    decisions: list[Decision],
     target: Optional[str] = None,
-) -> Any:
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
-    Applies FeatureConfig-driven feature engineering to an already prepared PrepResult.
-    Fixes Pandas4Warning at v1 engineer.py:698.
+    Apply engineering Decisions. Returns the new table and the fitted state
+    (mappings, scale parameters, cluster model, word lists) keyed like v1's specs.
+    The target column is carried through unchanged.
     """
-    if getattr(result, "pipeline", None) is None:
-        raise ValueError("You can only add features if you have already run prepare() to create a pipeline.")
-
-    profiles_to_use = profiles if profiles is not None else getattr(result.report, "profiles", getattr(result.report, "_profiles", None))
-    target_to_use = target if target is not None else getattr(result.report, "target", getattr(result.report, "_target", None))
-
-    if profiles_to_use is None or target_to_use is None:
-        raise ValueError("We need column profiles and a target name to add features.")
-
-    all_off = not (
-        feature_config.interactions
-        or feature_config.datetime_cyclical
-        or feature_config.datetime_deltas
-        or feature_config.datetime_reference_col
-        or feature_config.clustering
-        or feature_config.text_features
-    )
-
-    if all_off:
-        return result
-
-    df_out = result.df.copy()
-    new_entries = []
-    skipped_cols = []
-    cluster_info = {}
-    text_info = {}
-
-    df_raw = getattr(result.report, "_df", None)
-    if df_raw is None:
-        df_raw = df_out.copy()
-    else:
-        df_raw = df_raw.copy()
-
-    numeric_cols = [p.name for p in profiles_to_use if getattr(p, "semantic_type", None) == "NUMERIC_FEATURE" or getattr(getattr(p, "semantic_type", None), "name", "") == "NUMERIC_FEATURE"]
-    dt_cols = [p.name for p in profiles_to_use if getattr(p, "semantic_type", None) in ("DATETIME_NATIVE", "DATETIME_STRING") or getattr(getattr(p, "semantic_type", None), "name", "") in ("DATETIME_NATIVE", "DATETIME_STRING")]
-    text_cols = [p.name for p in profiles_to_use if getattr(p, "semantic_type", None) == "TEXT" or getattr(getattr(p, "semantic_type", None), "name", "") == "TEXT"]
-
-    # 1. Interactions
-    if feature_config.interactions:
-        df_int, reps = generate_interaction_features(df_out, numeric_cols, target_to_use, feature_config)
-        for col in df_int.columns.difference(df_out.columns):
-            if col in result.df.columns:
-                skipped_cols.append(col)
-                new_entries.append({
-                    "stage": "engineer",
-                    "column": col,
-                    "action": "skipped_duplicate_feature",
-                    "rationale": f"Skipped generated interaction feature {col} due to name collision.",
-                    "severity": "warning",
-                })
-            else:
-                df_out[col] = df_int[col]
-        for rep in reps:
-            if rep["column"] not in skipped_cols:
-                new_entries.append(rep)
-
-    # 2. Datetimes
-    if feature_config.datetime_cyclical or feature_config.datetime_deltas or feature_config.datetime_reference_col:
-        df_dt, reps = generate_datetime_cyclical_features(df_raw, dt_cols, feature_config)
-        for col in df_dt.columns.difference(df_raw.columns):
-            if col in result.df.columns:
-                skipped_cols.append(col)
-                new_entries.append({
-                    "stage": "engineer",
-                    "column": col,
-                    "action": "skipped_duplicate_feature",
-                    "rationale": f"Skipped generated datetime feature {col} due to name collision.",
-                    "severity": "warning",
-                })
-            else:
-                df_out[col] = df_dt[col]
-        for rep in reps:
-            if rep["column"] not in skipped_cols:
-                new_entries.append(rep)
-
-    # 3. Clustering
-    if feature_config.clustering:
-        df_clust, reps, cluster_info = generate_cluster_features(df_out, numeric_cols, feature_config)
-        for col in ["cluster_label", "cluster_dist_to_centroid"]:
-            if col in df_clust.columns:
-                if col in result.df.columns:
-                    skipped_cols.append(col)
-                    new_entries.append({
-                        "stage": "engineer",
-                        "column": col,
-                        "action": "skipped_duplicate_feature",
-                        "rationale": f"Skipped generated cluster feature {col} due to name collision.",
-                        "severity": "warning",
-                    })
-                else:
-                    df_out[col] = df_clust[col]
-        for rep in reps:
-            if rep["column"] not in skipped_cols:
-                new_entries.append(rep)
-
-    # 4. Text Features (with Pandas4Warning fix at line 698)
-    if feature_config.text_features:
-        original_input_cols = set(df_raw.columns)
-        df_text, reps, text_info = generate_text_features(
-            df_out, text_cols, feature_config, original_cols=original_input_cols
-        )
-        for col in df_text.columns.difference(df_out.columns):
-            df_out[col] = df_text[col]
-
-        _basic_feats = ["char_length", "word_count", "has_text"]
-        for orig_col in list(original_input_cols - set(df_out.columns)):
-            # Fix Pandas4Warning: use include=['object', 'string']
-            for str_col in df_raw.select_dtypes(include=["object", "string"]).columns:
-                if orig_col in (f"{str_col}_{f}" for f in _basic_feats):
-                    df_out[orig_col] = df_raw[orig_col]
-                    already_logged = any(
-                        r.get("action") == "skipped_duplicate_feature" and r.get("column") == orig_col
-                        for r in reps
-                    )
-                    if not already_logged:
-                        reps.append({
-                            "stage": "engineer",
-                            "column": orig_col,
-                            "action": "skipped_duplicate_feature",
-                            "rationale": f"Skipped generated text feature {orig_col} due to name collision with pre-existing column.",
-                            "severity": "warning",
-                        })
-                    break
-
-        for rep in reps:
-            new_entries.append(rep)
-            if rep.get("action") == "skipped_duplicate_feature":
-                skipped_cols.append(rep.get("column"))
-
-    # Construct pipeline with augmenter
-    augmenter = FeatureAugmenterTransformer(
-        feature_config, profiles_to_use, target_to_use, cluster_info, text_info, skipped_cols
-    )
-    augmenter.is_fitted_ = True
-    new_pipeline = Pipeline(steps=result.pipeline.steps + [("augmenter", augmenter)])
-
-    from preflight.types import PrepResult
-    return PrepResult(df=df_out, pipeline=new_pipeline, report=getattr(result, "report", None))
+    work = df.copy()
+    specs: dict[str, Any] = {}
+    target_numeric = _target_numeric(df, target)
+    for d in decisions:
+        if d.stage != "engineer":
+            continue
+        work = _apply_one(work, d, specs, target, target_numeric, df)
+    return work, specs

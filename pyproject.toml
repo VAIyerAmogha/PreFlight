@@ -21,14 +21,13 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "License :: OSI Approved :: MIT License"
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 dependencies = [
     "scikit-learn",
@@ -51,11 +50,84 @@ notebook = ["ipywidgets>=8"]
 dev = [
     "pytest",
     "pypdf>=5.0.0",
+    # hypothesis: MPL-2.0 licence. Property-based/fuzz testing for the hardening suite.
+    "hypothesis",
+    # pytest-cov: MIT licence. Coverage reporting integration for pytest.
+    "pytest-cov",
+    # ruff: MIT licence. Linter/formatter.
+    "ruff",
+    # mypy: MIT licence. Static type checker.
+    "mypy",
+    # nox: Apache-2.0 licence. Test/lint session automation across interpreters.
+    "nox",
+    # pre-commit: MIT licence. Git hook manager for running lint/type checks pre-commit.
+    "pre-commit",
+    # pytest-xdist: MIT licence. Runs the per-file corpus tests in parallel (-n 4 --dist loadgroup).
+    "pytest-xdist",
+    # pytest-timeout: MIT licence. Per-test time limit for the corpus and degenerate-input tests.
+    "pytest-timeout",
 ]
 
 [project.urls]
 Homepage = "https://github.com/VAIyerAmogha/PreFlight"
 Repository = "https://github.com/VAIyerAmogha/PreFlight"
+Documentation = "https://github.com/VAIyerAmogha/PreFlight#readme"
+Issues = "https://github.com/VAIyerAmogha/PreFlight/issues"
+Changelog = "https://github.com/VAIyerAmogha/PreFlight/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/preflight"]
+
+# The sdist ships only what is needed to build, test and read the package.
+# Corpus data, dev scripts and internal notes stay in the git repository only.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/examples",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+exclude = ["tests/corpus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# UP007/UP045/UP035: the code keeps typing.Optional/Union/List spelling; switching every
+# annotation to PEP 604 is a style rewrite, not a 3.10 requirement.
+# B905: zip(strict=) would turn silent length mismatches into errors; not applied blindly.
+ignore = ["E501", "UP007", "UP045", "UP035", "B905"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["preflight"]
+# tests import their shared helpers as top-level modules (tests/unit/conftest.py).
+known-third-party = ["conftest"]
+
+[tool.mypy]
+# Matches the requires-python floor (>=3.10).
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+# Minimal stubs for the sklearn / reportlab classes PreFlight subclasses (see typings/README.md)
+mypy_path = "typings"
+
+[[tool.mypy.overrides]]
+module = "preflight.*"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The corpus suites (tests/corpus, 254 files each) are slow and are skipped by default.
+# Run them with: pytest -m corpus -n 4 --dist loadgroup   (summary: scripts/corpus_summary.py)
+addopts = "-m 'not corpus'"
+markers = [
+    "corpus: runs once per corpus file in corpus/raw; slow, deselected by default (use -m corpus)",
+]
