@@ -6,7 +6,7 @@ from .plan import Plan, apply, dry_run, plan
 from .prepare import prepare
 from .schema import TableSchema
 
-__version__ = "2.0.0.dev0"
+__version__ = "2.0.0"
 
 __all__ = [
     "Decision",
