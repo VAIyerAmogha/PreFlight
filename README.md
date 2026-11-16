@@ -6,7 +6,6 @@
 
 [![PyPI](https://img.shields.io/pypi/v/pypreflight?include_prereleases&label=PyPI)](https://pypi.org/project/pypreflight/)
 [![Python](https://img.shields.io/pypi/pyversions/pypreflight)](https://pypi.org/project/pypreflight/)
-[![CI](https://github.com/VAIyerAmogha/PreFlight/actions/workflows/ci.yml/badge.svg)](https://github.com/VAIyerAmogha/PreFlight/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/VAIyerAmogha/PreFlight/blob/main/LICENSE)
 [![Typed](https://img.shields.io/badge/typing-mypy%20strict-informational)](https://github.com/VAIyerAmogha/PreFlight/tree/main/typings)
 
