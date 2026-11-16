@@ -1,0 +1,2576 @@
+{
+ "meta": {
+  "preflight": "2.0.0.dev0",
+  "pandas": "3.0.6"
+ },
+ "sample": "messy_noheader_semicolon.csv",
+ "target": "col_3",
+ "analysis": {
+  "file": "messy_noheader_semicolon.csv",
+  "rows": 60,
+  "columns": 4,
+  "task": null,
+  "reading": {
+   "encoding": {
+    "name": "utf-8",
+    "confidence": 1.0,
+    "has_bom": false
+   },
+   "delimiter": {
+    "char": ";",
+    "confidence": 0.9,
+    "margin": 0.9
+   },
+   "header": {
+    "row": null,
+    "confidence": 0.98,
+    "title_rows": [],
+    "blank_rows": []
+   }
+  },
+  "raw_lines": [
+   "5.5;2.9;2.2;versicolor",
+   "7.6;3.5;4.0;versicolor",
+   "5.6;3.3;1.1;versicolor",
+   "7.5;4.2;1.1;setosa",
+   "7.4;4.0;4.4;setosa",
+   "5.4;2.5;5.0;virginica",
+   "7.7;2.9;6.3;versicolor",
+   "6.1;3.9;4.2;setosa",
+   "6.9;2.2;2.0;versicolor",
+   "4.9;3.9;4.6;virginica",
+   "5.5;2.9;2.7;versicolor",
+   "7.1;3.8;3.9;versicolor",
+   "6.2;2.3;1.2;setosa",
+   "5.5;4.5;1.9;setosa"
+  ],
+  "naive_pandas": {
+   "ok": true,
+   "frame": {
+    "columns": [
+     "5.5;2.9;2.2;versicolor"
+    ],
+    "dtypes": [
+     "str"
+    ],
+    "index": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ],
+    "rows": [
+     [
+      "7.6;3.5;4.0;versicolor"
+     ],
+     [
+      "5.6;3.3;1.1;versicolor"
+     ],
+     [
+      "7.5;4.2;1.1;setosa"
+     ],
+     [
+      "7.4;4.0;4.4;setosa"
+     ],
+     [
+      "5.4;2.5;5.0;virginica"
+     ],
+     [
+      "7.7;2.9;6.3;versicolor"
+     ],
+     [
+      "6.1;3.9;4.2;setosa"
+     ],
+     [
+      "6.9;2.2;2.0;versicolor"
+     ]
+    ],
+    "shape": [
+     59,
+     1
+    ]
+   }
+  },
+  "raw_table": {
+   "columns": [
+    "col_0",
+    "col_1",
+    "col_2",
+    "col_3"
+   ],
+   "dtypes": [
+    "str",
+    "str",
+    "str",
+    "str"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     "5.5",
+     "2.9",
+     "2.2",
+     "versicolor"
+    ],
+    [
+     "7.6",
+     "3.5",
+     "4.0",
+     "versicolor"
+    ],
+    [
+     "5.6",
+     "3.3",
+     "1.1",
+     "versicolor"
+    ],
+    [
+     "7.5",
+     "4.2",
+     "1.1",
+     "setosa"
+    ],
+    [
+     "7.4",
+     "4.0",
+     "4.4",
+     "setosa"
+    ],
+    [
+     "5.4",
+     "2.5",
+     "5.0",
+     "virginica"
+    ],
+    [
+     "7.7",
+     "2.9",
+     "6.3",
+     "versicolor"
+    ],
+    [
+     "6.1",
+     "3.9",
+     "4.2",
+     "setosa"
+    ],
+    [
+     "6.9",
+     "2.2",
+     "2.0",
+     "versicolor"
+    ],
+    [
+     "4.9",
+     "3.9",
+     "4.6",
+     "virginica"
+    ],
+    [
+     "5.5",
+     "2.9",
+     "2.7",
+     "versicolor"
+    ],
+    [
+     "7.1",
+     "3.8",
+     "3.9",
+     "versicolor"
+    ],
+    [
+     "6.2",
+     "2.3",
+     "1.2",
+     "setosa"
+    ],
+    [
+     "5.5",
+     "4.5",
+     "1.9",
+     "setosa"
+    ],
+    [
+     "5.4",
+     "3.5",
+     "5.7",
+     "virginica"
+    ],
+    [
+     "4.3",
+     "3.4",
+     "4.4",
+     "virginica"
+    ],
+    [
+     "5.5",
+     "2.7",
+     "4.2",
+     "setosa"
+    ],
+    [
+     "5.8",
+     "2.7",
+     "5.7",
+     "virginica"
+    ],
+    [
+     "4.0",
+     "3.7",
+     "1.6",
+     "setosa"
+    ],
+    [
+     "7.3",
+     "4.0",
+     "2.1",
+     "versicolor"
+    ],
+    [
+     "5.7",
+     "2.3",
+     "2.0",
+     "setosa"
+    ],
+    [
+     "4.6",
+     "4.1",
+     "3.6",
+     "virginica"
+    ],
+    [
+     "7.2",
+     "3.4",
+     "5.9",
+     "versicolor"
+    ],
+    [
+     "5.0",
+     "3.2",
+     "1.6",
+     "versicolor"
+    ],
+    [
+     "5.3",
+     "2.1",
+     "5.7",
+     "virginica"
+    ],
+    [
+     "6.9",
+     "2.8",
+     "3.3",
+     "virginica"
+    ],
+    [
+     "4.3",
+     "4.3",
+     "6.8",
+     "virginica"
+    ],
+    [
+     "4.4",
+     "2.5",
+     "4.7",
+     "versicolor"
+    ],
+    [
+     "7.5",
+     "3.2",
+     "3.1",
+     "setosa"
+    ],
+    [
+     "6.2",
+     "2.8",
+     "2.5",
+     "setosa"
+    ],
+    [
+     "7.3",
+     "2.2",
+     "5.5",
+     "setosa"
+    ],
+    [
+     "6.6",
+     "3.6",
+     "6.6",
+     "virginica"
+    ],
+    [
+     "7.9",
+     "2.1",
+     "2.1",
+     "versicolor"
+    ],
+    [
+     "7.6",
+     "2.8",
+     "3.0",
+     "versicolor"
+    ],
+    [
+     "6.4",
+     "4.0",
+     "1.6",
+     "setosa"
+    ],
+    [
+     "4.1",
+     "2.6",
+     "1.4",
+     "versicolor"
+    ],
+    [
+     "7.5",
+     "3.8",
+     "1.1",
+     "setosa"
+    ],
+    [
+     "5.2",
+     "4.0",
+     "4.0",
+     "setosa"
+    ],
+    [
+     "4.4",
+     "3.9",
+     "3.0",
+     "versicolor"
+    ],
+    [
+     "7.8",
+     "2.4",
+     "5.7",
+     "setosa"
+    ],
+    [
+     "7.3",
+     "2.8",
+     "1.6",
+     "versicolor"
+    ],
+    [
+     "7.3",
+     "3.5",
+     "1.8",
+     "setosa"
+    ],
+    [
+     "4.6",
+     "4.3",
+     "1.2",
+     "virginica"
+    ],
+    [
+     "7.3",
+     "3.6",
+     "5.0",
+     "versicolor"
+    ],
+    [
+     "7.4",
+     "3.9",
+     "5.1",
+     "setosa"
+    ],
+    [
+     "5.2",
+     "3.3",
+     "1.3",
+     "versicolor"
+    ],
+    [
+     "5.0",
+     "3.9",
+     "5.1",
+     "virginica"
+    ],
+    [
+     "7.2",
+     "3.4",
+     "4.2",
+     "versicolor"
+    ],
+    [
+     "5.8",
+     "3.0",
+     "3.0",
+     "virginica"
+    ],
+    [
+     "5.9",
+     "4.0",
+     "6.6",
+     "versicolor"
+    ],
+    [
+     "4.1",
+     "3.7",
+     "4.5",
+     "versicolor"
+    ],
+    [
+     "4.5",
+     "2.6",
+     "6.0",
+     "virginica"
+    ],
+    [
+     "6.3",
+     "2.4",
+     "1.5",
+     "virginica"
+    ],
+    [
+     "4.0",
+     "3.3",
+     "4.0",
+     "versicolor"
+    ],
+    [
+     "7.7",
+     "4.3",
+     "4.8",
+     "setosa"
+    ],
+    [
+     "5.0",
+     "3.2",
+     "3.9",
+     "setosa"
+    ],
+    [
+     "6.9",
+     "2.8",
+     "4.7",
+     "versicolor"
+    ],
+    [
+     "7.7",
+     "2.7",
+     "4.9",
+     "setosa"
+    ],
+    [
+     "7.7",
+     "3.9",
+     "4.9",
+     "virginica"
+    ],
+    [
+     "4.6",
+     "3.9",
+     "6.3",
+     "virginica"
+    ]
+   ],
+   "shape": [
+    60,
+    4
+   ]
+  },
+  "schema": [
+   {
+    "name": "col_0",
+    "position": 0,
+    "type": "float",
+    "confidence": 1.0,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [],
+    "anomalies": [],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 1.0,
+     "datetime": 0.0,
+     "categorical": 0.05,
+     "text": 0.05
+    },
+    "margin": 0.95,
+    "non_missing": 60,
+    "total_rows": 60
+   },
+   {
+    "name": "col_1",
+    "position": 1,
+    "type": "float",
+    "confidence": 1.0,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [],
+    "anomalies": [],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 1.0,
+     "datetime": 0.0,
+     "categorical": 0.05,
+     "text": 0.05
+    },
+    "margin": 0.95,
+    "non_missing": 60,
+    "total_rows": 60
+   },
+   {
+    "name": "col_2",
+    "position": 2,
+    "type": "float",
+    "confidence": 1.0,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [],
+    "anomalies": [],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 1.0,
+     "datetime": 0.0,
+     "categorical": 0.05,
+     "text": 0.05
+    },
+    "margin": 0.95,
+    "non_missing": 60,
+    "total_rows": 60
+   },
+   {
+    "name": "col_3",
+    "position": 3,
+    "type": "categorical",
+    "confidence": 0.95,
+    "runner_up": null,
+    "abstained": false,
+    "missing_markers": [],
+    "anomalies": [],
+    "candidate_scores": {
+     "constant": 0.0,
+     "boolean": 0.0,
+     "ID": 0.0,
+     "int": 0.0,
+     "float": 0.0,
+     "datetime": 0.0,
+     "categorical": 0.95,
+     "text": 0.2
+    },
+    "margin": 0.95,
+    "non_missing": 60,
+    "total_rows": 60
+   }
+  ],
+  "decisions": [
+   {
+    "id": "dec_reading_table_3b308e77",
+    "stage": "reading",
+    "kind": "encoding",
+    "columns": [],
+    "action": "use_encoding_utf-8",
+    "default": "use_encoding_utf-8",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Read the file using standard text format.",
+    "evidence": {
+     "encoding": "utf-8",
+     "confidence": 1.0,
+     "has_bom": false,
+     "low_confidence": false,
+     "detected_as": "ascii",
+     "alternatives": []
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_517f5134",
+    "stage": "reading",
+    "kind": "dialect",
+    "columns": [],
+    "action": "separate_by_;",
+    "default": "separate_by_,",
+    "confidence": 0.9,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Separate columns using semicolon separators.",
+    "evidence": {
+     "delimiter": ";",
+     "quotechar": "\"",
+     "confidence": 0.9,
+     "margin": 0.9,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_c77220d4",
+    "stage": "reading",
+    "kind": "header",
+    "columns": [],
+    "action": "no_header",
+    "default": "use_header_row_0",
+    "confidence": 0.98,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "No column names row found; assign automatic column names.",
+    "evidence": {
+     "header_row_index": null,
+     "confidence": 0.98,
+     "title_rows": [],
+     "ragged_rows": [],
+     "is_ragged": false,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_0_a79ee341",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_0"
+    ],
+    "action": "cast_to_float",
+    "default": "keep_as_string",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_0' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_1_8615e4a6",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_1"
+    ],
+    "action": "cast_to_float",
+    "default": "keep_as_string",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_1' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_2_bb6dcd62",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_2"
+    ],
+    "action": "cast_to_float",
+    "default": "keep_as_string",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_2' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_3_121039b4",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_3"
+    ],
+    "action": "keep_as_categorical",
+    "default": "keep_as_string",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_3' as categorical with confidence 0.95 (margin: 0.95 over constant).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.95,
+     "runner_score": 0.0,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_3_c53bdbb2",
+    "stage": "infer",
+    "kind": "task_inference",
+    "columns": [
+     "col_3"
+    ],
+    "action": "classification",
+    "default": "classification",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Target column 'col_3' designated for classification.",
+    "evidence": {
+     "target": "col_3",
+     "num_unique": 3,
+     "unique_samples": [
+      "versicolor",
+      "setosa",
+      "virginica"
+     ],
+     "inferred_type": "categorical",
+     "ambiguous": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_col_0_2391a6b6",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "col_0"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [1.55, 10.75] for 'col_0' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 1.5500000000000003,
+     "upper_bound": 10.75,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_col_1_9a7869a6",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "col_1"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [1.087, 5.588] for 'col_1' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 1.0875,
+     "upper_bound": 5.5875,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_col_2_e1badfdc",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "col_2"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [-2.5, 9.5] for 'col_2' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": -2.5,
+     "upper_bound": 9.5,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   }
+  ],
+  "questions": []
+ },
+ "result": {
+  "task": null,
+  "raw_table": {
+   "columns": [
+    "col_0",
+    "col_1",
+    "col_2",
+    "col_3"
+   ],
+   "dtypes": [
+    "str",
+    "str",
+    "str",
+    "str"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     "5.5",
+     "2.9",
+     "2.2",
+     "versicolor"
+    ],
+    [
+     "7.6",
+     "3.5",
+     "4.0",
+     "versicolor"
+    ],
+    [
+     "5.6",
+     "3.3",
+     "1.1",
+     "versicolor"
+    ],
+    [
+     "7.5",
+     "4.2",
+     "1.1",
+     "setosa"
+    ],
+    [
+     "7.4",
+     "4.0",
+     "4.4",
+     "setosa"
+    ],
+    [
+     "5.4",
+     "2.5",
+     "5.0",
+     "virginica"
+    ],
+    [
+     "7.7",
+     "2.9",
+     "6.3",
+     "versicolor"
+    ],
+    [
+     "6.1",
+     "3.9",
+     "4.2",
+     "setosa"
+    ],
+    [
+     "6.9",
+     "2.2",
+     "2.0",
+     "versicolor"
+    ],
+    [
+     "4.9",
+     "3.9",
+     "4.6",
+     "virginica"
+    ],
+    [
+     "5.5",
+     "2.9",
+     "2.7",
+     "versicolor"
+    ],
+    [
+     "7.1",
+     "3.8",
+     "3.9",
+     "versicolor"
+    ],
+    [
+     "6.2",
+     "2.3",
+     "1.2",
+     "setosa"
+    ],
+    [
+     "5.5",
+     "4.5",
+     "1.9",
+     "setosa"
+    ],
+    [
+     "5.4",
+     "3.5",
+     "5.7",
+     "virginica"
+    ],
+    [
+     "4.3",
+     "3.4",
+     "4.4",
+     "virginica"
+    ],
+    [
+     "5.5",
+     "2.7",
+     "4.2",
+     "setosa"
+    ],
+    [
+     "5.8",
+     "2.7",
+     "5.7",
+     "virginica"
+    ],
+    [
+     "4.0",
+     "3.7",
+     "1.6",
+     "setosa"
+    ],
+    [
+     "7.3",
+     "4.0",
+     "2.1",
+     "versicolor"
+    ],
+    [
+     "5.7",
+     "2.3",
+     "2.0",
+     "setosa"
+    ],
+    [
+     "4.6",
+     "4.1",
+     "3.6",
+     "virginica"
+    ],
+    [
+     "7.2",
+     "3.4",
+     "5.9",
+     "versicolor"
+    ],
+    [
+     "5.0",
+     "3.2",
+     "1.6",
+     "versicolor"
+    ],
+    [
+     "5.3",
+     "2.1",
+     "5.7",
+     "virginica"
+    ],
+    [
+     "6.9",
+     "2.8",
+     "3.3",
+     "virginica"
+    ],
+    [
+     "4.3",
+     "4.3",
+     "6.8",
+     "virginica"
+    ],
+    [
+     "4.4",
+     "2.5",
+     "4.7",
+     "versicolor"
+    ],
+    [
+     "7.5",
+     "3.2",
+     "3.1",
+     "setosa"
+    ],
+    [
+     "6.2",
+     "2.8",
+     "2.5",
+     "setosa"
+    ],
+    [
+     "7.3",
+     "2.2",
+     "5.5",
+     "setosa"
+    ],
+    [
+     "6.6",
+     "3.6",
+     "6.6",
+     "virginica"
+    ],
+    [
+     "7.9",
+     "2.1",
+     "2.1",
+     "versicolor"
+    ],
+    [
+     "7.6",
+     "2.8",
+     "3.0",
+     "versicolor"
+    ],
+    [
+     "6.4",
+     "4.0",
+     "1.6",
+     "setosa"
+    ],
+    [
+     "4.1",
+     "2.6",
+     "1.4",
+     "versicolor"
+    ],
+    [
+     "7.5",
+     "3.8",
+     "1.1",
+     "setosa"
+    ],
+    [
+     "5.2",
+     "4.0",
+     "4.0",
+     "setosa"
+    ],
+    [
+     "4.4",
+     "3.9",
+     "3.0",
+     "versicolor"
+    ],
+    [
+     "7.8",
+     "2.4",
+     "5.7",
+     "setosa"
+    ],
+    [
+     "7.3",
+     "2.8",
+     "1.6",
+     "versicolor"
+    ],
+    [
+     "7.3",
+     "3.5",
+     "1.8",
+     "setosa"
+    ],
+    [
+     "4.6",
+     "4.3",
+     "1.2",
+     "virginica"
+    ],
+    [
+     "7.3",
+     "3.6",
+     "5.0",
+     "versicolor"
+    ],
+    [
+     "7.4",
+     "3.9",
+     "5.1",
+     "setosa"
+    ],
+    [
+     "5.2",
+     "3.3",
+     "1.3",
+     "versicolor"
+    ],
+    [
+     "5.0",
+     "3.9",
+     "5.1",
+     "virginica"
+    ],
+    [
+     "7.2",
+     "3.4",
+     "4.2",
+     "versicolor"
+    ],
+    [
+     "5.8",
+     "3.0",
+     "3.0",
+     "virginica"
+    ],
+    [
+     "5.9",
+     "4.0",
+     "6.6",
+     "versicolor"
+    ],
+    [
+     "4.1",
+     "3.7",
+     "4.5",
+     "versicolor"
+    ],
+    [
+     "4.5",
+     "2.6",
+     "6.0",
+     "virginica"
+    ],
+    [
+     "6.3",
+     "2.4",
+     "1.5",
+     "virginica"
+    ],
+    [
+     "4.0",
+     "3.3",
+     "4.0",
+     "versicolor"
+    ],
+    [
+     "7.7",
+     "4.3",
+     "4.8",
+     "setosa"
+    ],
+    [
+     "5.0",
+     "3.2",
+     "3.9",
+     "setosa"
+    ],
+    [
+     "6.9",
+     "2.8",
+     "4.7",
+     "versicolor"
+    ],
+    [
+     "7.7",
+     "2.7",
+     "4.9",
+     "setosa"
+    ],
+    [
+     "7.7",
+     "3.9",
+     "4.9",
+     "virginica"
+    ],
+    [
+     "4.6",
+     "3.9",
+     "6.3",
+     "virginica"
+    ]
+   ],
+   "shape": [
+    60,
+    4
+   ]
+  },
+  "prepared": {
+   "columns": [
+    "col_0",
+    "col_1",
+    "col_2",
+    "col_3"
+   ],
+   "dtypes": [
+    "float64",
+    "float64",
+    "float64",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     5.5,
+     2.9,
+     2.2,
+     "versicolor"
+    ],
+    [
+     7.6,
+     3.5,
+     4.0,
+     "versicolor"
+    ],
+    [
+     5.6,
+     3.3,
+     1.1,
+     "versicolor"
+    ],
+    [
+     7.5,
+     4.2,
+     1.1,
+     "setosa"
+    ],
+    [
+     7.4,
+     4.0,
+     4.4,
+     "setosa"
+    ],
+    [
+     5.4,
+     2.5,
+     5.0,
+     "virginica"
+    ],
+    [
+     7.7,
+     2.9,
+     6.3,
+     "versicolor"
+    ],
+    [
+     6.1,
+     3.9,
+     4.2,
+     "setosa"
+    ],
+    [
+     6.9,
+     2.2,
+     2.0,
+     "versicolor"
+    ],
+    [
+     4.9,
+     3.9,
+     4.6,
+     "virginica"
+    ],
+    [
+     5.5,
+     2.9,
+     2.7,
+     "versicolor"
+    ],
+    [
+     7.1,
+     3.8,
+     3.9,
+     "versicolor"
+    ],
+    [
+     6.2,
+     2.3,
+     1.2,
+     "setosa"
+    ],
+    [
+     5.5,
+     4.5,
+     1.9,
+     "setosa"
+    ],
+    [
+     5.4,
+     3.5,
+     5.7,
+     "virginica"
+    ],
+    [
+     4.3,
+     3.4,
+     4.4,
+     "virginica"
+    ],
+    [
+     5.5,
+     2.7,
+     4.2,
+     "setosa"
+    ],
+    [
+     5.8,
+     2.7,
+     5.7,
+     "virginica"
+    ],
+    [
+     4.0,
+     3.7,
+     1.6,
+     "setosa"
+    ],
+    [
+     7.3,
+     4.0,
+     2.1,
+     "versicolor"
+    ],
+    [
+     5.7,
+     2.3,
+     2.0,
+     "setosa"
+    ],
+    [
+     4.6,
+     4.1,
+     3.6,
+     "virginica"
+    ],
+    [
+     7.2,
+     3.4,
+     5.9,
+     "versicolor"
+    ],
+    [
+     5.0,
+     3.2,
+     1.6,
+     "versicolor"
+    ],
+    [
+     5.3,
+     2.1,
+     5.7,
+     "virginica"
+    ],
+    [
+     6.9,
+     2.8,
+     3.3,
+     "virginica"
+    ],
+    [
+     4.3,
+     4.3,
+     6.8,
+     "virginica"
+    ],
+    [
+     4.4,
+     2.5,
+     4.7,
+     "versicolor"
+    ],
+    [
+     7.5,
+     3.2,
+     3.1,
+     "setosa"
+    ],
+    [
+     6.2,
+     2.8,
+     2.5,
+     "setosa"
+    ],
+    [
+     7.3,
+     2.2,
+     5.5,
+     "setosa"
+    ],
+    [
+     6.6,
+     3.6,
+     6.6,
+     "virginica"
+    ],
+    [
+     7.9,
+     2.1,
+     2.1,
+     "versicolor"
+    ],
+    [
+     7.6,
+     2.8,
+     3.0,
+     "versicolor"
+    ],
+    [
+     6.4,
+     4.0,
+     1.6,
+     "setosa"
+    ],
+    [
+     4.1,
+     2.6,
+     1.4,
+     "versicolor"
+    ],
+    [
+     7.5,
+     3.8,
+     1.1,
+     "setosa"
+    ],
+    [
+     5.2,
+     4.0,
+     4.0,
+     "setosa"
+    ],
+    [
+     4.4,
+     3.9,
+     3.0,
+     "versicolor"
+    ],
+    [
+     7.8,
+     2.4,
+     5.7,
+     "setosa"
+    ],
+    [
+     7.3,
+     2.8,
+     1.6,
+     "versicolor"
+    ],
+    [
+     7.3,
+     3.5,
+     1.8,
+     "setosa"
+    ],
+    [
+     4.6,
+     4.3,
+     1.2,
+     "virginica"
+    ],
+    [
+     7.3,
+     3.6,
+     5.0,
+     "versicolor"
+    ],
+    [
+     7.4,
+     3.9,
+     5.1,
+     "setosa"
+    ],
+    [
+     5.2,
+     3.3,
+     1.3,
+     "versicolor"
+    ],
+    [
+     5.0,
+     3.9,
+     5.1,
+     "virginica"
+    ],
+    [
+     7.2,
+     3.4,
+     4.2,
+     "versicolor"
+    ],
+    [
+     5.8,
+     3.0,
+     3.0,
+     "virginica"
+    ],
+    [
+     5.9,
+     4.0,
+     6.6,
+     "versicolor"
+    ],
+    [
+     4.1,
+     3.7,
+     4.5,
+     "versicolor"
+    ],
+    [
+     4.5,
+     2.6,
+     6.0,
+     "virginica"
+    ],
+    [
+     6.3,
+     2.4,
+     1.5,
+     "virginica"
+    ],
+    [
+     4.0,
+     3.3,
+     4.0,
+     "versicolor"
+    ],
+    [
+     7.7,
+     4.3,
+     4.8,
+     "setosa"
+    ],
+    [
+     5.0,
+     3.2,
+     3.9,
+     "setosa"
+    ],
+    [
+     6.9,
+     2.8,
+     4.7,
+     "versicolor"
+    ],
+    [
+     7.7,
+     2.7,
+     4.9,
+     "setosa"
+    ],
+    [
+     7.7,
+     3.9,
+     4.9,
+     "virginica"
+    ],
+    [
+     4.6,
+     3.9,
+     6.3,
+     "virginica"
+    ]
+   ],
+   "shape": [
+    60,
+    4
+   ]
+  },
+  "model_ready": {
+   "columns": [
+    "col_0",
+    "col_1",
+    "col_2"
+   ],
+   "dtypes": [
+    "float64",
+    "float64",
+    "float64"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+   ],
+   "rows": [
+    [
+     5.5,
+     2.9,
+     2.2
+    ],
+    [
+     7.6,
+     3.5,
+     4.0
+    ],
+    [
+     5.6,
+     3.3,
+     1.1
+    ],
+    [
+     7.5,
+     4.2,
+     1.1
+    ],
+    [
+     7.4,
+     4.0,
+     4.4
+    ],
+    [
+     5.4,
+     2.5,
+     5.0
+    ],
+    [
+     7.7,
+     2.9,
+     6.3
+    ],
+    [
+     6.1,
+     3.9,
+     4.2
+    ],
+    [
+     6.9,
+     2.2,
+     2.0
+    ],
+    [
+     4.9,
+     3.9,
+     4.6
+    ],
+    [
+     5.5,
+     2.9,
+     2.7
+    ],
+    [
+     7.1,
+     3.8,
+     3.9
+    ],
+    [
+     6.2,
+     2.3,
+     1.2
+    ],
+    [
+     5.5,
+     4.5,
+     1.9
+    ],
+    [
+     5.4,
+     3.5,
+     5.7
+    ],
+    [
+     4.3,
+     3.4,
+     4.4
+    ],
+    [
+     5.5,
+     2.7,
+     4.2
+    ],
+    [
+     5.8,
+     2.7,
+     5.7
+    ],
+    [
+     4.0,
+     3.7,
+     1.6
+    ],
+    [
+     7.3,
+     4.0,
+     2.1
+    ],
+    [
+     5.7,
+     2.3,
+     2.0
+    ],
+    [
+     4.6,
+     4.1,
+     3.6
+    ],
+    [
+     7.2,
+     3.4,
+     5.9
+    ],
+    [
+     5.0,
+     3.2,
+     1.6
+    ],
+    [
+     5.3,
+     2.1,
+     5.7
+    ],
+    [
+     6.9,
+     2.8,
+     3.3
+    ],
+    [
+     4.3,
+     4.3,
+     6.8
+    ],
+    [
+     4.4,
+     2.5,
+     4.7
+    ],
+    [
+     7.5,
+     3.2,
+     3.1
+    ],
+    [
+     6.2,
+     2.8,
+     2.5
+    ],
+    [
+     7.3,
+     2.2,
+     5.5
+    ],
+    [
+     6.6,
+     3.6,
+     6.6
+    ],
+    [
+     7.9,
+     2.1,
+     2.1
+    ],
+    [
+     7.6,
+     2.8,
+     3.0
+    ],
+    [
+     6.4,
+     4.0,
+     1.6
+    ],
+    [
+     4.1,
+     2.6,
+     1.4
+    ],
+    [
+     7.5,
+     3.8,
+     1.1
+    ],
+    [
+     5.2,
+     4.0,
+     4.0
+    ],
+    [
+     4.4,
+     3.9,
+     3.0
+    ],
+    [
+     7.8,
+     2.4,
+     5.7
+    ],
+    [
+     7.3,
+     2.8,
+     1.6
+    ],
+    [
+     7.3,
+     3.5,
+     1.8
+    ],
+    [
+     4.6,
+     4.3,
+     1.2
+    ],
+    [
+     7.3,
+     3.6,
+     5.0
+    ],
+    [
+     7.4,
+     3.9,
+     5.1
+    ],
+    [
+     5.2,
+     3.3,
+     1.3
+    ],
+    [
+     5.0,
+     3.9,
+     5.1
+    ],
+    [
+     7.2,
+     3.4,
+     4.2
+    ],
+    [
+     5.8,
+     3.0,
+     3.0
+    ],
+    [
+     5.9,
+     4.0,
+     6.6
+    ],
+    [
+     4.1,
+     3.7,
+     4.5
+    ],
+    [
+     4.5,
+     2.6,
+     6.0
+    ],
+    [
+     6.3,
+     2.4,
+     1.5
+    ],
+    [
+     4.0,
+     3.3,
+     4.0
+    ],
+    [
+     7.7,
+     4.3,
+     4.8
+    ],
+    [
+     5.0,
+     3.2,
+     3.9
+    ],
+    [
+     6.9,
+     2.8,
+     4.7
+    ],
+    [
+     7.7,
+     2.7,
+     4.9
+    ],
+    [
+     7.7,
+     3.9,
+     4.9
+    ],
+    [
+     4.6,
+     3.9,
+     6.3
+    ]
+   ],
+   "shape": [
+    60,
+    3
+   ]
+  },
+  "changes": {
+   "available": true,
+   "dropped_columns": [],
+   "added_columns": [],
+   "dropped_rows": [],
+   "dropped_rows_total": 0,
+   "changed": {
+    "col_0": [
+     18,
+     23,
+     46,
+     53,
+     55
+    ],
+    "col_1": [
+     4,
+     19,
+     34,
+     37,
+     48,
+     49
+    ],
+    "col_2": [
+     1,
+     5,
+     8,
+     20,
+     33,
+     37,
+     38,
+     43,
+     48,
+     51,
+     53
+    ]
+   },
+   "blanked": {},
+   "raw_rows": 60
+  },
+  "pipeline": [
+   {
+    "name": "cleaner",
+    "class": "FoldCleaner",
+    "module": "preflight.assemble"
+   },
+   {
+    "name": "engineer",
+    "class": "EngineerTransformer",
+    "module": "preflight.assemble"
+   }
+  ],
+  "decisions": [
+   {
+    "id": "dec_reading_table_3b308e77",
+    "stage": "reading",
+    "kind": "encoding",
+    "columns": [],
+    "action": "use_encoding_utf-8",
+    "default": "use_encoding_utf-8",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Read the file using standard text format.",
+    "evidence": {
+     "encoding": "utf-8",
+     "confidence": 1.0,
+     "has_bom": false,
+     "low_confidence": false,
+     "detected_as": "ascii",
+     "alternatives": []
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_517f5134",
+    "stage": "reading",
+    "kind": "dialect",
+    "columns": [],
+    "action": "separate_by_;",
+    "default": "separate_by_,",
+    "confidence": 0.9,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Separate columns using semicolon separators.",
+    "evidence": {
+     "delimiter": ";",
+     "quotechar": "\"",
+     "confidence": 0.9,
+     "margin": 0.9,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_reading_table_c77220d4",
+    "stage": "reading",
+    "kind": "header",
+    "columns": [],
+    "action": "no_header",
+    "default": "use_header_row_0",
+    "confidence": 0.98,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "No column names row found; assign automatic column names.",
+    "evidence": {
+     "header_row_index": null,
+     "confidence": 0.98,
+     "title_rows": [],
+     "ragged_rows": [],
+     "is_ragged": false,
+     "flagged": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_0_a79ee341",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_0"
+    ],
+    "action": "cast_to_float",
+    "default": "keep_as_string",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_0' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_1_8615e4a6",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_1"
+    ],
+    "action": "cast_to_float",
+    "default": "keep_as_string",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_1' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_2_bb6dcd62",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_2"
+    ],
+    "action": "cast_to_float",
+    "default": "keep_as_string",
+    "confidence": 1.0,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_2' as float with confidence 1.00 (margin: 0.95 over categorical).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 1.0,
+      "datetime": 0.0,
+      "categorical": 0.05,
+      "text": 0.05
+     },
+     "top_score": 1.0,
+     "runner_score": 0.05,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_3_121039b4",
+    "stage": "infer",
+    "kind": "type_inference",
+    "columns": [
+     "col_3"
+    ],
+    "action": "keep_as_categorical",
+    "default": "keep_as_string",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Inferred column 'col_3' as categorical with confidence 0.95 (margin: 0.95 over constant).",
+    "evidence": {
+     "candidate_scores": {
+      "constant": 0.0,
+      "boolean": 0.0,
+      "ID": 0.0,
+      "int": 0.0,
+      "float": 0.0,
+      "datetime": 0.0,
+      "categorical": 0.95,
+      "text": 0.2
+     },
+     "top_score": 0.95,
+     "runner_score": 0.0,
+     "margin": 0.95,
+     "non_missing_count": 60,
+     "total_rows": 60,
+     "decimal_comma_detected": false,
+     "leading_zero_detected": false,
+     "ambiguous_date_detected": false,
+     "embedded_unit_detected": null,
+     "unresolved_trap": null
+    },
+    "history": []
+   },
+   {
+    "id": "dec_infer_col_3_c53bdbb2",
+    "stage": "infer",
+    "kind": "task_inference",
+    "columns": [
+     "col_3"
+    ],
+    "action": "classification",
+    "default": "classification",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Target column 'col_3' designated for classification.",
+    "evidence": {
+     "target": "col_3",
+     "num_unique": 3,
+     "unique_samples": [
+      "versicolor",
+      "setosa",
+      "virginica"
+     ],
+     "inferred_type": "categorical",
+     "ambiguous": false
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_col_0_2391a6b6",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "col_0"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [1.55, 10.75] for 'col_0' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 1.5500000000000003,
+     "upper_bound": 10.75,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_col_1_9a7869a6",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "col_1"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [1.087, 5.588] for 'col_1' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": 1.0875,
+     "upper_bound": 5.5875,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   },
+   {
+    "id": "dec_clean_col_2_e1badfdc",
+    "stage": "clean",
+    "kind": "clip_outliers",
+    "columns": [
+     "col_2"
+    ],
+    "action": "clip_outliers",
+    "default": "clip_outliers",
+    "confidence": 0.95,
+    "needs_attention": false,
+    "status": "automatic",
+    "plain_language": "Set limits [-2.5, 9.5] for 'col_2' (no current entry is outside them; they apply to new data).",
+    "evidence": {
+     "method": "iqr",
+     "lower_bound": -2.5,
+     "upper_bound": 9.5,
+     "outlier_count": 0,
+     "total_entries": 60,
+     "impact_fraction": 0.0,
+     "threshold": 0.05
+    },
+    "history": []
+   }
+  ],
+  "anomalies": [],
+  "code": "import preflight\n\nplan = preflight.plan('messy_noheader_semicolon.csv', target='col_3')\n\nout = preflight.prepare('messy_noheader_semicolon.csv', target='col_3', mode=\"defaults\")\n\nprepared = out[\"apply_result\"].prepared   # cleaned table\npipeline = out[\"pipeline\"]                 # unfitted: fit it inside each CV fold"
+ }
+}

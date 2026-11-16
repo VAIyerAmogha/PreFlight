@@ -1,10 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
+  "framework": "nextjs",
   "headers": [
     {
-      "source": "/py/(.*)",
-      "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }]
+      "source": "/wheels/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
     },
     {
       "source": "/(.*)",
