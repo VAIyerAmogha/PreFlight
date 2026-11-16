@@ -71,3 +71,6 @@ prompt
 
 # Personal sandbox for trying the package locally (not published).
 playground/
+
+# personal docs
+deployment.md
