@@ -12,7 +12,6 @@ Exposes the stage-based planner and apply lifecycle:
 - dry_run: writes plan.json and Plan PDF, with strict failure isolation.
 """
 
-import csv
 import json
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, replace
@@ -31,12 +30,14 @@ from preflight.clean.impute import apply_impute
 from preflight.clean.markers import apply_markers
 from preflight.clean.normalize import apply_normalization
 from preflight.clean.outliers import apply_outliers
+from preflight.clean.rows import apply_missing_target, plan_class_imbalance, plan_grouped_rows
 from preflight.decisions import Decision
 from preflight.engineer.config import FeatureConfig
 from preflight.engineer.engineer import apply_engineer, plan_engineer
 from preflight.infer import infer_table_types
 from preflight.infer.types import strip_unit
 from preflight.ingest import HeaderResult, detect_dialect, detect_encoding, detect_header, load_raw
+from preflight.ingest.dialect import WHITESPACE_DELIMITER, split_rows
 from preflight.report.plan_pdf import render_plan_pdf
 from preflight.report.templates import (
     template_ambiguous_task,
@@ -44,7 +45,13 @@ from preflight.report.templates import (
     template_encoding,
     template_header,
 )
-from preflight.schema import ColumnRawMetadata, TableSchema
+from preflight.schema import (
+    ColumnRawMetadata,
+    DialectSchema,
+    EncodingSchema,
+    HeaderSchema,
+    TableSchema,
+)
 
 # ===========================================================================
 # Context & Result Objects
@@ -256,7 +263,14 @@ class ReadingStage(Stage):
                 "flagged": dialect_res.flagged,
             },
             confidence=dialect_res.confidence,
-            default="separate_by_,",
+            # Comma is the usual safe default; but whitespace is only ever detected when
+            # comma (and every other explicit separator) failed to split the rows, so
+            # falling back to comma there would read the whole file as one column.
+            default=(
+                f"separate_by_{WHITESPACE_DELIMITER}"
+                if dialect_res.delimiter == WHITESPACE_DELIMITER
+                else "separate_by_,"
+            ),
             needs_attention=dial_needs_att,
             plain_language=template_dialect(
                 dialect_res.delimiter,
@@ -315,6 +329,35 @@ class ReadingStage(Stage):
             source_path=str(p.resolve()),
             row_count=load_res.row_count,
             column_count=load_res.column_count,
+            # Record what was actually detected: left to the dataclass defaults, the
+            # schema would claim confidence 1.0 and a header in row 0 for every file.
+            encoding=EncodingSchema(
+                detected=enc_res.encoding,
+                confidence=enc_res.confidence,
+                has_bom=enc_res.has_bom,
+                low_confidence=enc_res.low_confidence,
+                raw_detected=enc_res.raw_detected,
+            ),
+            dialect=DialectSchema(
+                delimiter=dialect_res.delimiter,
+                quotechar=dialect_res.quotechar,
+                escapechar=dialect_res.escapechar,
+                doublequote=dialect_res.doublequote,
+                confidence=dialect_res.confidence,
+                flagged=dialect_res.flagged,
+                margin=dialect_res.margin,
+            ),
+            header=HeaderSchema(
+                header_row_index=header_res.header_row_index,
+                confidence=header_res.confidence,
+                title_rows=list(header_res.title_rows),
+                footer_rows=list(header_res.footer_rows),
+                blank_rows=list(header_res.blank_rows),
+                total_rows=list(header_res.total_rows),
+                ragged_rows=list(header_res.ragged_rows),
+                is_ragged=header_res.is_ragged,
+                flagged=header_res.flagged,
+            ),
             columns=[
                 ColumnRawMetadata(name=name, position=idx)
                 for idx, name in enumerate(load_res.column_names)
@@ -382,7 +425,7 @@ def _header_for_action(
         raise ValueError(f"Unknown column-names action: {action!r}")
     n = int(row)
     with open(path, newline="", encoding=encoding or "utf-8") as fh:
-        rows = list(csv.reader(fh, delimiter=delimiter or ","))
+        rows = split_rows([ln.rstrip("\r\n") for ln in fh], delimiter or ",")
     if n >= len(rows):
         raise ValueError(f"Row {n + 1} does not exist in {path.name} ({len(rows)} rows)")
     return replace(
@@ -419,6 +462,17 @@ class TypingStage(Stage):
         # Target Column & Task Type Inference
         if context.target_column:
             target = context.target_column
+            if target not in df.columns:
+                # Usually a misread file (wrong separator or header row), not a typo:
+                # without this, every later step would run and then train on nothing.
+                cols = [str(c) for c in df.columns]
+                shown = cols[:10] + (["..."] if len(cols) > 10 else [])
+                raise ValueError(
+                    f"Target column '{target}' was not found in {context.source_path.name}. "
+                    f"The file was read as {len(cols)} column(s): {shown}. "
+                    "If that looks wrong, the separator or column-names row was misread: "
+                    "re-run with mode='ask' to choose them. Otherwise check the target's name."
+                )
             if target in df.columns:
                 target_series = df[target]
                 unique_vals = [
@@ -431,6 +485,26 @@ class TypingStage(Stage):
                     (c for c in inferred_schema.columns if c.name == target), None
                 )
                 t_type = col_meta.inferred_type if col_meta else "text"
+
+                # The target must keep at least two distinct values once its missing
+                # markers are blanked. Otherwise every later step would train on a
+                # constant (a "perfect" but meaningless score), so stop here, loudly.
+                markers = {
+                    str(m.get("marker", "")) for m in (col_meta.missing_markers if col_meta else [])
+                }
+                kept_vals = [v for v in unique_vals if v not in markers]
+                if len(kept_vals) < 2:
+                    blanked = sorted(v for v in unique_vals if v in markers)
+                    raise ValueError(
+                        f"Target column '{target}' has {len(kept_vals)} distinct value(s) "
+                        f"left after reading ({kept_vals[:5]}); a model cannot be trained on it. "
+                        + (
+                            f"Values read as missing: {blanked}. If these are real labels, "
+                            "review the target's missing markers. "
+                            if blanked else ""
+                        )
+                        + "Check that the right column was chosen as the target."
+                    )
 
                 if context.task_type and context.task_type.lower() != "none":
                     specified = context.task_type.lower()
@@ -778,6 +852,10 @@ def _ensure_prep_plan(context: PlanContext) -> list[Decision]:
 
     target = context.target_column if context.target_column in work.columns else None
     cp = plan_clean_full(work, schema, target, context.cleaner_config)
+    # Notes on the table as read (before fills, which would create false repeats).
+    notes = plan_class_imbalance(work, target, _resolved_task(context)) + plan_grouped_rows(
+        work, target, cp.signals
+    )
     eng = plan_engineer(
         cp.cleaned,
         schema=schema,
@@ -788,7 +866,7 @@ def _ensure_prep_plan(context: PlanContext) -> list[Decision]:
         task=_resolved_task(context),
         signals=cp.signals,
     )
-    context.prep_decisions = list(cp.decisions) + list(eng)
+    context.prep_decisions = list(cp.decisions) + notes + list(eng)
     return context.prep_decisions
 
 
@@ -834,12 +912,17 @@ class FixingStage(PrepStage):
 
 
 class RemovingStage(PrepStage):
-    """Removing: repeated rows and unusable columns."""
+    """Removing: rows without a target value, repeated rows and unusable columns (plus notes)."""
     name: str = "removing"
     section: str = "removing"
-    kinds = ("remove_duplicates", "drop_high_missingness", "drop_id", "drop_constant")
+    kinds = (
+        "missing_target_rows", "remove_duplicates", "drop_high_missingness", "drop_id", "drop_constant",
+        # Notes only: listed so they stay in the plan; the runner does nothing with them.
+        "class_imbalance", "grouped_rows",
+    )
 
     def runner(self, df: pd.DataFrame, decisions: list[Decision], context: ApplyContext) -> pd.DataFrame:
+        df, _ = apply_missing_target(df, decisions)
         df, _ = apply_dedupe(df, decisions)
         df, _ = apply_drops(df, decisions)
         return df

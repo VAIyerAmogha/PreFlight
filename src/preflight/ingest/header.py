@@ -7,11 +7,12 @@ and total/summary rows. Flags ragged rows with inconsistent field counts.
 Returns a typed HeaderResult.
 """
 
-import csv
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
+
+from .dialect import split_rows
 
 YEAR_PATTERN = re.compile(r"^(?:1[89]|20)\d{2}$")
 DATE_PATTERNS = [
@@ -135,15 +136,14 @@ def detect_header(
             flagged=True,
         )
 
-    # Parse with CSV reader
-    reader = csv.reader(
+    # Parse with CSV reader (the whitespace sentinel splits on runs of spaces/tabs)
+    raw_rows = split_rows(
         lines,
-        delimiter=delimiter,
+        delimiter,
         quotechar=quotechar,
         doublequote=doublequote,
         escapechar=escapechar,
     )
-    raw_rows = list(reader)
 
     if not raw_rows:
         return HeaderResult(

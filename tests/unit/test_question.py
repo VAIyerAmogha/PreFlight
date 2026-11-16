@@ -228,3 +228,30 @@ def test_disguised_missing_and_high_anomaly_use_column_evidence():
     assert default_registry().classify(dec, TriggerContext(raw_series=series)) == TriggerCategory.HIGH_ANOMALY_RATE
     ok = pd.Series([str(i) for i in range(30)])
     assert default_registry().classify(dec, TriggerContext(raw_series=ok)) == TriggerCategory.AMBIGUOUS_TYPE
+
+
+# --- clear type flagged only for missing-value placeholders --------------------------
+
+def test_placeholder_only_flag_recommends_the_clear_type():
+    """'?' placeholders flag a column, but a clear float reading stays the recommendation."""
+    from preflight.infer.types import infer_column_type
+
+    values = [f"{2 + i / 50:.2f}" for i in range(100)] + ["?"] * 4
+    res = infer_column_type(values, "stroke")
+    dec = res.decision
+    assert dec.needs_attention and dec.action == "cast_to_float"
+    assert dec.default == "cast_to_float"
+
+    q = build_question_from_decision(dec)
+    assert q.option_actions[q.recommended_default] == "cast_to_float"
+    assert "keep_as_string" in q.option_actions.values()  # plain text still offered
+    assert "placeholders for missing data" in q.explanation
+
+
+def test_type_in_doubt_still_defaults_to_text():
+    """A close call between readings keeps the plain-text default."""
+    from preflight.infer.types import infer_column_type
+
+    res = infer_column_type([str(i) for i in range(1, 400)], "row_id")  # int vs ID
+    assert res.decision.needs_attention
+    assert res.decision.default == "keep_as_string"

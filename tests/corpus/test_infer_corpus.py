@@ -104,4 +104,8 @@ def test_corpus_decisions_structure_and_fingerprints(fn: str):
         assert dec.fingerprint is not None
         assert len(dec.fingerprint) == 16
         assert dec.status == "automatic"
-        assert dec.default == "keep_as_string"
+        # Plain text, unless the decision is flagged but its type is clear (placeholders
+        # for missing data only, or a single-unit column): then the proposal is the default.
+        assert dec.default in ("keep_as_string", dec.action)
+        if dec.default != "keep_as_string":
+            assert dec.needs_attention and not dec.evidence.get("unresolved_trap")

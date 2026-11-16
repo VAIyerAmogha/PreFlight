@@ -12,7 +12,7 @@ from typing import Any, Optional, Union
 
 import pandas as pd
 
-from .dialect import DialectResult, detect_dialect
+from .dialect import DialectResult, detect_dialect, pandas_sep
 from .encoding import detect_encoding
 from .header import HeaderResult, detect_header
 
@@ -118,7 +118,7 @@ def load_raw(
 
     read_csv_kwargs: dict[str, Any] = {
         "filepath_or_buffer": p,
-        "sep": delim,
+        "sep": pandas_sep(delim),
         "encoding": enc_name,
         "quotechar": qchar,
         "doublequote": double_q,
