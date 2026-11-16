@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Unreleased
+## 2.0.0 (2026-11-16)
 
 ### Changed
 - A column whose type is clear but is flagged only because some values are placeholders for
