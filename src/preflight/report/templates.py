@@ -224,6 +224,9 @@ _PREP_ACTION_NAMES = {
     "create_datetime_features": "Create extra date columns",
     "create_cluster_features": "Create group columns",
     "create_text_features": "Create text size columns",
+    "drop_rows": "Set these rows aside",
+    "note_class_imbalance": "Note only; nothing changes",
+    "note_grouped_rows": "Note only; nothing changes",
 }
 
 
@@ -544,6 +547,9 @@ _SECTION_BY_KIND = {
     "drop_constant": "removing",
     "suspected_leakage": "removing",
     "feature_overlap": "removing",
+    "missing_target_rows": "removing",
+    "class_imbalance": "removing",
+    "grouped_rows": "removing",
 }
 
 
@@ -586,11 +592,55 @@ _PREP_QUESTIONS = {
 }
 
 
+# Proposal wording that asks a question; once the Decision is resolved, the sentence
+# must state the outcome instead (it may otherwise describe a step that never ran).
+_PROPOSAL_QUESTION_TAILS = (
+    ("? This is a large share, so please confirm.", ". This is a large share, and it was confirmed."),
+    ("; please confirm.", "."),
+)
+
+
+def _resolved_prep_summary(decision: Decision, summary: str) -> str:
+    """
+    The sentence for a resolved cleaning Decision: what was actually done. A proposal
+    declined (by a person or by defaults mode's safe default) is described as kept, and
+    a confirmed proposal loses its "please confirm" question.
+    """
+    ev = decision.evidence or {}
+    col = decision.columns[0] if decision.columns else None
+    act = decision.action
+    if decision.kind == "remove_duplicates" and act == "keep_rows":
+        n = ev.get("duplicate_count")
+        share = ev.get("impact_fraction")
+        if isinstance(n, int) and isinstance(share, (int, float)):
+            return (
+                f"Keep all rows, including {n} repeated ones ({share:.1%} of the table); "
+                "removing them would change a large share of the table."
+            )
+        return "Keep all rows, including repeated ones."
+    if decision.kind == "clip_outliers" and act == "keep_outliers" and col:
+        n = ev.get("outlier_count")
+        share = ev.get("impact_fraction")
+        if isinstance(n, int) and isinstance(share, (int, float)):
+            word = "entry" if n == 1 else "entries"
+            return (
+                f"Leave the {n} extreme {word} in '{col}' ({share:.1%} of entries) as they are; "
+                "pulling them back would change a large share of the column."
+            )
+        return f"Leave the extreme entries in '{col}' as they are."
+    if act == "keep_column" and col:
+        return f"Keep column '{col}'."
+    for question_tail, statement_tail in _PROPOSAL_QUESTION_TAILS:
+        if summary.endswith(question_tail):
+            return summary[: -len(question_tail)] + statement_tail
+    return summary
+
+
 def template_prep_step(decision: Decision) -> RenderedDecisionText:
     """Plain-language text for cleaning and engineering Decisions."""
     summary = decision.plain_language or friendly_action_name(decision.action)
     if not decision.needs_attention:
-        return RenderedDecisionText(summary=summary)
+        return RenderedDecisionText(summary=_resolved_prep_summary(decision, summary))
     title, why = _PREP_QUESTIONS.get(
         decision.kind, ("How should this be handled?", "This step changes your data noticeably.")
     )
@@ -761,6 +811,7 @@ def template_type_question(
     column_name: str,
     action: str,
     evidence: dict[str, Any],
+    default: Optional[str] = None,
 ) -> RenderedDecisionText:
     """Plain-language question for an uncertain column type decision."""
     ev = evidence or {}
@@ -788,6 +839,11 @@ def template_type_question(
         )
     if ev.get("decimal_comma_detected"):
         reasons.append("Numbers appear to use a comma as the decimal mark.")
+    if not reasons and default is not None and default == action:
+        reasons.append(
+            "The reading itself is clear. This is flagged because some values look like "
+            "placeholders for missing data (like '?' or -999); they will be treated as missing."
+        )
     if not reasons:
         reasons.append(
             "The values fit more than one reading closely enough that a wrong guess could change them."
@@ -809,7 +865,7 @@ def render_question_text(decision: Decision) -> RenderedDecisionText:
     ev = decision.evidence or {}
 
     if kind in ("type_inference", "type_abstain", "type"):
-        return template_type_question(col_name, decision.action, ev)
+        return template_type_question(col_name, decision.action, ev, decision.default)
 
     base = render_decision_text(decision)
     if kind in ("encoding", "text_format"):

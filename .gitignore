@@ -68,3 +68,6 @@ preflight_out/
 .review/
 dev-docs/
 prompt
+
+# Personal sandbox for trying the package locally (not published).
+playground/

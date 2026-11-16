@@ -178,7 +178,8 @@ def _type_actions(d: Decision) -> list[str]:
         key=lambda kv: kv[1],
         reverse=True,
     )
-    return [_TYPE_TO_ACTION[k] for k, _ in ranked if k in _TYPE_TO_ACTION]
+    # Plain text is always offered: when the default is a cast it is the lossless escape hatch.
+    return ["keep_as_string", *(_TYPE_TO_ACTION[k] for k, _ in ranked if k in _TYPE_TO_ACTION)]
 
 
 def _encoding_actions(d: Decision) -> list[str]:

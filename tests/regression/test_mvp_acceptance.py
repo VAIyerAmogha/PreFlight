@@ -169,11 +169,11 @@ class TestRegression_IdLikeColumnsNotCoercedToNumeric:
         })
         profiles, _entries = pf.run_profiler(df, target="target", task="classification")
         by_name = {p.name: p for p in profiles}
-        # Phase 7b (approved change, docs/port_regressions.md): v2 treats this conversion as
-        # lossy (5 entries would become blank), asks, and its safe default keeps the text.
-        # The adapter runs mode="defaults", so the column stays text, by design.
-        assert by_name["total_charges"].semantic_type != SemanticType.NUMERIC_FEATURE
-        assert [e.action for e in _entries if e.column == "total_charges"] == ["keep_as_string"]
+        # Policy (docs/port_regressions.md, failure 3, reversed): the column is flagged only
+        # because a few entries are placeholders for missing data; its type is clear, so the
+        # safe default is the conversion. The adapter runs mode="defaults".
+        assert by_name["total_charges"].semantic_type == SemanticType.NUMERIC_FEATURE
+        assert [e.action for e in _entries if e.column == "total_charges"] == ["cast_to_float"]
 
     def test_id_guard_and_messy_numeric_fix_coexist(self):
         """Both fixes must work correctly in the SAME DataFrame at once."""

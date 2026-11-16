@@ -69,6 +69,12 @@ STANDARD_SENTINELS: dict[str, float] = {
     "unspecified": 0.85,
 }
 
+# Sentinels that mean "missing" whatever else is in the column. Every other sentinel
+# ("-", ".", "*", "none", "unknown", ...) is also an ordinary label in real data
+# (credit-approval's "+"/"-" class, a "none"/"some" level), so it is only treated as
+# missing when the column has other values besides it (see _is_category_label).
+UNAMBIGUOUS_SENTINELS = frozenset(k for k, conf in STANDARD_SENTINELS.items() if conf >= 1.0)
+
 # Contextually suspicious numeric sentinel candidates
 NUMERIC_SENTINEL_CANDIDATES = {"999", "-999", "9999", "-99", "99", "-1"}
 
@@ -81,6 +87,17 @@ def _safe_float(val: str) -> Optional[float]:
         return float(cleaned)
     except (ValueError, TypeError):
         return None
+
+
+def _is_category_label(token: str, val_counts: Counter) -> bool:
+    """
+    True when an ambiguous sentinel is one of only two distinct non-blank values in
+    the column: blanking it would leave a constant column, so it is a category level.
+    """
+    if token.strip().lower() in UNAMBIGUOUS_SENTINELS:
+        return False
+    others = {v.strip() for v in val_counts if v.strip() and v != token}
+    return len(others) <= 1
 
 
 def detect_missing_markers(
@@ -118,6 +135,8 @@ def detect_missing_markers(
         v_lower = v_stripped.lower()
 
         if v_lower in STANDARD_SENTINELS:
+            if _is_category_label(raw_val, val_counts):
+                continue
             conf = STANDARD_SENTINELS[v_lower]
             freq = count / total_rows
             reason = "empty_string" if v_stripped == "" else f"standard_sentinel: {v_stripped}"
@@ -128,7 +147,7 @@ def detect_missing_markers(
                 count=count,
                 frequency=freq,
             )
-        elif v_lower == "unknown" and count > 0:
+        elif v_lower == "unknown" and count > 0 and not _is_category_label(raw_val, val_counts):
             # "unknown" in categorical columns is frequently a missing marker
             freq = count / total_rows
             detected[raw_val] = MissingMarker(
@@ -201,7 +220,11 @@ def detect_missing_markers(
         for raw_val, count in val_counts.items():
             if raw_val not in detected:
                 v_str = raw_val.strip()
-                if _safe_float(v_str) is None and len(v_str) <= 10:
+                if (
+                    _safe_float(v_str) is None
+                    and len(v_str) <= 10
+                    and not _is_category_label(raw_val, val_counts)
+                ):
                     # Short non-numeric token in an otherwise numeric column
                     freq = count / total_rows
                     detected[raw_val] = MissingMarker(

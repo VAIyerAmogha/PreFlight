@@ -2,6 +2,7 @@
 Column drop planning and execution for PreFlight v2.0 (high missingness, ID, constant).
 """
 
+import re
 from collections.abc import Sequence
 from typing import Any, Optional
 
@@ -11,7 +12,41 @@ from preflight.clean._common import need_signals
 from preflight.clean.config import DEFAULT_CLEANER_CONFIG, CleanerConfig
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
-from preflight.signals import CONSTANT, NUMERIC_ID, ColumnSignals
+from preflight.signals import CONSTANT, NUMERIC_ID, ColumnSignals, _text_like
+
+# "id" as its own word ("ID", "user_id", "Sample ID") or a camel-case suffix
+# ("customerID", "PassengerId"); never inside a word ("valid", "width", "Paid").
+_ID_NAME = re.compile(r"(?:^|[^A-Za-z])(?:id|ID|Id)(?:[^A-Za-z]|$)|[a-z](?:Id|ID)$")
+# A row label is (nearly) unique per row; v1's numeric-ID rule uses the same bar.
+ROW_LABEL_UNIQUE_RATIO = 0.95
+ROW_LABEL_MIN_ROWS = 20
+
+
+def looks_like_id_name(name: Any) -> bool:
+    """True when a column name reads as an identifier ("customerID", "user_id", "ID")."""
+    return bool(_ID_NAME.search(str(name)))
+
+
+def unique_ratio(series: pd.Series) -> float:
+    """Distinct non-blank values / non-blank values (0.0 for an empty column)."""
+    nn = series.dropna()
+    return float(nn.nunique() / len(nn)) if len(nn) else 0.0
+
+
+def is_row_label(series: pd.Series, sig: ColumnSignals) -> bool:
+    """
+    A column that labels rows instead of describing them, whatever its stored type:
+    nearly every value is unique AND the column was read as an identifier or is named
+    like one. Covers text IDs ("7590-VHVEG") that the numeric-ID rule cannot see, and
+    numeric IDs that were kept as text. Free text (names, comments) is never a label,
+    and an "identifier" with few distinct values (codes with leading zeros) is a feature.
+    """
+    nn = series.dropna()
+    if len(nn) < ROW_LABEL_MIN_ROWS or unique_ratio(series) < ROW_LABEL_UNIQUE_RATIO:
+        return False
+    if _text_like(nn):
+        return False
+    return (sig.v2_type or "").lower() == "id" or looks_like_id_name(series.name)
 
 
 def should_drop_column(missing_rate: float, drop_threshold: float = 0.6) -> bool:
@@ -97,6 +132,10 @@ def plan_drops(
             )
         elif sig.kind == NUMERIC_ID:
             cols_to_drop.append((col, "numeric_id", {"cardinality": sig.cardinality}))
+        elif is_row_label(df[col], sig):
+            cols_to_drop.append(
+                (col, "row_label", {"cardinality": sig.cardinality, "unique_ratio": unique_ratio(df[col])})
+            )
         elif sig.kind == CONSTANT:
             cols_to_drop.append((col, "constant", {"unique_count": sig.cardinality}))
 
@@ -111,7 +150,7 @@ def plan_drops(
         if reason == "high_missingness":
             summary = f"Remove column '{col}' because {ev_detail['missing_rate']:.1%} of its entries are blank."
             kind = "drop_high_missingness"
-        elif reason == "numeric_id":
+        elif reason in ("numeric_id", "row_label"):
             summary = f"Remove identifier column '{col}' (a unique label for each row, not useful for learning)."
             kind = "drop_id"
         else:

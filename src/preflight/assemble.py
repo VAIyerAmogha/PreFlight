@@ -35,6 +35,7 @@ from preflight.clean.impute import apply_impute
 from preflight.clean.markers import apply_markers
 from preflight.clean.normalize import apply_normalization, identify_rare_categories
 from preflight.clean.outliers import apply_outliers
+from preflight.clean.rows import apply_missing_target
 from preflight.decisions import Decision
 from preflight.engineer.config import DEFAULT_ENGINEER_CONFIG, EngineerConfig, FeatureConfig
 from preflight.engineer.datetime import expand_datetime, generate_datetime_cyclical_features
@@ -88,7 +89,7 @@ def overlay_actions(fresh: list[Decision], in_force: Optional[Iterable[Decision]
 # ---------------------------------------------------------------------------
 
 STATELESS_CLEAN_KINDS: tuple[str, ...] = (
-    "convert_missing_markers", "coerce_numeric", "remove_duplicates",
+    "convert_missing_markers", "coerce_numeric", "missing_target_rows", "remove_duplicates",
     "drop_high_missingness", "drop_id", "drop_constant", "normalize_categories",
 )
 PIPELINE_CLEAN_KINDS: tuple[str, ...] = (
@@ -101,6 +102,7 @@ def apply_stateless(df: pd.DataFrame, decisions: list[Decision]) -> pd.DataFrame
     """The steps that learn nothing from data, in plan order, on the full table."""
     decs = [d for d in decisions if d.stage == "clean" and d.kind in STATELESS_CLEAN_KINDS]
     out = apply_coerce(apply_markers(df.copy(), decs), decs)
+    out, _ = apply_missing_target(out, decs)
     out, _ = apply_dedupe(out, decs)
     out, _ = apply_drops(out, decs)
     return apply_normalization(out, decs)

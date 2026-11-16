@@ -26,6 +26,7 @@ from preflight.clean.normalize import (
     plan_normalization,
 )
 from preflight.clean.outliers import apply_outliers, plan_outliers
+from preflight.clean.rows import apply_missing_target, plan_missing_target
 from preflight.decisions import Decision
 from preflight.schema import TableSchema
 from preflight.signals import ColumnSignals, compute_signals
@@ -225,6 +226,10 @@ def plan_clean_full(
     work = apply_coerce(work, d_coerce)
     decisions.extend(d_mark)
     decisions.extend(d_coerce)
+    # Rows without a target value are set aside before anything is measured or learned.
+    d_target = plan_missing_target(work, target)
+    work, _ = apply_missing_target(work, d_target)
+    decisions.extend(d_target)
 
     sigs = compute_signals(
         work,
@@ -259,6 +264,7 @@ def apply_clean(
     """Apply cleaning Decisions in the order `plan_clean` simulated them."""
     out = apply_markers(df.copy(), decisions)
     out = apply_coerce(out, decisions)
+    out, _ = apply_missing_target(out, decisions)
     out, _ = apply_dedupe(out, decisions)
     out, _ = apply_drops(out, decisions)
     out = apply_normalization(out, decisions)

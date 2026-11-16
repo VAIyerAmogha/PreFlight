@@ -667,7 +667,16 @@ def infer_column_type(
             action = "keep_as_constant"
         else:
             action = f"keep_as_{inferred_type}"
-        default_act = "keep_as_string"
+        # The safe default is plain text whenever the TYPE itself is in doubt. A column
+        # flagged only because some values are missing-value placeholders (like '?' or
+        # -999) has a clear type, so its default (and the recommended answer) is that
+        # type. Unflagged decisions keep the text default; it is never used for them.
+        type_in_doubt = (
+            confidence < 0.90
+            or margin < 0.25
+            or any(not a.startswith("disguised_missing:") for a in anomalies)
+        )
+        default_act = action if (needs_attention and not type_in_doubt) else "keep_as_string"
         plain_lang = (
             f"Inferred column '{column_name}' as {inferred_type} with confidence {confidence:.2f} "
             f"(margin: {margin:.2f} over {runner_cand})."

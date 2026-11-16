@@ -94,7 +94,8 @@ def test_schema_generation_and_round_trip(corpus_file: Path):
     assert isinstance(schema, TableSchema)
     assert schema.schema_version == "2.0.0"
     assert schema.encoding.detected != ""
-    assert schema.dialect.delimiter in (",", ";", "\t", "|")
+    # " " is the whitespace sentinel (runs of spaces/tabs, UCI-style .data files)
+    assert schema.dialect.delimiter in (",", ";", "\t", "|", " ")
     assert len(schema.columns) > 0
 
     restored = TableSchema.from_json(schema.to_json())
