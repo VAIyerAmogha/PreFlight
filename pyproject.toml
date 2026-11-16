@@ -71,9 +71,27 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/VAIyerAmogha/PreFlight"
 Repository = "https://github.com/VAIyerAmogha/PreFlight"
+Documentation = "https://github.com/VAIyerAmogha/PreFlight#readme"
+Issues = "https://github.com/VAIyerAmogha/PreFlight/issues"
+Changelog = "https://github.com/VAIyerAmogha/PreFlight/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/preflight"]
+
+# The sdist ships only what is needed to build, test and read the package.
+# Corpus data, dev scripts and internal notes stay in the git repository only.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/examples",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+exclude = ["tests/corpus"]
 
 [tool.ruff]
 line-length = 100

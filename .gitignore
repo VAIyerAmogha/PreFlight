@@ -1,19 +1,70 @@
+# ---------------------------------------------------------------------------
+# Python bytecode and build output
+# ---------------------------------------------------------------------------
 __pycache__/
-prompt
-*.pyc
+*.py[cod]
+*$py.class
+*.so
 build/
 dist/
+wheels/
 *.egg-info/
-.coverage
-htmlcov/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# ---------------------------------------------------------------------------
+# Virtual environments
+# ---------------------------------------------------------------------------
 .venv/
 venv/
-.ipynb_checkpoints/
-corpus/raw/
-.review/
+env/
+.python-version
 
-# PreFlight's default output folder (created where it is run)
+# ---------------------------------------------------------------------------
+# Test, coverage, lint and type-check caches
+# ---------------------------------------------------------------------------
+.pytest_cache/
+.hypothesis/
+.nox/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit*.xml
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# ---------------------------------------------------------------------------
+# Notebooks
+# ---------------------------------------------------------------------------
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Editors, OS files, local tooling
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+.claude/
+CLAUDE.md
+
+# ---------------------------------------------------------------------------
+# Project-specific
+# ---------------------------------------------------------------------------
+# Raw corpus files are downloaded by scripts/acquire_corpus.py (labels are tracked).
+corpus/raw/
+# Generated measurement output from scripts/corpus_accuracy.py and friends.
+scripts/_*.json
+# PreFlight's default output folder (created wherever it is run).
 preflight_out/
+# Local review logs and internal working notes (never published).
+.review/
+dev-docs/
+prompt
