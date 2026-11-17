@@ -7,7 +7,7 @@ export const PYODIDE_VERSION = "0.27.2";
 //     2.0.0 is on PyPI: PyPI has only 1.x, which lacks the v2 API.
 //   * anything else is a pip requirement that micropip resolves on PyPI,
 //     e.g. "pypreflight==2.0.0". Switch to that after the release (DEMO_DEV.md Q-03).
-export const PREFLIGHT_SPEC = "/wheels/pypreflight-2.0.0.dev0-py3-none-any.whl";
+export const PREFLIGHT_SPEC = "pypreflight==2.0.0";
 
 export interface Sample {
   file: string;
