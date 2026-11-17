@@ -70,6 +70,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/VAIyerAmogha/PreFlight"
+Demo = "https://pre-flight-tan.vercel.app"
 Repository = "https://github.com/VAIyerAmogha/PreFlight"
 Documentation = "https://github.com/VAIyerAmogha/PreFlight#readme"
 Issues = "https://github.com/VAIyerAmogha/PreFlight/issues"

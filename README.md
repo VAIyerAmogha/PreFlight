@@ -9,6 +9,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/VAIyerAmogha/PreFlight/blob/main/LICENSE)
 [![Typed](https://img.shields.io/badge/typing-mypy%20strict-informational)](https://github.com/VAIyerAmogha/PreFlight/tree/main/typings)
 
+**[Try it in your browser](https://pre-flight-tan.vercel.app)**
+
 [Installation](#installation) ·
 [Quickstart](#quickstart) ·
 [How it works](#how-it-works) ·
